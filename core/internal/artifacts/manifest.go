@@ -7,14 +7,17 @@ import (
 )
 
 type ManifestArtifact struct {
-	baseArtifact
+	domain.StreamedArtifact
 }
 
 func CreateManifestArtifact(id uuid.UUID) (*ManifestArtifact, error) {
 	manifestArtifact := &ManifestArtifact{
-		baseArtifact: baseArtifact{
-			id:           id.String(),
-			artifactType: domain.ManifestArtifactType,
+		StreamedArtifact: domain.StreamedArtifact{
+			Source: nil,
+			Artifact: domain.Artifact{
+				Id:           id.String(),
+				ArtifactType: domain.ManifestArtifactType,
+			},
 		},
 	}
 

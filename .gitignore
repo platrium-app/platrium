@@ -1,0 +1,8 @@
+# OS Files
+.DS_Store
+
+# Agent Files
+.agent/
+
+# IDE Files
+.vscode/
