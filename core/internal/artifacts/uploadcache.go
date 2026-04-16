@@ -4,6 +4,7 @@ import (
 	"io"
 	"platrium/internal/domain"
 	"platrium/internal/encoding"
+	"platrium/internal/providers"
 )
 
 type UploadCacheArtifact struct {
@@ -36,7 +37,7 @@ func GetUploadCacheArtifact(hexHash string) (*UploadCacheArtifact, error) {
 		ArtifactType: domain.UploadCacheArtifactType,
 	}
 
-	storage := domain.NewStorageProvider()
+	storage := providers.NewStorageProvider()
 	diskStream, err := storage.Load(&artifact)
 	if err != nil {
 		return nil, err

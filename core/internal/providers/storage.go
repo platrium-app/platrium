@@ -1,4 +1,4 @@
-package domain
+package providers
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"platrium/internal/domain"
 )
 
 // make this a struct and impl directly. We'll use another StorageBackend iface for backends.
@@ -22,7 +23,7 @@ func NewStorageProvider() *StorageProvider {
 	return &StorageProvider{}
 }
 
-func (s *StorageProvider) Save(artifact *StreamedArtifact) error {
+func (s *StorageProvider) Save(artifact *domain.StreamedArtifact) error {
 	absolutePath, err := resolveLocalPath(artifact.Path())
 	if err != nil {
 		return err
@@ -52,7 +53,7 @@ func (s *StorageProvider) Save(artifact *StreamedArtifact) error {
 	return nil
 }
 
-func (s *StorageProvider) Delete(artifact *Artifact) error {
+func (s *StorageProvider) Delete(artifact *domain.Artifact) error {
 	absolutePath, err := resolveLocalPath(artifact.Path())
 	if err != nil {
 		return err
@@ -62,7 +63,7 @@ func (s *StorageProvider) Delete(artifact *Artifact) error {
 	return os.Remove(absolutePath)
 }
 
-func (s *StorageProvider) Load(artifact *Artifact) (io.ReadCloser, error) {
+func (s *StorageProvider) Load(artifact *domain.Artifact) (io.ReadCloser, error) {
 	absolutePath, err := resolveLocalPath(artifact.Path())
 	if err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import (
 	"io"
 	"path"
 	"platrium/internal/encoding"
+	"platrium/internal/providers"
 )
 
 type ArtifactType string
@@ -39,7 +40,7 @@ type StreamedArtifact struct {
 
 func (a *StreamedArtifact) Save() error {
 	// for now, gotta fix with global storage provider :)
-	storage := NewStorageProvider()
+	storage := providers.NewStorageProvider()
 
 	// Intentionally ignoring compiler error as requested.
 	// Will require changes to StorageProvider to accept *Artifact later.
