@@ -1,95 +1,47 @@
 package providers
 
 import (
-	"fmt"
-	"io"
-	"log"
-	"os"
-	"path/filepath"
-	"platrium/internal/domain"
+	"context"
+	"path"
+
+	"platrium/internal/adapters/storage"
+	"platrium/internal/repositories"
 )
 
-// make this a struct and impl directly. We'll use another StorageBackend iface for backends.
-// type StorageProvider interface {
-// 	Save(ctx context.Context, res StoredArtifact) error
-// 	Load(ctx context.Context, res StoredArtifact) error
-// 	Exists(ctx context.Context, res StoredArtifact) (bool, error)
-// }
-
+// StorageProvider acts as the orchestrator over a specific StorageBackend.
 type StorageProvider struct {
+	writesRepo repositories.AttachedFSWritesRepository
 }
 
-func NewStorageProvider() *StorageProvider {
-	return &StorageProvider{}
+func NewStorageProvider(writesRepo repositories.AttachedFSWritesRepository) *StorageProvider {
+	return &StorageProvider{
+		writesRepo: writesRepo,
+	}
 }
 
-func (s *StorageProvider) Save(artifact *domain.StreamedArtifact) error {
-	absolutePath, err := resolveLocalPath(artifact.Path())
-	if err != nil {
-		return err
+// GenerateUploadURLs delegates to the correct backend.
+func (s *StorageProvider) GenerateUploadURLs(ctx context.Context, chunkHashes []string) (map[string]string, error) {
+	chunks := make(map[string]storage.ChunkUploadInfo)
+	for _, hash := range chunkHashes {
+		chunks[hash] = storage.ChunkUploadInfo{
+			Path: GetShardedPath(storage.ObjectTypeChunk, hash),
+			Size: 0, // Size is unknown at this point, but structurally supported
+		}
 	}
 
-	targetDir := filepath.Dir(absolutePath)
-
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create nested directories at %s: %w", targetDir, err)
-	}
-
-	file, err := os.Create(absolutePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file at %s: %w", absolutePath, err)
-	}
-
-	defer file.Close()
-
-	written, err := io.Copy(file, artifact.Source)
-	if err != nil {
-		log.Printf("Storage stream explicitly aborted for %s (wrote %d bytes): %v", absolutePath, written, err)
-		return err
-	}
-
-	fmt.Printf("\n--- Done! Total bytes Written: %d ---\n", written)
-	fmt.Printf("Path: %s", absolutePath)
-	return nil
+	// Hardcoded routing to attached FS backend for now
+	backend := storage.NewAttachedFSBackend(s.writesRepo)
+	return backend.GenerateUploadURLs(ctx, "./data", chunks)
 }
 
-func (s *StorageProvider) Delete(artifact *domain.Artifact) error {
-	absolutePath, err := resolveLocalPath(artifact.Path())
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Deleting File from Backend %s at path %s\n", "local", absolutePath)
-	return os.Remove(absolutePath)
-}
-
-func (s *StorageProvider) Load(artifact *domain.Artifact) (io.ReadCloser, error) {
-	absolutePath, err := resolveLocalPath(artifact.Path())
-	if err != nil {
-		return nil, err
-	}
-
-	file, err := os.Open(absolutePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open artifact file at %s: %w", absolutePath, err)
-	}
-
-	return file, nil
-}
-
-// func (s *StorageProvider) Move(oldLoc *Artifact, newLoc *Artifact) error {
-// 	fmt.Println("File Moved")
-// 	return nil
-// }
-
-// resolveLocalPath resolves a relative artifact path to its absolute location
-// within the local file system's "data/" directory.
-// This logic will eventually reside exclusively within the future `local` StorageBackend implementation.
-func resolveLocalPath(relativePath string) (string, error) {
-	execdir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("failed to get executable file path: %w", err)
-	}
-	basePath := filepath.Join(execdir, "data")
-	return filepath.Join(basePath, relativePath), nil
+// GetShardedPath enforces 3-level prefix sharding to improve file system efficiency
+// and faster performance for object-based stores. This is a unified layout for all providers.
+func GetShardedPath(objectType storage.ObjectType, hash string) string {
+	return path.Join(
+		string(objectType),
+		hash[0:2],
+		hash[2:4],
+		hash[4:6],
+		hash,
+	)
 }

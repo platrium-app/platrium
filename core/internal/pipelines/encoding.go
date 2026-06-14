@@ -1,4 +1,4 @@
-package encoding
+package pipelines
 
 import (
 	"crypto/sha256"
@@ -60,9 +60,9 @@ func (p *EncodingPipeline) EnableHashVerification(expectedHashHex string) *Encod
 
 // SetEncryption wraps the stream with cryptographic transformers based on algo.
 func (p *EncodingPipeline) SetEncryption(algo byte) *EncodingPipeline {
-	if algo == EncAlgoAESGCM {
-		// TODO (Future): p.stream = cipher.NewStreamWriter(...)
-	}
+	// if algo == EncAlgoAESGCM {
+	// 	// TODO (Future): p.stream = cipher.NewStreamWriter(...)
+	// }
 	return p
 }
 
@@ -82,11 +82,11 @@ func NewDecodingPipeline(baseStream io.Reader) *DecodingPipeline {
 
 // UnwrapEncryption removes the AES-GCM layer if applicable
 func (p *DecodingPipeline) SetDecryption(algo byte) (*DecodingPipeline, error) {
-	if algo == EncAlgoAESGCM {
-		// TODO (Future): p.stream = cipher.NewStreamReader(...)
-	} else if algo != EncAlgoPlaintext {
-		return nil, fmt.Errorf("unsupported encryption algorithm: %v", algo)
-	}
+	// if algo == EncAlgoAESGCM {
+	// 	// TODO (Future): p.stream = cipher.NewStreamReader(...)
+	// } else if algo != EncAlgoPlaintext {
+	// 	return nil, fmt.Errorf("unsupported encryption algorithm: %v", algo)
+	// }
 	return p, nil
 }
 
