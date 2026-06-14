@@ -1,4 +1,4 @@
-package storage_adapter
+package storage
 
 import (
 	"context"

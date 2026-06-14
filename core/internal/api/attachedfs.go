@@ -6,17 +6,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"platrium/internal/adapters/storage_adapter"
+	"platrium/internal/infra/storage"
 	"platrium/pkg/constants"
 )
 
 // AttachedFSHandler manages direct stream uploads for the local attached file system backend.
 type AttachedFSHandler struct {
-	attachedFS *storage_adapter.AttachedFSBackend
+	attachedFS *storage.AttachedFSBackend
 }
 
 // NewAttachedFSHandler initializes a new AttachedFSHandler with the attached file system backend.
-func NewAttachedFSHandler(attachedFS *storage_adapter.AttachedFSBackend) *AttachedFSHandler {
+func NewAttachedFSHandler(attachedFS *storage.AttachedFSBackend) *AttachedFSHandler {
 	return &AttachedFSHandler{
 		attachedFS: attachedFS,
 	}

@@ -1,4 +1,4 @@
-package kvstore_adapter
+package kvstore
 
 import (
 	"context"

@@ -6,10 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	"platrium/internal/adapters/storage_adapter"
+	"platrium/internal/infra/storage"
 	"platrium/internal/api"
-	"platrium/internal/providers/kvstore_provider"
-	"platrium/internal/providers/storage_provider"
+	"platrium/internal/infra/kvstore"
 	"platrium/internal/repositories"
 
 	"github.com/go-chi/chi/v5"
@@ -22,7 +21,7 @@ import (
 // @host            localhost:3000
 // @BasePath        /
 func main() {
-	store, err := kvstore_provider.NewFromEnv()
+	store, err := kvstore.NewFromEnv()
 	if err != nil {
 		log.Fatalf("failed to initialize KV store: %v", err)
 	}
@@ -31,8 +30,8 @@ func main() {
 
 	// Wire up dependencies
 	writesRepo := repositories.NewAttachedFSWritesRepository(store)
-	storageProvider := storage_provider.NewStorageProvider(writesRepo)
-	attachedFS := storage_adapter.NewAttachedFSBackend(writesRepo)
+	storageProvider := storage.NewStorageProvider(writesRepo)
+	attachedFS := storage.NewAttachedFSBackend(writesRepo)
 
 	objectsHandler := api.NewObjectsHandler(storageProvider)
 	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
