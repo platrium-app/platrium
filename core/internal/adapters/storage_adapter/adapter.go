@@ -1,4 +1,4 @@
-package storage
+package storage_adapter
 
 import (
 	"context"
@@ -15,7 +15,6 @@ const (
 // ChunkUploadInfo contains metadata required by backends to generate precise upload URLs.
 type ChunkUploadInfo struct {
 	Path string
-	Size int64 // Future-proofing: S3 presigned URLs often strictly require Content-Length
 }
 
 // StorageBackend represents a specific storage mechanism (Local, S3, etc.).

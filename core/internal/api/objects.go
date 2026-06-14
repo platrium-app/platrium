@@ -3,19 +3,18 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"platrium/internal/providers/storage_provider"
 
 	"github.com/go-chi/chi/v5"
-
-	"platrium/internal/providers"
 )
 
 // ObjectsHandler manages the REST endpoints for object/chunk generation and uploads.
 type ObjectsHandler struct {
-	storageProvider *providers.StorageProvider
+	storageProvider *storage_provider.StorageProvider
 }
 
 // NewObjectsHandler initializes a new ObjectsHandler with its required dependencies.
-func NewObjectsHandler(storageProvider *providers.StorageProvider) *ObjectsHandler {
+func NewObjectsHandler(storageProvider *storage_provider.StorageProvider) *ObjectsHandler {
 	return &ObjectsHandler{
 		storageProvider: storageProvider,
 	}

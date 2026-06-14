@@ -6,16 +6,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"platrium/internal/adapters/storage"
+	"platrium/internal/adapters/storage_adapter"
+	"platrium/pkg/constants"
 )
 
 // AttachedFSHandler manages direct stream uploads for the local attached file system backend.
 type AttachedFSHandler struct {
-	attachedFS *storage.AttachedFSBackend
+	attachedFS *storage_adapter.AttachedFSBackend
 }
 
 // NewAttachedFSHandler initializes a new AttachedFSHandler with the attached file system backend.
-func NewAttachedFSHandler(attachedFS *storage.AttachedFSBackend) *AttachedFSHandler {
+func NewAttachedFSHandler(attachedFS *storage_adapter.AttachedFSBackend) *AttachedFSHandler {
 	return &AttachedFSHandler{
 		attachedFS: attachedFS,
 	}
@@ -44,6 +45,9 @@ func (h *AttachedFSHandler) Routes() chi.Router {
 // @Router       /api/attachedfs/{writeId} [put]
 func (h *AttachedFSHandler) AttachedFSUploadHandler(w http.ResponseWriter, r *http.Request) {
 	writeId := chi.URLParam(r, "writeId")
+	
+	// Enforce strict chunk size limits at the HTTP stream level
+	r.Body = http.MaxBytesReader(w, r.Body, constants.DedupChunkSizeBytes)
 	defer r.Body.Close()
 
 	if err := h.attachedFS.CommitLocalWrite(r.Context(), writeId, r.Body); err != nil {

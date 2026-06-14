@@ -1,4 +1,4 @@
-package kvstore
+package kvstore_adapter
 
 import "time"
 

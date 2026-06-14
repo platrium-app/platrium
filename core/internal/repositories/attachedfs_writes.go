@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"platrium/internal/adapters/kvstore"
+	"platrium/internal/adapters/kvstore_adapter"
 )
 
 // WriteSession encapsulates the physical location and logical path for an upload session.
@@ -23,32 +23,32 @@ type AttachedFSWritesRepository interface {
 }
 
 type AttachedFSWritesRepo struct {
-	store kvstore.KVStore
+	store kvstore_adapter.KVStore
 }
 
 // Ensure AttachedFSWritesRepo implements AttachedFSWritesRepository
 var _ AttachedFSWritesRepository = (*AttachedFSWritesRepo)(nil)
 
-func NewAttachedFSWritesRepository(store kvstore.KVStore) *AttachedFSWritesRepo {
+func NewAttachedFSWritesRepository(store kvstore_adapter.KVStore) *AttachedFSWritesRepo {
 	return &AttachedFSWritesRepo{
 		store: store,
 	}
 }
 
 func (r *AttachedFSWritesRepo) SetUploadPath(ctx context.Context, writeId string, session WriteSession) error {
-	key := kvstore.BuildKey(NamespaceAttachedFSWrites, writeId)
+	key := kvstore_adapter.BuildKey(NamespaceAttachedFSWrites, writeId)
 	
 	bytes, err := json.Marshal(session)
 	if err != nil {
 		return err
 	}
 	
-	return r.store.Set(ctx, key, bytes, kvstore.WithTTL(24*time.Hour))
+	return r.store.Set(ctx, key, bytes, kvstore_adapter.WithTTL(24*time.Hour))
 }
 
 func (r *AttachedFSWritesRepo) GetUploadPath(ctx context.Context, writeId string) (WriteSession, error) {
 	var session WriteSession
-	key := kvstore.BuildKey(NamespaceAttachedFSWrites, writeId)
+	key := kvstore_adapter.BuildKey(NamespaceAttachedFSWrites, writeId)
 	rawBytes, err := r.store.Get(ctx, key)
 	if err != nil {
 		return session, err
@@ -59,6 +59,6 @@ func (r *AttachedFSWritesRepo) GetUploadPath(ctx context.Context, writeId string
 }
 
 func (r *AttachedFSWritesRepo) DeleteUploadPath(ctx context.Context, writeId string) error {
-	key := kvstore.BuildKey(NamespaceAttachedFSWrites, writeId)
+	key := kvstore_adapter.BuildKey(NamespaceAttachedFSWrites, writeId)
 	return r.store.Delete(ctx, key)
 }
