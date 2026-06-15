@@ -1,14 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 
-	"platrium/internal/infra/storage"
 	"platrium/internal/api"
+	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
+	"platrium/internal/infra/storage"
 	"platrium/internal/repositories"
 
 	"github.com/go-chi/chi/v5"
@@ -28,10 +30,19 @@ func main() {
 	defer store.Close()
 	log.Println("kv store initialized successfully")
 
+	graphStore, err := graph.NewFromEnv()
+	if err != nil {
+		log.Fatalf("failed to initialize Graph store: %v", err)
+	}
+	defer graphStore.Close(context.Background())
+	log.Println("graph store initialized successfully")
+
 	// Wire up dependencies
 	writesRepo := repositories.NewAttachedFSWritesRepository(store)
 	storageProvider := storage.NewStorageProvider(writesRepo)
 	attachedFS := storage.NewAttachedFSBackend(writesRepo)
+
+	// fsOps := fsops.NewFSOps(graphStore)
 
 	objectsHandler := api.NewObjectsHandler(storageProvider)
 	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
