@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"platrium/internal/api"
+	"platrium/internal/fsops"
 	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
@@ -42,9 +43,10 @@ func main() {
 	storageProvider := storage.NewStorageProvider(writesRepo)
 	attachedFS := storage.NewAttachedFSBackend(writesRepo)
 
-	// fsOps := fsops.NewFSOps(graphStore)
+	manifestRepo := fsops.NewManifestRepo(store)
+	fsOps := fsops.NewFSOps(graphStore)
 
-	objectsHandler := api.NewObjectsHandler(storageProvider)
+	fsOpsHandler := fsops.NewHTTPHandler(fsOps, manifestRepo, storageProvider)
 	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
 
 	router := chi.NewRouter()
@@ -54,7 +56,7 @@ func main() {
 	// Routes
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/health", HealthHandler)
-		r.Mount("/objects", objectsHandler.Routes())
+		r.Mount("/fs", fsOpsHandler.Routes())
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
 	})
 

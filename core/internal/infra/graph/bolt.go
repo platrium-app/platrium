@@ -11,9 +11,10 @@ import (
 )
 
 type BoltConfig struct {
+	// TODO: Make Required, Remove ENV Defaults!
 	URI  string `env:"GRAPH_BOLT_URI" envDefault:"bolt://localhost:7687"`
 	User string `env:"GRAPH_BOLT_USER" envDefault:"neo4j"`
-	Pass string `env:"GRAPH_BOLT_PASSWORD" envDefault:"password"`
+	Pass string `env:"GRAPH_BOLT_PASSWORD" envDefault:"12345678"`
 }
 
 type BoltGraph struct {

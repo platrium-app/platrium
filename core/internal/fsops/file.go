@@ -16,9 +16,9 @@ func NewFSOps(g graph.Graph) *FSOps {
 	return &FSOps{graph: g}
 }
 
-// FinalizeFile assigns a file into the resource graph, strictly verifying the parent
+// CreateFile assigns a file into the resource graph, strictly verifying the parent
 // container exists and isn't a file, all within a single Neo4j transaction.
-func (f *FSOps) FinalizeFile(ctx context.Context, tenantId, parentId, fileId, name, manifestPath string) error {
+func (f *FSOps) CreateFile(ctx context.Context, tenantId, parentId, fileId, name, manifestPath string, inlineChunks []string) error {
 	cypher := `
 		MATCH (parent:Resource {id: $parent_id, tenant_id: $tenant_id})
 		WHERE parent:PrivateDrive OR parent:SharedDrive OR parent:Folder
@@ -28,7 +28,8 @@ func (f *FSOps) FinalizeFile(ctx context.Context, tenantId, parentId, fileId, na
 			file:File,
 			file.name = $name, 
 			file.tenant_id = $tenant_id,
-			file.manifest_path = $manifest_path
+			file.manifest_path = $manifest_path,
+			file.inline_chunks = $inline_chunks
 		
 		MERGE (file)-[:CHILD_OF]->(parent)
 		RETURN file
@@ -40,6 +41,7 @@ func (f *FSOps) FinalizeFile(ctx context.Context, tenantId, parentId, fileId, na
 		"file_id":       fileId,
 		"name":          name,
 		"manifest_path": manifestPath,
+		"inline_chunks": inlineChunks,
 	}
 
 	return f.graph.WriteTx(ctx, func(tx graph.Tx) error {
