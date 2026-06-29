@@ -1,0 +1,15 @@
+# Binaries
+bin/
+*.exe
+*.dll
+data/
+
+# OS Files
+.DS_Store
+
+# Go
+vendor/
+go.work
+
+# Enviroment
+.env
