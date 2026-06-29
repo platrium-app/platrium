@@ -3,18 +3,16 @@ package storage
 import (
 	"context"
 	"path"
-
-	"platrium/internal/repositories"
 )
 
 // StorageProvider acts as the orchestrator over a specific StorageBackend.
 type StorageProvider struct {
-	writesRepo repositories.AttachedFSWritesRepository
+	store AttachedFSStore
 }
 
-func NewStorageProvider(writesRepo repositories.AttachedFSWritesRepository) *StorageProvider {
+func NewStorageProvider(store AttachedFSStore) *StorageProvider {
 	return &StorageProvider{
-		writesRepo: writesRepo,
+		store: store,
 	}
 }
 
@@ -28,7 +26,7 @@ func (s *StorageProvider) GenerateUploadURLs(ctx context.Context, chunkHashes []
 	}
 
 	// Hardcoded routing to attached FS backend for now
-	backend := NewAttachedFSBackend(s.writesRepo)
+	backend := NewAttachedFSBackend(s.store)
 	return backend.GenerateUploadURLs(ctx, "./data", chunks)
 }
 

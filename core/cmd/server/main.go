@@ -9,10 +9,12 @@ import (
 
 	"platrium/internal/api"
 	"platrium/internal/fsops"
+	"platrium/internal/identity"
 	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
-	"platrium/internal/repositories"
+	"platrium/internal/objects"
+	"platrium/internal/setup"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -39,15 +41,33 @@ func main() {
 	log.Println("graph store initialized successfully")
 
 	// Wire up dependencies
-	writesRepo := repositories.NewAttachedFSWritesRepository(store)
-	storageProvider := storage.NewStorageProvider(writesRepo)
-	attachedFS := storage.NewAttachedFSBackend(writesRepo)
+	attachedFSStore := storage.NewAttachedFSStore(store)
+	
+	storageProvider := storage.NewStorageProvider(attachedFSStore)
+	attachedFS := storage.NewAttachedFSBackend(attachedFSStore)
 
 	manifestRepo := fsops.NewManifestRepo(store)
-	fsOps := fsops.NewFSOps(graphStore)
+	fsOps := fsops.NewFSOps(graphStore, manifestRepo)
 
-	fsOpsHandler := fsops.NewHTTPHandler(fsOps, manifestRepo, storageProvider)
+	// Setup Identity Domain
+	tenantStore := identity.NewTenantStore(graphStore)
+
+	// Setup Instance Config Store
+	instanceConfigStore := setup.NewInstanceConfigStore(store)
+
+	// Setup Cross-Domain Orchestrator
+	setupOrchestrator := setup.NewOrchestrator(instanceConfigStore, tenantStore)
+	if err := setupOrchestrator.Bootstrap(context.Background()); err != nil {
+		log.Fatalf("failed to bootstrap native tenant: %v", err)
+	}
+
+	// Setup HTTP Routers
+	fsRouter := fsops.NewRouter(fsOps)
+	objectsRouter := objects.NewRouter(storageProvider)
 	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
+
+	identityHandler := identity.NewTenantHandler(tenantStore)
+	identityRouter := identity.NewRouter(identityHandler)
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -56,8 +76,10 @@ func main() {
 	// Routes
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/health", HealthHandler)
-		r.Mount("/fs", fsOpsHandler.Routes())
+		r.Mount("/fs", fsRouter)
+		r.Mount("/objects", objectsRouter)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
+		r.Mount("/tenants", identityRouter.Routes())
 	})
 
 	port := os.Getenv("PORT")

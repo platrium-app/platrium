@@ -24,6 +24,6 @@ func NewFromEnv() (KVStore, error) {
 		// return NewTiKVStore()
 		return nil, fmt.Errorf("tikv adapter not yet implemented")
 	default:
-		return nil, fmt.Errorf("unsupported KV backend: %s", cfg.Backend)
+		return nil, fmt.Errorf("unknown kv backend: %s", cfg.Backend)
 	}
 }

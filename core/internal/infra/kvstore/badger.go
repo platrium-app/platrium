@@ -33,37 +33,80 @@ func NewBadgerStore() (*BadgerStore, error) {
 	return &BadgerStore{db: db}, nil
 }
 
-func (b *BadgerStore) Get(ctx context.Context, key string) ([]byte, error) {
-	var valCopy []byte
-	err := b.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-			return err
-		}
-		valCopy, err = item.ValueCopy(nil)
-		return err
+func (b *BadgerStore) ReadTx(ctx context.Context, fn func(tx Tx) error) error {
+	return b.db.View(func(txn *badger.Txn) error {
+		return fn(&BadgerTx{txn: txn})
 	})
-	return valCopy, err
 }
 
-func (b *BadgerStore) Set(ctx context.Context, key string, value []byte, opts ...SetOption) error {
+type BadgerTx struct {
+	txn *badger.Txn
+}
+
+var _ Tx = (*BadgerTx)(nil)
+
+func (t *BadgerTx) Get(key Key) ([]byte, error) {
+	item, err := t.txn.Get([]byte(key.String()))
+	if err != nil {
+		return nil, err
+	}
+	return item.ValueCopy(nil)
+}
+
+func (t *BadgerTx) MultiGet(keys []Key) (map[string][]byte, error) {
+	res := make(map[string][]byte, len(keys))
+	for _, k := range keys {
+		val, err := t.Get(k)
+		if err == badger.ErrKeyNotFound {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		res[k.ID] = val // Return the ID without the namespace to the caller
+	}
+	return res, nil
+}
+
+func (t *BadgerTx) Set(key Key, value []byte, opts ...SetOption) error {
 	options := &SetOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	return b.db.Update(func(txn *badger.Txn) error {
-		entry := badger.NewEntry([]byte(key), value)
-		if options.TTL > 0 {
-			entry = entry.WithTTL(options.TTL)
-		}
-		return txn.SetEntry(entry)
-	})
+	finalKey := []byte(key.String())
+	if options.TTL > 0 {
+		e := badger.NewEntry(finalKey, value).WithTTL(options.TTL)
+		return t.txn.SetEntry(e)
+	}
+	return t.txn.Set(finalKey, value)
 }
 
-func (b *BadgerStore) Delete(ctx context.Context, key string) error {
+func (t *BadgerTx) MultiSet(kvs map[Key][]byte, opts ...SetOption) error {
+	for k, v := range kvs {
+		if err := t.Set(k, v, opts...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *BadgerTx) Delete(key Key) error {
+	return t.txn.Delete([]byte(key.String()))
+}
+
+func (t *BadgerTx) MultiDelete(keys []Key) error {
+	for _, k := range keys {
+		if err := t.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *BadgerStore) WriteTx(ctx context.Context, fn func(tx Tx) error) error {
 	return b.db.Update(func(txn *badger.Txn) error {
-		return txn.Delete([]byte(key))
+		return fn(&BadgerTx{txn: txn})
 	})
 }
 

@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"platrium/internal/pipelines"
-	"platrium/internal/repositories"
 )
 
 type AttachedFSConfig struct {
@@ -22,7 +21,7 @@ const WriteCacheDir = "writecache"
 
 // AttachedFSBackend implements StorageBackend for any OS-attached file system (local, RAID, NFS, etc.).
 type AttachedFSBackend struct {
-	writesRepo repositories.AttachedFSWritesRepository
+	store AttachedFSStore
 	apiBaseURL string
 }
 
@@ -30,14 +29,14 @@ type AttachedFSBackend struct {
 var _ StorageBackend = (*AttachedFSBackend)(nil)
 
 // NewAttachedFSBackend initializes a new AttachedFSBackend.
-func NewAttachedFSBackend(writesRepo repositories.AttachedFSWritesRepository) *AttachedFSBackend {
+func NewAttachedFSBackend(store AttachedFSStore) *AttachedFSBackend {
 	var cfg AttachedFSConfig
 	if err := env.Parse(&cfg); err != nil {
 		panic(fmt.Sprintf("failed to parse AttachedFSConfig: %v", err)) // Fail fast if config is invalid
 	}
 
 	return &AttachedFSBackend{
-		writesRepo: writesRepo,
+		store:      store,
 		apiBaseURL: cfg.AppURL,
 	}
 }
@@ -48,12 +47,12 @@ func (l *AttachedFSBackend) GenerateUploadURLs(ctx context.Context, location str
 	for hash, info := range chunks {
 		writeId := uuid.New().String()
 
-		session := repositories.WriteSession{
+		session := WriteSession{
 			Location: location,
 			Path:     info.Path,
 		}
 
-		err := l.writesRepo.SetUploadPath(ctx, writeId, session)
+		err := l.store.SetUploadPath(ctx, writeId, session)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create upload session: %w", err)
 		}
@@ -65,7 +64,7 @@ func (l *AttachedFSBackend) GenerateUploadURLs(ctx context.Context, location str
 
 // CommitLocalWrite safely streams the HTTP request body directly to disk, performing real-time cryptographic hash validation.
 func (l *AttachedFSBackend) CommitLocalWrite(ctx context.Context, writeId string, stream io.Reader) error {
-	session, err := l.writesRepo.GetUploadPath(ctx, writeId)
+	session, err := l.store.GetUploadPath(ctx, writeId)
 	if err != nil {
 		return fmt.Errorf("invalid or expired write session: %w", err)
 	}
@@ -115,5 +114,5 @@ func (l *AttachedFSBackend) CommitLocalWrite(ctx context.Context, writeId string
 	}
 
 	streamSuccess = true
-	return l.writesRepo.DeleteUploadPath(ctx, writeId)
+	return l.store.DeleteUploadPath(ctx, writeId)
 }
