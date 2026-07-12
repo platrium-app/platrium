@@ -2,15 +2,23 @@ package fsops
 
 import (
 	"github.com/go-chi/chi/v5"
+
+	"platrium/internal/infra/storage"
 )
 
-// NewRouter aggregates all domain-specific feature handlers into a single router.
-func NewRouter(fsOps *FSOps) chi.Router {
-	r := chi.NewRouter()
+type Router struct {
+	handler *FileHandler
+}
 
-	fileHandler := NewFileHandler(fsOps)
+func NewRouter(fsOps *FSOps, storageProvider *storage.StorageProvider) *Router {
+	return &Router{
+		handler: NewFileHandler(fsOps, storageProvider),
+	}
+}
 
-	r.Post("/createfile", fileHandler.CreateFile)
-	
-	return r
+func (r *Router) Routes() chi.Router {
+	mux := chi.NewRouter()
+	mux.Post("/createfile", r.handler.CreateFile)
+	mux.Get("/download/{fileId}", r.handler.DownloadFile)
+	return mux
 }

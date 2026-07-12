@@ -22,7 +22,17 @@ type PresignRequest struct {
 	Hashes []string `json:"hashes"`
 }
 
-// Presign generates upload URLs (S3 presigned or AttachedFS local URLs) for a given set of object hashes.
+// Presign godoc
+// @Summary      Generate upload URLs for chunks
+// @Description  Generates presigned URLs for uploading raw binary blobs (chunks) directly to the storage backend.
+// @Tags         Objects
+// @Accept       json
+// @Produce      json
+// @Param        request body PresignRequest true "Chunk hashes to presign"
+// @Success      200  {object}  map[string]string "Returns map of hash to upload URL"
+// @Failure      400  {string}  string "Invalid JSON"
+// @Failure      500  {string}  string "Internal Server Error"
+// @Router       /objects/presign [post]
 func (h *ChunkHandler) Presign(w http.ResponseWriter, r *http.Request) {
 	var req PresignRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

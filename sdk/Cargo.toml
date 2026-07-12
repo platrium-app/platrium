@@ -1,0 +1,10 @@
+[package]
+name = "platrium-sdk"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+# Required for Android, iOS and WebAssembly cross-compilation
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]

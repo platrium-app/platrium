@@ -42,7 +42,7 @@ func main() {
 
 	// Wire up dependencies
 	attachedFSStore := storage.NewAttachedFSStore(store)
-	
+
 	storageProvider := storage.NewStorageProvider(attachedFSStore)
 	attachedFS := storage.NewAttachedFSBackend(attachedFSStore)
 
@@ -51,22 +51,23 @@ func main() {
 
 	// Setup Identity Domain
 	tenantStore := identity.NewTenantStore(graphStore)
+	userStore := identity.NewUserStore(graphStore)
 
 	// Setup Instance Config Store
 	instanceConfigStore := setup.NewInstanceConfigStore(store)
 
 	// Setup Cross-Domain Orchestrator
-	setupOrchestrator := setup.NewOrchestrator(instanceConfigStore, tenantStore)
+	setupOrchestrator := setup.NewOrchestrator(instanceConfigStore, tenantStore, userStore, fsOps)
 	if err := setupOrchestrator.Bootstrap(context.Background()); err != nil {
 		log.Fatalf("failed to bootstrap native tenant: %v", err)
 	}
 
 	// Setup HTTP Routers
-	fsRouter := fsops.NewRouter(fsOps)
+	fsRouter := fsops.NewRouter(fsOps, storageProvider)
 	objectsRouter := objects.NewRouter(storageProvider)
 	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
 
-	identityHandler := identity.NewTenantHandler(tenantStore)
+	identityHandler := identity.NewTenantHandler(tenantStore, userStore, fsOps)
 	identityRouter := identity.NewRouter(identityHandler)
 
 	router := chi.NewRouter()
@@ -76,7 +77,7 @@ func main() {
 	// Routes
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/health", HealthHandler)
-		r.Mount("/fs", fsRouter)
+		r.Mount("/fs", fsRouter.Routes())
 		r.Mount("/objects", objectsRouter)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
 		r.Mount("/tenants", identityRouter.Routes())
@@ -88,7 +89,9 @@ func main() {
 	}
 
 	log.Printf("Server listening on :%s", port)
-	http.ListenAndServe(":"+port, router)
+	if err := http.ListenAndServe(":"+port, router); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }
 
 // HealthHandler godoc
