@@ -20,9 +20,9 @@
                     "3. Disable API and Docs Generation, Remove Unnecessary Artifacts"
                 ],
                 "commands": [
-                    "rm -rf sdk/_generated/src sdk/_generated/Cargo.toml",
-                    "docker run --rm -v \"$(pwd)\":/local openapitools/openapi-generator-cli generate -i /local/api/rest/_generated/openapi.yaml -g rust -o /local/sdk/_generated --package-name platrium-restapi --additional-properties=supportAsync=true,preferPassthroughParameters=true,reqwestDefaultFeatures=reqwest/rustls --global-property apiDocs=false,modelDocs=false,apiTests=false,modelTests=false",
-                    "rm -rf sdk/_generated/.openapi-generator sdk/_generated/git_push.sh sdk/_generated/README.md sdk/_generated/.openapi-generator-ignore sdk/_generated/.travis.yml"
+                    "rm -rf {projectRoot}/_generated/src {projectRoot}/_generated/Cargo.toml",
+                    "docker run --rm -v \"$(pwd)\":/local openapitools/openapi-generator-cli generate -i /local/api/rest/_generated/openapi.yaml -g rust -o /local/{projectRoot}/_generated --package-name platrium-restapi --additional-properties=supportAsync=true,preferPassthroughParameters=true,reqwestDefaultFeatures=reqwest/rustls --global-property apiDocs=false,modelDocs=false,apiTests=false,modelTests=false",
+                    "rm -rf {projectRoot}/_generated/.openapi-generator {projectRoot}/_generated/git_push.sh {projectRoot}/_generated/README.md {projectRoot}/_generated/.openapi-generator-ignore {projectRoot}/_generated/.travis.yml"
                 ]
             },
             "inputs": [
@@ -30,6 +30,30 @@
             ],
             "outputs": [
                 "{projectRoot}/_generated"
+            ]
+        },
+        "generate-ffi-android": {
+            "executor": "nx:run-commands",
+            "cache": true,
+            "options": {
+                "commands": [
+                    "cargo ndk -t arm64-v8a -t x86_64 -o ./_ffi/android/src/main/jniLibs build --release",
+                    "cargo run --manifest-path uniffi/Cargo.toml -- generate --library ./target/aarch64-linux-android/release/libplatrium_sdk.so --config uniffi/uniffi.toml --language kotlin --out-dir ./_ffi/android/src/main/java",
+                    "cd _ffi/android && gradle assembleRelease"
+                ],
+                "parallel": false,
+                "cwd": "sdk"
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_ffi/android/src/**/*",
+                "{projectRoot}/_ffi/android/build.gradle"
+            ],
+            "outputs": [
+                "{projectRoot}/_ffi/android/build/outputs/aar",
+                "{projectRoot}/_ffi/android/src/main/jniLibs",
+                "{projectRoot}/_ffi/android/src/main/java/org/platrium/sdk"
             ]
         },
         "build": {

@@ -8,11 +8,13 @@ edition = "2024"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+log = "0.4"
 platrium-restapi = { path = "./_generated" }
 futures = "0.3"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
+uniffi = { version = "0.32.0", features = ["tokio"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.0", features = ["full"] }
@@ -22,3 +24,7 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["File", "Blob", "ReadableStream", "Response"] }
+
+# Android Only dependencies
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.15"

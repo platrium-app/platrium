@@ -26,9 +26,7 @@ impl XPlatFile {
     pub fn size(&self) -> u64 {
         match self {
             #[cfg(not(target_arch = "wasm32"))]
-            XPlatFile::Native(file) => {
-                file.metadata().map(|m| m.len()).unwrap_or(0)
-            }
+            XPlatFile::Native(file) => file.metadata().map(|m| m.len()).unwrap_or(0),
             #[cfg(target_arch = "wasm32")]
             XPlatFile::Wasm(file) => file.size() as u64,
         }

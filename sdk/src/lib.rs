@@ -1,4 +1,7 @@
+uniffi::setup_scaffolding!("platrium_sdk");
+
 pub mod client;
+pub mod errors;
 pub(crate) mod fs;
 pub(crate) mod xplat;
 
