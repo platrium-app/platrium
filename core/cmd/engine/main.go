@@ -14,6 +14,7 @@ import (
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
 	"platrium/internal/objects"
+	"platrium/internal/restapi"
 	"platrium/internal/setup"
 
 	"github.com/go-chi/chi/v5"
@@ -63,12 +64,13 @@ func main() {
 	}
 
 	// Setup HTTP Routers
-	fsRouter := fsops.NewRouter(fsOps, storageProvider)
 	objectsRouter := objects.NewRouter(storageProvider)
 	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
 
 	identityHandler := identity.NewTenantHandler(tenantStore, userStore, fsOps)
 	identityRouter := identity.NewRouter(identityHandler)
+
+	restAPI := restapi.NewRestAPI(fsOps)
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -77,10 +79,12 @@ func main() {
 	// Routes
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/health", HealthHandler)
-		r.Mount("/fs", fsRouter.Routes())
 		r.Mount("/objects", objectsRouter)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
 		r.Mount("/tenants", identityRouter.Routes())
+
+		// OpenAPI Generated Routes
+		restapi.HandlerFromMux(restAPI, r)
 	})
 
 	port := os.Getenv("PORT")
@@ -101,5 +105,5 @@ func main() {
 // @Success      200  {object}  map[string]string
 // @Router       /health [get]
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(map[string]string{"message": "Platrium Core is running"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Platrium Engine is running"})
 }

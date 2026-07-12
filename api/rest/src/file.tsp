@@ -32,10 +32,10 @@ model InternalServerError {
     message: string;
 }
 
-@route("/fs")
-@tag("FileSystem")
-interface FileSystem {
-    @route("createfile")
+@route("/files")
+@tag("Files")
+interface Files {
+    @route("create")
     @post
     @summary("Create a new file")
     @doc("Creates a New File for the Current User")

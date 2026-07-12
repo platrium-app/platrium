@@ -16,7 +16,7 @@
                 "cwd": "api/rest"
             }
         },
-        "compile": {
+        "build": {
             "executor": "nx:run-commands",
             "cache": true,
             "dependsOn": [

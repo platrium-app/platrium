@@ -1,5 +1,5 @@
 import "@typespec/http";
-import "./fsops_file.tsp";
+import "./file.tsp";
 
 using TypeSpec.Http;
 
