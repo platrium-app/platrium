@@ -1,0 +1,12 @@
+[package]
+name = "platrium-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "platrium"
+path = "src/main.rs"
+
+[dependencies]
+platrium-sdk = { path = "../sdk" }
+tokio = { version = "1.52.3", features = ["full"] }

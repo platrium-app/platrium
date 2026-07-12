@@ -1,0 +1,102 @@
+{
+    "name": "sdk",
+    "projectType": "library",
+    "sourceRoot": "sdk/src",
+    "implicitDependencies": [
+        "api-rest"
+    ],
+    "targets": {
+        "_generate_restapi_bindings": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "api-rest:build"
+            ],
+            "options": {
+                "parallel": false,
+                "_comments": [
+                    "1. openapi-generator-cli overwrites and is append-only so, remove the existing generated files",
+                    "2. To avoid JRE hassle, use Docker to generate and replace TLS lib with rustls to support WASM",
+                    "3. Disable API and Docs Generation, Remove Unnecessary Artifacts"
+                ],
+                "commands": [
+                    "rm -rf {projectRoot}/_generated/src {projectRoot}/_generated/Cargo.toml",
+                    "docker run --rm -v \"$(pwd)\":/local openapitools/openapi-generator-cli generate -i /local/api/rest/_generated/openapi.yaml -g rust -o /local/{projectRoot}/_generated --package-name platrium-restapi --additional-properties=supportAsync=true,preferPassthroughParameters=true,reqwestDefaultFeatures=reqwest/rustls --global-property apiDocs=false,modelDocs=false,apiTests=false,modelTests=false",
+                    "rm -rf {projectRoot}/_generated/.openapi-generator {projectRoot}/_generated/git_push.sh {projectRoot}/_generated/README.md {projectRoot}/_generated/.openapi-generator-ignore {projectRoot}/_generated/.travis.yml"
+                ]
+            },
+            "inputs": [
+                "{workspaceRoot}/api/rest/_generated/openapi.yaml"
+            ],
+            "outputs": [
+                "{projectRoot}/_generated"
+            ]
+        },
+        "generate-ffi-android": {
+            "executor": "nx:run-commands",
+            "cache": true,
+            "options": {
+                "commands": [
+                    "cargo ndk -t arm64-v8a -t x86_64 -o ./_ffi/android/src/main/jniLibs build --release",
+                    "cargo run --manifest-path uniffi/Cargo.toml -- generate --library ./target/aarch64-linux-android/release/libplatrium_sdk.so --config uniffi/uniffi.toml --language kotlin --out-dir ./_ffi/android/src/main/java",
+                    "cd _ffi/android && gradle assembleRelease"
+                ],
+                "parallel": false,
+                "cwd": "sdk"
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_ffi/android/src/**/*",
+                "{projectRoot}/_ffi/android/build.gradle"
+            ],
+            "outputs": [
+                "{projectRoot}/_ffi/android/build/outputs/aar",
+                "{projectRoot}/_ffi/android/src/main/jniLibs",
+                "{projectRoot}/_ffi/android/src/main/java/org/platrium/sdk"
+            ]
+        },
+        "build": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_restapi_bindings"
+            ],
+            "options": {
+                "command": "cargo build",
+                "cwd": "sdk"
+            },
+            "configurations": {
+                "release": {
+                    "command": "cargo build --release"
+                }
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*.rs",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_generated/**/*.rs"
+            ],
+            "outputs": [
+                "{projectRoot}/target/debug/libplatrium_sdk.rlib",
+                "{projectRoot}/target/debug/libplatrium_sdk.a",
+                "{projectRoot}/target/debug/libplatrium_sdk.so"
+            ]
+        },
+        "test": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_restapi_bindings"
+            ],
+            "options": {
+                "command": "cargo test",
+                "cwd": "sdk"
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*.rs",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_generated/**/*.rs"
+            ]
+        }
+    }
+}

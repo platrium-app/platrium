@@ -1,0 +1,64 @@
+# Auto-generated UniFFI Stubs
+src/main/java
+src/main/jniLibs
+
+# Built artifacts
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+.kotlin/
+bin/
+gen/
+out/
+
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (contains local paths to SDK, etc.)
+local.properties
+
+# Log files
+*.log
+
+# Android Studio internal files
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+cmake-build-*/
+
+# IntelliJ IDEA files (Android Studio is built on IntelliJ)
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+*.iml
+*.ipr
+*.iws
+
+# Keystore files (NEVER commit your production signing keys!)
+*.jks
+*.keystore
+*.p12
+
+# Google Services configuration file (usually handled per environment)
+# google-services.json
+
+# Device app profiling and benchmarking
+*.hprof
+
+# OS specific files
+.DS_Store
+Thumbs.db

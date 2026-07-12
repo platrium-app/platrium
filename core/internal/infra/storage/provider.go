@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"io"
 	"path"
 )
 
@@ -28,6 +29,12 @@ func (s *StorageProvider) GenerateUploadURLs(ctx context.Context, chunkHashes []
 	// Hardcoded routing to attached FS backend for now
 	backend := NewAttachedFSBackend(s.store)
 	return backend.GenerateUploadURLs(ctx, "./data", chunks)
+}
+
+func (s *StorageProvider) GetChunk(ctx context.Context, hash string) (io.ReadCloser, error) {
+	backend := NewAttachedFSBackend(s.store)
+	path := GetShardedPath(ObjectTypeChunk, hash)
+	return backend.GetChunk(ctx, "./data", path)
 }
 
 // GetShardedPath enforces 3-level prefix sharding to improve file system efficiency

@@ -21,7 +21,7 @@ const WriteCacheDir = "writecache"
 
 // AttachedFSBackend implements StorageBackend for any OS-attached file system (local, RAID, NFS, etc.).
 type AttachedFSBackend struct {
-	store AttachedFSStore
+	store      AttachedFSStore
 	apiBaseURL string
 }
 
@@ -115,4 +115,14 @@ func (l *AttachedFSBackend) CommitLocalWrite(ctx context.Context, writeId string
 
 	streamSuccess = true
 	return l.store.DeleteUploadPath(ctx, writeId)
+}
+
+// GetChunk returns a read stream for the specified chunk path.
+func (l *AttachedFSBackend) GetChunk(ctx context.Context, location string, chunkPath string) (io.ReadCloser, error) {
+	finalPath := filepath.Join(location, chunkPath)
+	file, err := os.Open(finalPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open chunk at %s: %w", finalPath, err)
+	}
+	return file, nil
 }

@@ -17,6 +17,17 @@ type FSOps struct {
 	manifestRepo *ManifestRepo
 }
 
+// File represents a file node in the graph database.
+type File struct {
+	ID           string   `json:"id"`
+	TenantID     string   `json:"tenant_id"`
+	Name         string   `json:"name"`
+	Size         int64    `json:"size"`
+	CreatedAt    int64    `json:"created_at"`
+	ManifestPath string   `json:"manifest_path,omitempty"`
+	InlineChunks []string `json:"inline_chunks,omitempty"`
+}
+
 func NewFSOps(g graph.Graph, m *ManifestRepo) *FSOps {
 	return &FSOps{graph: g, manifestRepo: m}
 }
@@ -68,6 +79,8 @@ func (f *FSOps) CreateFile(ctx context.Context, tenantId, parentId, name string,
 			file:File,
 			file.name = $name, 
 			file.tenant_id = $tenant_id,
+			file.size = 0,
+			file.created_at = timestamp(),
 			file.manifest_path = $manifest_path,
 			file.inline_chunks = $inline_chunks
 		
@@ -102,5 +115,53 @@ func (f *FSOps) CreateFile(ctx context.Context, tenantId, parentId, name string,
 		return nil
 	})
 
-	return fileId, err
+	if err != nil {
+		return "", err
+	}
+
+	return fileId, nil
+}
+
+// GetFile retrieves the full file metadata, ensuring tenant isolation.
+func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, error) {
+	query := `
+		MATCH (file:File {id: $file_id, tenant_id: $tenant_id})
+		RETURN 
+			file.id AS id,
+			file.tenant_id AS tenant_id,
+			file.name AS name,
+			file.size AS size,
+			file.created_at AS created_at,
+			file.manifest_path AS manifest_path, 
+			file.inline_chunks AS inline_chunks
+	`
+	params := map[string]interface{}{
+		"file_id":   fileId,
+		"tenant_id": tenantId,
+	}
+
+	var file File
+	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
+		res, err := tx.Query(ctx, query, params)
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+
+		if !res.Next() {
+			return fmt.Errorf("file not found or access denied")
+		}
+
+		if err := res.Scan(&file); err != nil {
+			return fmt.Errorf("failed to scan file: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &file, nil
 }

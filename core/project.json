@@ -1,0 +1,69 @@
+{
+  "name": "core-engine",
+  "projectType": "application",
+  "sourceRoot": "core",
+  "implicitDependencies": [
+    "api-rest"
+  ],
+  "targets": {
+    "_generate_restapi_bindings": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "api-rest:build"
+      ],
+      "options": {
+        "command": "go tool oapi-codegen -generate types,chi-server,spec -package restapi -o internal/restapi/generated_bindings.go ../api/rest/_generated/openapi.yaml",
+        "cwd": "core"
+      },
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/api/rest/_generated/openapi.yaml"
+      ],
+      "outputs": [
+        "{projectRoot}/internal/restapi/generated_bindings.go"
+      ]
+    },
+    "build": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "_generate_restapi_bindings"
+      ],
+      "options": {
+        "command": "go build -o bin/core-engine cmd/engine/main.go",
+        "cwd": "core"
+      },
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum"
+      ],
+      "outputs": [
+        "{projectRoot}/bin/core-engine"
+      ]
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "./bin/core-engine",
+        "cwd": "core"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go test ./...",
+        "cwd": "core"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum"
+      ]
+    }
+  }
+}

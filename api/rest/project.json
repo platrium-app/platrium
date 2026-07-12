@@ -1,0 +1,38 @@
+{
+    "name": "api-rest",
+    "targets": {
+        "_install": {
+            "executor": "nx:run-commands",
+            "cache": true,
+            "inputs": [
+                "{projectRoot}/package.json",
+                "{projectRoot}/package-lock.json"
+            ],
+            "outputs": [
+                "{projectRoot}/node_modules"
+            ],
+            "options": {
+                "command": "npm install",
+                "cwd": "api/rest"
+            }
+        },
+        "build": {
+            "executor": "nx:run-commands",
+            "cache": true,
+            "dependsOn": [
+                "_install"
+            ],
+            "inputs": [
+                "{projectRoot}/src/**/*.tsp",
+                "{projectRoot}/tspconfig.yaml"
+            ],
+            "outputs": [
+                "{projectRoot}/_generated/openapi.yaml"
+            ],
+            "options": {
+                "command": "npm run build",
+                "cwd": "api/rest"
+            }
+        }
+    }
+}

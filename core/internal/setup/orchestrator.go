@@ -5,19 +5,25 @@ import (
 	"fmt"
 	"log"
 
+	"platrium/internal/fsops"
 	"platrium/internal/identity"
 )
 
+// TODO: This needs to be split into flows for each thing like user creation etc, would become a huge ahh class otherwise
 // Orchestrator handles cross-domain setup logic like Bootstrapping.
 type Orchestrator struct {
 	configStore InstanceConfigStore
 	tenantStore *identity.TenantStore
+	userStore   *identity.UserStore
+	fsOps       *fsops.FSOps
 }
 
-func NewOrchestrator(configStore InstanceConfigStore, tenantStore *identity.TenantStore) *Orchestrator {
+func NewOrchestrator(configStore InstanceConfigStore, tenantStore *identity.TenantStore, userStore *identity.UserStore, fsOps *fsops.FSOps) *Orchestrator {
 	return &Orchestrator{
 		configStore: configStore,
 		tenantStore: tenantStore,
+		userStore:   userStore,
+		fsOps:       fsOps,
 	}
 }
 
@@ -39,6 +45,22 @@ func (o *Orchestrator) Bootstrap(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create native tenant in GraphDB: %w", err)
 	}
+
+	// TODO: User Creation Flow, get preferred email from .env and for others/post-super-admin,
+	//	     user says tenant super admin email in new tenant call.
+	// Hardcode a default admin user for the native tenant
+	user, err := o.userStore.CreateUser(ctx, tenant.ID, "admin@example.com")
+	if err != nil {
+		return fmt.Errorf("failed to create native super admin: %w", err)
+	}
+	log.Printf("Setup: Created Native Super Admin (ID: %s, Email: %s)", user.ID, user.Email)
+
+	// Hardcode a private drive creation for the user (to be moved to user creation flow later)
+	drive, err := o.fsOps.CreatePrivateDrive(ctx, tenant.ID, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to create private drive for native super admin: %w", err)
+	}
+	log.Printf("Setup: Created Private Drive (ID: %s) for Native Super Admin", drive.ID)
 
 	// Save the ID to the KV Store instance config
 	err = o.configStore.Set(ctx, KeyNativeTenantID, tenant.ID)

@@ -1,0 +1,87 @@
+openapi: 3.0.0
+info:
+  title: Platrium Core API
+  version: 0.0.0
+tags:
+  - name: Files
+paths:
+  /files/create:
+    post:
+      operationId: Files_createFile
+      summary: Create a new file
+      description: Creates a New File for the Current User
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.CreateFileResponse'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.MissingChunks'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.CreateFileRequest'
+components:
+  schemas:
+    Errors.EngineInternal:
+      type: object
+      required:
+        - debuginfo
+      properties:
+        debuginfo:
+          type: string
+    Errors.MissingChunks:
+      type: object
+      required:
+        - missing_chunks
+      properties:
+        missing_chunks:
+          type: array
+          items:
+            type: string
+    Files.CreateFileRequest:
+      type: object
+      required:
+        - parent_id
+        - file_name
+        - hashes
+      properties:
+        parent_id:
+          type: string
+          description: ID of the parent folder or drive
+        file_name:
+          type: string
+          description: Name of the file
+        hashes:
+          type: array
+          items:
+            type: string
+          description: Array of chunk hashes
+    Files.CreateFileResponse:
+      type: object
+      required:
+        - file_id
+      properties:
+        file_id:
+          type: string
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+    variables: {}

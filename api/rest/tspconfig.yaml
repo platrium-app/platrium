@@ -1,0 +1,9 @@
+kind: project
+warn-as-error: true
+emit:
+  - "@typespec/openapi3"
+options:
+  "@typespec/openapi3":
+    emitter-output-dir: "{project-root}/_generated"
+    openapi-versions:
+      - 3.0.0
