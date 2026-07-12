@@ -51,7 +51,7 @@ func (h *FileHandler) CreateFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: Hardcoded tenant ID for now, replace with JWT middleware later
-	tenantId := "default_tenant"
+	tenantId := "10ea4b03-d6dd-40bc-8b29-12b02efac041"
 
 	fileId, err := h.fsOps.CreateFile(r.Context(), tenantId, req.ParentID, req.FileName, req.Hashes)
 	if err != nil {

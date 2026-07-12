@@ -3,9 +3,19 @@
 
 # Agent Files
 .agent/
+.claude/worktrees
+.claude/settings.local.json
 
 # IDE Files
 .vscode/
 
 # Scratchpads, Plans, Do Whatever files lol
 scratch/
+
+# Nx Build System
+.nx/installation
+.nx/cache
+.nx/workspace-data
+.nx/self-healing
+.nx/migrate-runs
+.nx/polygraph
