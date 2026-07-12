@@ -1,8 +1,9 @@
 import "@typespec/http";
+import "./errors.tsp";
 
 using TypeSpec.Http;
 
-namespace Platrium;
+namespace Platrium.Files;
 
 model CreateFileRequest {
     @doc("ID of the parent folder or drive")
@@ -20,18 +21,6 @@ model CreateFileResponse {
     file_id: string;
 }
 
-@error
-model InvalidJsonError {
-    @statusCode _: 400;
-    message: string;
-}
-
-@error
-model InternalServerError {
-    @statusCode _: 500;
-    message: string;
-}
-
 @route("/files")
 @tag("Files")
 interface Files {
@@ -41,6 +30,6 @@ interface Files {
     @doc("Creates a New File for the Current User")
     createFile(@body body: CreateFileRequest):
         | CreateFileResponse
-        | InvalidJsonError
-        | InternalServerError;
+        | Platrium.Errors.MissingChunks
+        | Platrium.Errors.EngineInternal;
 }

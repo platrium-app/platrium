@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.0
 info:
   title: Platrium Core API
   version: 0.0.0
@@ -17,19 +17,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateFileResponse'
-        '400':
-          description: The server could not understand the request due to invalid syntax.
+                $ref: '#/components/schemas/Files.CreateFileResponse'
+        '404':
+          description: The server cannot find the requested resource.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InvalidJsonError'
+                $ref: '#/components/schemas/Errors.MissingChunks'
         '500':
           description: Server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternalServerError'
+                $ref: '#/components/schemas/Errors.EngineInternal'
       tags:
         - Files
       requestBody:
@@ -37,10 +37,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateFileRequest'
+              $ref: '#/components/schemas/Files.CreateFileRequest'
 components:
   schemas:
-    CreateFileRequest:
+    Errors.EngineInternal:
+      type: object
+      required:
+        - debuginfo
+      properties:
+        debuginfo:
+          type: string
+    Errors.MissingChunks:
+      type: object
+      required:
+        - missing_chunks
+      properties:
+        missing_chunks:
+          type: array
+          items:
+            type: string
+    Files.CreateFileRequest:
       type: object
       required:
         - parent_id
@@ -58,26 +74,12 @@ components:
           items:
             type: string
           description: Array of chunk hashes
-    CreateFileResponse:
+    Files.CreateFileResponse:
       type: object
       required:
         - file_id
       properties:
         file_id:
-          type: string
-    InternalServerError:
-      type: object
-      required:
-        - message
-      properties:
-        message:
-          type: string
-    InvalidJsonError:
-      type: object
-      required:
-        - message
-      properties:
-        message:
           type: string
 servers:
   - url: http://localhost:3000/api

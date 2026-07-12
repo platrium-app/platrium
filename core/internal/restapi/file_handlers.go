@@ -7,7 +7,7 @@ import (
 
 // FilesCreateFile implements the OpenAPI POST /files/create endpoint.
 func (api *RestAPI) FilesCreateFile(w http.ResponseWriter, r *http.Request) {
-	var req CreateFileRequest
+	var req FilesCreateFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -16,13 +16,16 @@ func (api *RestAPI) FilesCreateFile(w http.ResponseWriter, r *http.Request) {
 	// TODO: Hardcoded tenant ID for now, replace with JWT middleware later
 	tenantId := "f6105961-cd9f-492a-8657-33f7e14ff1b2"
 
+	// TODO: Check if all requested chunks exist else, throw error.
 	fileId, err := api.FSOps.CreateFile(r.Context(), tenantId, req.ParentId, req.FileName, req.Hashes)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorsEngineInternal{Debuginfo: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(CreateFileResponse{FileId: fileId})
+	json.NewEncoder(w).Encode(FilesCreateFileResponse{FileId: fileId})
 }

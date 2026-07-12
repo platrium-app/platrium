@@ -17,8 +17,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// CreateFileRequest defines model for CreateFileRequest.
-type CreateFileRequest struct {
+// ErrorsEngineInternal defines model for Errors.EngineInternal.
+type ErrorsEngineInternal struct {
+	Debuginfo string `json:"debuginfo"`
+}
+
+// ErrorsMissingChunks defines model for Errors.MissingChunks.
+type ErrorsMissingChunks struct {
+	MissingChunks []string `json:"missing_chunks"`
+}
+
+// FilesCreateFileRequest defines model for Files.CreateFileRequest.
+type FilesCreateFileRequest struct {
 	// FileName Name of the file
 	FileName string `json:"file_name"`
 
@@ -29,23 +39,13 @@ type CreateFileRequest struct {
 	ParentId string `json:"parent_id"`
 }
 
-// CreateFileResponse defines model for CreateFileResponse.
-type CreateFileResponse struct {
+// FilesCreateFileResponse defines model for Files.CreateFileResponse.
+type FilesCreateFileResponse struct {
 	FileId string `json:"file_id"`
 }
 
-// InternalServerError defines model for InternalServerError.
-type InternalServerError struct {
-	Message string `json:"message"`
-}
-
-// InvalidJsonError defines model for InvalidJsonError.
-type InvalidJsonError struct {
-	Message string `json:"message"`
-}
-
 // FilesCreateFileJSONRequestBody defines body for FilesCreateFile for application/json ContentType.
-type FilesCreateFileJSONRequestBody = CreateFileRequest
+type FilesCreateFileJSONRequestBody = FilesCreateFileRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -212,17 +212,17 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"tFVNb9s4EP0rg9k9Cpay2b3ols1uARdFEPTjVBgBI44jphSpDEmnRuD/XgwpO3bttJfkJpJv5r35ePYT",
-	"dn4YvSMXA7ZPGLqeBpU/L5lUpHfG0kd6SBSiXI7sR+JoKEOWxtKNUwPJQVPo2IzReIctXqmBwC8h9gQC",
-	"wwrjeiRsMUQ27g43FfYq9CXRYewFs1pLcNcn9w0mWIUm0pDhR5mmCyWBch4Vk4s3Rh8nn/+3lVVAsPRW",
-	"E4Nn0GxWJ4RuKmR6SIZJY/t1L3e114BdNYtdvL+9py6KnP1WhtG7QC/0sgj+Nf8WeIpo7iKxU/YT8Yr4",
-	"f2bPx0wDhaDu6PdMW+BpppWyRr8P3r0djSCNW/qcw0Qrb9dWRTZpgEvPBBfXc6xwRRzKdJtZM2tEnx/J",
-	"qdFgi+ezs1mDshOxz8Jq6WCouzyUrNuX5T5clDK0AAqu6BFkeLD0nDfnMnFenS+BGDMXK4maa2xRkOF5",
-	"4liKpRD/9XotNJ13kVxmVONoTZdj6/sgtFsLytefTEts8Y/62aP1ZND62J2bw75GTpQvysLlyv9qzt5E",
-	"wLTTWcFhEz/3BFP54mMIqeuINGlQToMCR4/AFHzijjLglshBGY0GJd1nCsnGmQz176Z5Nf1HC/yC+pCt",
-	"BJ1PVoPzEZLTxCGK/rhXnU4E0YMpaSGsXVTfs+p/XlX1scFPCC/PQNN7hSENg+L1bq2n1m9/mdVdECfm",
-	"1cVFTljqluufjfHBd8qCphVZPw7ig4LFChNbbLGPcWzr2gqu9yG2503T1OLGzWJH9oTlj2Mi3Sw2PwIA",
-	"AP//",
+	"tFRNT9w8EP4r1rzvMdqkhV5yo1sqrdQi1I9TtUImnmxME9vMOItWKP+9sp0E2I+KA70l9mM/HzPjR6hs",
+	"56xB4xnKR+CqwU7Gz0siS7y4NBttcGU8kpFt2HBkHZLXGGEKb/uNNrUNP37nEEpgT9psYBgyILzvNaGC",
+	"8tcz6DqboPb2DisPQzbxfdXM2myWTW9+8yFdl7Zvqnlfe+z4CPlMIYnk7kDM3kXHFH3WLfJiSSg9hu9v",
+	"eN8j+0NRtW7xxsgOUyBckXZeWwMlXMkOha2Fb1AEGGSHOhvJzRTm87MXQXg4HDWKEZa92nEGThIaf6PV",
+	"4eWrT5OsBBK1bRWSsCQU6e0RoXsBPt2dPQtgdvO6QNlZw3gi0ST77yom4CFdQM59qX0b9q5b6Un3nVha",
+	"QnFxvYIMtkicIikWxaIIOq1DI52GEs7iUgjSN1FYHgg5r6KHqNumjniZbvLIQoorfBDBq6gtxbiXPcW8",
+	"fzISRC6S4dRKQZkSegoIkllk/9GqXaCprPFoIqN0rtVVPJvfcaCd5jd8/U9YQwn/5U8Dno/TnZ9q7OFl",
+	"up56jAupStH/++LdP5QxtkPU8TLQHw2KMYowCIL7qkJUqIQ0Skhh8EEQsu2pwgi4RTQilUkJGSpByH3r",
+	"F6HA58X5m7k4+m6dcMBIWyRRSWOsF7U2KrbEaAzVbCGq/FAUb61y7zU/IvN7kogBH6eN+66TtJubegx7",
+	"eszkhsMcxlrCOl6YXIbl/bH4YivZCoVbbK3rwhQkLGTQUwslNN67Ms/bgGss+/KsKIo8zOKwnskeIb21",
+	"I+mwHv4EAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

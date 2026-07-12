@@ -1,0 +1,78 @@
+{
+    "name": "sdk",
+    "projectType": "library",
+    "sourceRoot": "sdk/src",
+    "implicitDependencies": [
+        "api-rest"
+    ],
+    "targets": {
+        "_generate_restapi_bindings": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "api-rest:build"
+            ],
+            "options": {
+                "parallel": false,
+                "_comments": [
+                    "1. openapi-generator-cli overwrites and is append-only so, remove the existing generated files",
+                    "2. To avoid JRE hassle, use Docker to generate and replace TLS lib with rustls to support WASM",
+                    "3. Disable API and Docs Generation, Remove Unnecessary Artifacts"
+                ],
+                "commands": [
+                    "rm -rf sdk/_generated/src sdk/_generated/Cargo.toml",
+                    "docker run --rm -v \"$(pwd)\":/local openapitools/openapi-generator-cli generate -i /local/api/rest/_generated/openapi.yaml -g rust -o /local/sdk/_generated --package-name platrium-restapi --additional-properties=supportAsync=true,preferPassthroughParameters=true,reqwestDefaultFeatures=reqwest/rustls --global-property apiDocs=false,modelDocs=false,apiTests=false,modelTests=false",
+                    "rm -rf sdk/_generated/.openapi-generator sdk/_generated/git_push.sh sdk/_generated/README.md sdk/_generated/.openapi-generator-ignore sdk/_generated/.travis.yml"
+                ]
+            },
+            "inputs": [
+                "{workspaceRoot}/api/rest/_generated/openapi.yaml"
+            ],
+            "outputs": [
+                "{projectRoot}/_generated"
+            ]
+        },
+        "build": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_restapi_bindings"
+            ],
+            "options": {
+                "command": "cargo build",
+                "cwd": "sdk"
+            },
+            "configurations": {
+                "release": {
+                    "command": "cargo build --release"
+                }
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*.rs",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_generated/**/*.rs"
+            ],
+            "outputs": [
+                "{projectRoot}/target/debug/libplatrium_sdk.rlib",
+                "{projectRoot}/target/debug/libplatrium_sdk.a",
+                "{projectRoot}/target/debug/libplatrium_sdk.so"
+            ]
+        },
+        "test": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_restapi_bindings"
+            ],
+            "options": {
+                "command": "cargo test",
+                "cwd": "sdk"
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*.rs",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_generated/**/*.rs"
+            ]
+        }
+    }
+}

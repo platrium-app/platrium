@@ -27,7 +27,7 @@
                 "{projectRoot}/tspconfig.yaml"
             ],
             "outputs": [
-                "{projectRoot}/_generated"
+                "{projectRoot}/_generated/openapi.yaml"
             ],
             "options": {
                 "command": "npm run build",
