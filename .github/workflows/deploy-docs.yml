@@ -43,9 +43,7 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Build docs with Nx
-        # Since Nx is configured to run `npm run build` in the `docs` folder,
-        # it will correctly pick up the `output: 'export'` we added and generate the `out` folder.
-        run: nx build docs
+        run: ./nx build docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
