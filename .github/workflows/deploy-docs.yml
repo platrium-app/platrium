@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: docs/package-lock.json
 
@@ -36,13 +36,16 @@ jobs:
         working-directory: docs
         run: npm ci
 
+      - name: Install Nx
+        run: npm install -g nx
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Build docs with Nx
         # Since Nx is configured to run `npm run build` in the `docs` folder,
         # it will correctly pick up the `output: 'export'` we added and generate the `out` folder.
-        run: npx nx build docs
+        run: nx build docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
