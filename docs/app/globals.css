@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@theme {
+    --color-fd-primary: #ed1a38;
+}
+
+.dark {
+    --color-fd-primary: #ff5c75;
+}
