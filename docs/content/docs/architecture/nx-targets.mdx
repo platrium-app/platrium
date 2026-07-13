@@ -1,0 +1,51 @@
+---
+title: Nx Targets & Cross-Platform Builds
+description: How we manage mobile, web, and native builds using the Nx DAG.
+---
+
+Platrium is a massive polyglot monorepo. We have Go for the backend, Rust for the core SDK, Kotlin for Android, Swift for iOS, and WASM for the Web. 
+
+To prevent this from devolving into a chaotic nightmare of Makefiles and Bash scripts, we rely entirely on the **Nx Build System**. 
+
+## How We Use Nx Internally
+
+Nx uses a **Directed Acyclic Graph (DAG)** to understand exactly how our projects relate to one another. 
+Instead of writing imperative scripts ("first build X, then build Y"), we declaratively define dependencies in our `project.json` files.
+
+For example, look at how the Android SDK target is set up. It doesn't just run Gradle; it dictates a strict chain of events:
+
+1. **The SDK depends on the API**: The SDK cannot compile until the `api` project successfully compiles the TypeSpec into OpenAPI YAML and generates the Rust client.
+2. **The FFI Build**: The `sdk` project uses `cargo ndk` to cross-compile the Rust code into Android `.so` binaries.
+3. **UniFFI Generation**: It then runs `uniffi-bindgen` to generate the Kotlin `.kt` files.
+4. **Gradle Packaging**: Finally, it invokes `gradle assembleRelease` to package the Kotlin code and the C++ binaries into a clean Android `.aar` library!
+
+Because Nx tracks all of this, running `nx build android-app` will automatically trigger the entire chain all the way down to the TypeSpec compiler if needed, while aggressively caching anything that hasn't changed.
+
+## Adding New Targets
+
+Adding a new target (like Windows Native, macOS Desktop, or a new mobile framework) is incredibly straightforward.
+
+You simply define a new target in the `project.json` of the relevant project (usually `sdk`) using the `nx:run-commands` executor.
+
+```json
+// Example of adding a new target in sdk/project.json
+{
+  "targets": {
+    "generate-ffi-macos": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+            "cargo build --target aarch64-apple-darwin --release",
+            "cargo run --manifest-path uniffi/Cargo.toml -- generate --library ./target/aarch64-apple-darwin/release/libplatrium_sdk.dylib --language swift --out-dir ./_ffi/macos"
+        ],
+        "parallel": false
+      },
+      "dependsOn": [
+        "^build" // This tells Nx to build the API generators first!
+      ]
+    }
+  }
+}
+```
+
+By adding `dependsOn: ["^build"]`, you ensure that the new target perfectly integrates into the existing DAG. You never have to worry about race conditions or building against outdated APIs!

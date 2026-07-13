@@ -1,0 +1,13 @@
+---
+title: API Architecture
+description: Overview of the API protocols used in Platrium.
+---
+
+Platrium's architecture is powered by a dual-protocol approach to ensure maximum performance and flexibility across our clients. 
+
+We split our API layer into two distinct responsibilities:
+
+1. **REST APIs**: Used for heavy lifting, high-throughput binary streaming (file uploads/downloads), and standard authentication protocols.
+2. **GraphQL APIs**: Used specifically for the UI data layer to allow clients to query deeply nested relational data (like folder structures and user permissions) without suffering from over-fetching or under-fetching.
+
+Choose a section from the sidebar to dive into the technical details and authoring guides for each protocol!

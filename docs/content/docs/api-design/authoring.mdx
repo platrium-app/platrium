@@ -1,0 +1,97 @@
+---
+title: How to Add a New REST API
+description: Step-by-step guide to authoring a new API endpoint in Platrium.
+---
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+Platrium REST APIs are design-first and it uses a heavily automated generator pipeline, so adding a new REST API endpoint is incredibly easy and safe. You never have to write HTTP routing boilerplate or client deserialization code by hand!
+
+Here is the exact workflow for adding a new endpoint to the platform:
+
+<Steps>
+<Step>
+### Define TypeSpec
+Write your API definitions in `.tsp` files inside the `api/` directory. Nx will automatically compile this into a single `openapi.yaml` file.
+</Step>
+<Step>
+### Implement Go Server
+The pipeline uses `oapi-codegen` to generate Go interfaces. The compiler will explicitly fail until you implement these new handler methods in the `core/` backend.
+</Step>
+<Step>
+### Implement SDK Wrapper
+The `openapi-generator-cli` auto-generates a raw Rust client, but this is kept internal. You must write a high-level Rust wrapper function in the SDK to handle authentication and expose a clean interface.
+</Step>
+<Step>
+### Cross-Platform Use
+Because of UniFFI and WASM-bindgen, any Rust wrapper you just exposed is automatically compiled into Kotlin, Swift, and JavaScript ready to be consumed by the frontend apps!
+</Step>
+</Steps>
+
+## Define the API in TypeSpec
+Everything starts in the `api/` folder. Locate the relevant `.tsp` file (or create a new one) and define your endpoint using standard TypeSpec syntax.
+
+```tsp twoslash
+// Example of defining a new endpoint in TypeSpec
+import "@typespec/http";
+import "@typespec/rest";
+
+using TypeSpec.Http;
+
+namespace Platrium.Files {
+  model FileResponse {
+    id: string;
+    name: string;
+    size: int64;
+  }
+
+  @route("/files")
+  interface FilesApi {
+    @get
+    @summary("Get a file by ID")
+    getFile(@path id: string): FileResponse;
+  }
+}
+```
+
+## Run the Nx Pipeline
+Once you've saved your TypeSpec definitions, you need to compile them and run the generators. 
+
+Because we use Nx, you can simply run the build target for the API project. Nx will automatically recompile the TypeSpec into OpenAPI YAML, and then seamlessly trigger the Go and Rust generators!
+
+```bash
+nx build api
+```
+
+:::info
+Because of Nx's dependency graph, you don't actually *have* to run `nx build api` directly! If you run `nx build sdk`, Nx knows the SDK depends on the API, so it will automatically build the API first. This is exactly why we use Nx!
+:::
+
+## Implement the Go Server
+The pipeline automatically uses `oapi-codegen` to generate Go interfaces based on your new endpoint. These interfaces are dropped into the `core/internal/restapi/_generated/` folder.
+
+If you run `go build` right now, the compiler will actually **fail**! It will complain that your server struct is missing the new `GetFile` method. 
+This is a feature, not a bug! It forces you to implement the logic for the endpoint you just designed.
+
+Simply open your Go handler file and implement the method to satisfy the interface:
+
+```go
+func (h *FileHandler) GetFile(ctx context.Context, request GetFileRequestObject) (GetFileResponseObject, error) {
+    // 1. Fetch the file from the database using request.Id
+    // 2. Return the response
+    return GetFile200JSONResponse{
+        Id: file.ID,
+        Name: file.Name,
+        Size: file.Size,
+    }, nil
+}
+```
+
+## Update the Rust SDK
+The `openapi-generator-cli` has already analyzed the new OpenAPI YAML and injected the `get_file` function directly into the internal Rust SDK (`sdk/_generated/`).
+
+However, the raw generated API calls are **not public** to our mobile or web developers. They are strictly internal to the SDK. 
+
+You need to implement a high-level wrapper function in the Rust SDK (like we have for the `files` API) that implements the call, handles authentication, and exposes a clean interface. 
+
+Once you wrap it in the SDK, the cross-platform wrappers (Kotlin, Swift, WASM) will automatically inherit it, and your cross-platform devs can call it directly!

@@ -1,0 +1,107 @@
+---
+title: REST API Definitions
+description: A deep dive into exactly how our REST API pipeline compiles code under the hood.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import { File, Folder, Files } from 'fumadocs-ui/components/files';
+
+Platrium REST APIs are **strictly design-first** to be extendable, maintainble and enterprise-grade. Therefore, instead of writing code and hoping the documentation matches, or writing massive OpenAPI YAML files by hand, we use **TypeSpec**.
+
+## Why TypeSpec?
+[TypeSpec](https://typespec.io) is a language created by Microsoft that feels exactly like modern TypeScript, but is purpose-built for defining APIs. 
+
+By writing our definitions in TypeSpec (`.tsp` files), we get:
+- **Incredible DX**: Syntax highlighting, linting, and a familiar TypeScript-like feel.
+- **Reusability**: We can define standard error models and pagination interfaces once, and reuse them across hundreds of endpoints.
+- **Automation**: Our Nx pipeline automatically compiles the TypeSpec into a massive `openapi.yaml` file, which is then fed into our generators to build the Go server stubs and Rust SDK client.
+
+## Folder Structure
+All of our REST API definitions are centralized within the `api/rest` project. 
+
+<Files>
+  <Folder name="api/rest" defaultOpen>
+    <Folder name="_generated" defaultOpen>
+      <File name="openapi.yaml" />
+    </Folder>
+    <Folder name="src" defaultOpen>
+      <File name="errors.tsp" />
+      <File name="files.tsp" />
+      <File name="main.tsp" />
+    </Folder>
+  </Folder>
+</Files>
+
+When compiled, the definitions in `src` generate the single `openapi.yaml` source of truth. Here is a visual representation of how that definition then flows through the rest of the platform:
+
+```mermaid
+flowchart TD
+    A[TypeSpec Definitions] -->|Nx Build| B(OpenAPI YAML)
+    B -->|oapi-codegen| C[Platrium Server (Go Backend)]
+    B -->|openapi-generator| D[Generated Rust Bindings]
+    D --> E[Cross-Platform Rust SDK]
+    E -->|UniFFI & WASM| F[Cross-Platform SDK Libraries]
+
+    style A fill:#3178c6,stroke:#fff,stroke-width:2px,color:#fff
+    style C fill:#10b981,stroke:#fff,stroke-width:2px,color:#fff
+    style E fill:#ed1a38,stroke:#fff,stroke-width:2px,color:#fff
+```
+
+## Compiling TypeSpec (`api-rest`)
+Our API definitions live in the [`api/rest/src`](https://github.com/platrium-app/platrium/tree/main/api/rest/src) directory. When you run `nx build api-rest`, Nx executes the Microsoft `tsp` compiler.
+
+Internally, this simply runs `tsp compile src/` which gathers all the `.tsp` files and generates a monolithic standard `openapi.yaml` file located in `api/rest/_generated/openapi.yaml`. This YAML file acts as the single source of truth for the rest of the generation pipeline.
+
+## Generating the Go Backend (`core-engine`)
+The backend logic lives in the [`core/`](https://github.com/platrium-app/platrium/tree/main/core) directory. Before Nx even attempts to build the Go binary, it triggers the `_generate_restapi_bindings` target.
+
+This target runs `oapi-codegen` to translate the OpenAPI YAML into strongly-typed Go structs and interfaces for the Chi router:
+```bash
+go tool oapi-codegen -generate types,chi-server,spec -package restapi -o internal/restapi/generated_bindings.go ../api/rest/_generated/openapi.yaml
+```
+If your implementation in `core/` no longer satisfies the generated interfaces, the subsequent `go build` step will fail immediately.
+
+## Generating the Rust SDK (`sdk`)
+The Rust client generation lives in the [`sdk/`](https://github.com/platrium-app/platrium/tree/main/sdk) directory. Because Java-based generators can be incredibly frustrating to set up cross-platform, we bypass local JRE dependencies completely by running the generation inside a Docker container!
+
+When the `_generate_restapi_bindings` target runs for the SDK, Nx spins up the `openapitools/openapi-generator-cli` Docker image, mounts your local workspace, and generates the Rust bindings directly into `sdk/_generated`:
+
+```bash
+docker run --rm -v "$(pwd)":/local openapitools/openapi-generator-cli generate \
+  -i /local/api/rest/_generated/openapi.yaml \
+  -g rust \
+  -o /local/sdk/_generated \
+  --package-name platrium-restapi \
+  --additional-properties=supportAsync=true,preferPassthroughParameters=true,reqwestDefaultFeatures=reqwest/rustls \
+  --global-property apiDocs=false,modelDocs=false,apiTests=false,modelTests=false
+```
+
+:::info
+Notice we explicitly swap out the default TLS library for `rustls` during generation! This ensures that our Rust SDK can be safely compiled into WASM later on without running into OpenSSL linking issues in the browser.
+:::
+
+Once this generation is complete, developers can write high-level wrappers around the internal API to be exposed to the `_ffi` targets (Android, iOS, WASM).
+
+## Design Decisions
+
+When architecting the API layer for Platrium, we had to make several crucial decisions about protocols and frameworks. 
+
+<Accordions>
+  <Accordion title="Why REST and not gRPC?">
+    While gRPC is incredible for microservice-to-microservice (East/West) communication, Platrium relies heavily on client-to-server (North/South) traffic. 
+    
+    The vast majority of our traffic consists of file uploads, downloads, and basic authentication. REST handles large binary streams exceptionally well and plays much nicer with mobile clients and web browsers without needing heavy Envoy proxies or translation layers.
+  </Accordion>
+  <Accordion title="What about GraphQL?">
+    We use **GraphQL** specifically for our UI and rich data querying! 
+    
+    While REST is perfect for heavy lifting (like uploading a 5GB video file or handling OAuth), GraphQL shines when the client needs to fetch complex, deeply nested relationships (like "Get this folder, its subfolders, and the user profiles of everyone who has access to them"). It completely eliminates the dreaded over-fetching or under-fetching problem. 
+    
+    Our architecture elegantly splits these responsibilities: **REST** for files/auth, and **GraphQL** for the UI data layer.
+  </Accordion>
+  <Accordion title="Why not AWS Smithy?">
+    We strongly considered AWS Smithy for our design-first approach! However, Smithy is highly optimized for massive enterprise ecosystems (like AWS). 
+    
+    We found it to be a bit too heavy and verbose for our specific needs. TypeSpec gives us the exact same design-first benefits but with a syntax that is significantly more lightweight, developer-friendly, and doesn't require a PhD in enterprise architecture to understand.
+  </Accordion>
+</Accordions>
