@@ -1,0 +1,71 @@
+---
+title: Chunking Strategy
+description: Slicing massive files into bite-sized 4MB payloads.
+---
+
+When uploading a 50GB video file, we can't load it into memory. Doing so will immediately invoke an OOM killer, regardless of whether you are running on an iPhone, a Linux Desktop or a Chrome browser tab.
+
+To safely process these massive files, Platrium's SDK relies on a zero-buffer **Chunking Engine**.
+
+## The 4MB Rule
+
+We slice all files into strict **4MB** chunks. 
+
+```rust
+pub const CHUNK_SIZE_BYTES: u64 = 4 * 1024 * 1024; // 4MB
+```
+
+Why 4MB? It is the perfect Goldilocks zone for network transfers:
+- **Small enough** to keep our RAM footprint virtually non-existent.
+- **Large enough** that we don't spam our backend or object storage with millions of tiny chunk records and API requests.
+
+## The `ChunkProcessor`
+
+The core of our strategy is the `ChunkProcessor`. It acts like a high-performance iterator over the file, calculating byte offsets on the fly without ever holding the actual file contents in memory.
+
+### Zero-Copy References
+
+The processor takes an immutable reference to our [XPlatFile abstraction](/sdk/internal-design/fs/xplatfile). By using a lifetime reference `&'a XPlatFile`, we ensure that the chunking engine never takes ownership of the file handle or wastes CPU cycles trying to clone it.
+
+```rust
+pub struct ChunkProcessor<'a> {
+    pub xplat_file: &'a XPlatFile,
+    pub file_size: u64,
+    pub total_chunks: usize,
+}
+```
+
+### The Magic of `scan_chunk_hashes`
+
+Before we upload a batch of chunks, we need to generate their SHA-256 hashes to ask the server if it already has them. This is the most dangerous part of the pipeline—if we accidentally buffered the chunk payloads into a vector, memory would instantly explode!
+
+Look at how the `scan_chunk_hashes` loop elegantly avoids this:
+
+```rust
+pub async fn scan_chunk_hashes(&self, start_index: usize, batch_size: usize) -> Result<Vec<ChunkMetadata>, String> {
+    // ...
+    for idx in start_index..end_index {
+        let offset = (idx as u64) * CHUNK_SIZE_BYTES;
+        let size = /* 4MB or remaining bytes for EOF */;
+
+        // 1. Read exactly 4MB into memory using our XPlatFile abstraction
+        let buffer = self.xplat_file.read_exact_at(offset, size as usize).await?;
+
+        // 2. Compute the SHA-256 Hash
+        let mut hasher = Sha256::new();
+        hasher.update(&buffer);
+        let hash = format!("{:x}", hasher.finalize());
+
+        scanned.push(ChunkMetadata { index: idx, hash });
+        
+        // 3. The `buffer` goes out of scope here and is DROPPED! 
+        // Our peak RAM usage instantly drops back to zero.
+    }
+    
+    Ok(scanned)
+}
+```
+
+Because the `buffer` variable is scoped *inside* the `for` loop iteration, Rust's ownership model automatically frees that 4MB chunk of memory the absolute microsecond the hash is computed. 
+
+Whether you are hashing a 10MB PDF or a 50GB 8K video, this loop mathematically guarantees that **peak memory usage will never exceed 4MB!**

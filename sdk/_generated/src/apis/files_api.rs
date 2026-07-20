@@ -15,28 +15,44 @@ use crate::{apis::ResponseContent, models};
 use super::{Error, configuration, ContentType};
 
 
-/// struct for typed errors of method [`files_create_file`]
+/// struct for typed errors of method [`upload_session_chunks`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum FilesCreateFileError {
-    Status404(models::ErrorsMissingChunks),
+pub enum UploadSessionChunksError {
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`upload_session_commit`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UploadSessionCommitError {
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`upload_session_initialize`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UploadSessionInitializeError {
     Status500(models::ErrorsEngineInternal),
     UnknownValue(serde_json::Value),
 }
 
 
-/// Creates a New File for the Current User
-pub async fn files_create_file(configuration: &configuration::Configuration, files_create_file_request: models::FilesCreateFileRequest) -> Result<models::FilesCreateFileResponse, Error<FilesCreateFileError>> {
+/// Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.
+pub async fn upload_session_chunks(configuration: &configuration::Configuration, session_id: &str, files_upload_session_chunks_request: models::FilesUploadSessionChunksRequest) -> Result<models::FilesUploadSessionChunksResponse, Error<UploadSessionChunksError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_body_files_create_file_request = files_create_file_request;
+    let p_path_session_id = session_id;
+    let p_body_files_upload_session_chunks_request = files_upload_session_chunks_request;
 
-    let uri_str = format!("{}/files/create", configuration.base_path);
+    let uri_str = format!("{}/files/uploadsession/{sessionId}/chunks", configuration.base_path, sessionId=crate::apis::urlencode(p_path_session_id));
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
-    req_builder = req_builder.json(&p_body_files_create_file_request);
+    req_builder = req_builder.json(&p_body_files_upload_session_chunks_request);
 
     let req = req_builder.build()?;
     let resp = configuration.client.execute(req).await?;
@@ -53,12 +69,89 @@ pub async fn files_create_file(configuration: &configuration::Configuration, fil
         let content = resp.text().await?;
         match content_type {
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::FilesCreateFileResponse`"))),
-            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::FilesCreateFileResponse`")))),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::FilesUploadSessionChunksResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::FilesUploadSessionChunksResponse`")))),
         }
     } else {
         let content = resp.text().await?;
-        let entity: Option<FilesCreateFileError> = serde_json::from_str(&content).ok();
+        let entity: Option<UploadSessionChunksError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Commit an upload session and finalize the file layout using the provided cryptographic receipts.
+pub async fn upload_session_commit(configuration: &configuration::Configuration, session_id: &str, files_upload_session_commit_request: models::FilesUploadSessionCommitRequest) -> Result<models::FilesUploadSessionCommitResponse, Error<UploadSessionCommitError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_session_id = session_id;
+    let p_body_files_upload_session_commit_request = files_upload_session_commit_request;
+
+    let uri_str = format!("{}/files/uploadsession/{sessionId}/commit", configuration.base_path, sessionId=crate::apis::urlencode(p_path_session_id));
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_files_upload_session_commit_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::FilesUploadSessionCommitResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::FilesUploadSessionCommitResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<UploadSessionCommitError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
+pub async fn upload_session_initialize(configuration: &configuration::Configuration, files_upload_session_init_request: models::FilesUploadSessionInitRequest) -> Result<models::FilesUploadSessionInitResponse, Error<UploadSessionInitializeError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_files_upload_session_init_request = files_upload_session_init_request;
+
+    let uri_str = format!("{}/files/uploadsession", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_files_upload_session_init_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::FilesUploadSessionInitResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::FilesUploadSessionInitResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<UploadSessionInitializeError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }

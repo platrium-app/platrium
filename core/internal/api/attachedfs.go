@@ -10,22 +10,23 @@ import (
 	"platrium/pkg/constants"
 )
 
+// TODO: This needs moving. API folder needs to be removed.
 // AttachedFSHandler manages direct stream uploads for the local attached file system backend.
 type AttachedFSHandler struct {
-	attachedFS *storage.AttachedFSBackend
+	storageManager *storage.Manager
 }
 
 // NewAttachedFSHandler initializes a new AttachedFSHandler with the attached file system backend.
-func NewAttachedFSHandler(attachedFS *storage.AttachedFSBackend) *AttachedFSHandler {
+func NewAttachedFSHandler(storageManager *storage.Manager) *AttachedFSHandler {
 	return &AttachedFSHandler{
-		attachedFS: attachedFS,
+		storageManager: storageManager,
 	}
 }
 
 // Routes returns a chi.Router with the local file upload endpoints mounted.
 func (h *AttachedFSHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.Put("/{writeId}", h.AttachedFSUploadHandler)
+	r.Put("/{backendId}/{writeId}", h.AttachedFSUploadHandler)
 	return r
 }
 
@@ -44,13 +45,28 @@ func (h *AttachedFSHandler) Routes() chi.Router {
 // @Failure      500  {string}  string "Internal Server Error"
 // @Router       /api/attachedfs/{writeId} [put]
 func (h *AttachedFSHandler) AttachedFSUploadHandler(w http.ResponseWriter, r *http.Request) {
+	backendId := chi.URLParam(r, "backendId")
+	writeSig := r.URL.Query().Get("sig")
 	writeId := chi.URLParam(r, "writeId")
-	
+
 	// Enforce strict chunk size limits at the HTTP stream level
 	r.Body = http.MaxBytesReader(w, r.Body, constants.DedupChunkSizeBytes)
 	defer r.Body.Close()
 
-	if err := h.attachedFS.CommitLocalWrite(r.Context(), writeId, r.Body); err != nil {
+	// Get the Backend from Storage Manager
+	backend, exists := h.storageManager.GetActiveBackend(backendId)
+	if !exists {
+		http.Error(w, "Invalid Storage Manager Backend ID", http.StatusBadRequest)
+		return
+	}
+
+	afsBackend, ok := backend.(*storage.AttachedFSBackend)
+	if !ok {
+		http.Error(w, "Backend is not an AttachedFS instance", http.StatusBadRequest)
+		return
+	}
+
+	if err := afsBackend.CommitLocalWrite(r.Context(), writeId, writeSig, r.Body); err != nil {
 		log.Printf("upload failed for writeId %s: %v", writeId, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

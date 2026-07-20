@@ -1,5 +1,6 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import PlatriumLogo from '@/components/platrium_logo'
+import { Code2Icon } from 'lucide-react';
 
 export function baseOptions(): BaseLayoutProps {
     return {

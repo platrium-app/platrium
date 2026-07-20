@@ -1017,6 +1017,7 @@ dependencies = [
  "serde",
  "sha2",
  "tokio",
+ "tokio-util",
  "uniffi",
  "wasm-bindgen",
  "wasm-bindgen-futures",

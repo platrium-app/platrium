@@ -12,15 +12,22 @@
         "api-rest:build"
       ],
       "options": {
-        "command": "go tool oapi-codegen -generate types,chi-server,spec -package restapi -o internal/restapi/generated_bindings.go ../api/rest/_generated/openapi.yaml",
-        "cwd": "core"
+        "commands": [
+          "go tool oapi-codegen -generate types -package restapi -o internal/restapi/types.gen.go ../api/rest/_generated/openapi.yaml",
+          "go tool oapi-codegen -generate chi-server,strict-server -package restapi -o internal/restapi/server.gen.go ../api/rest/_generated/openapi.yaml",
+          "go tool oapi-codegen -generate spec -package restapi -o internal/restapi/spec.gen.go ../api/rest/_generated/openapi.yaml"
+        ],
+        "cwd": "core",
+        "parallel": false
       },
       "cache": true,
       "inputs": [
         "{workspaceRoot}/api/rest/_generated/openapi.yaml"
       ],
       "outputs": [
-        "{projectRoot}/internal/restapi/generated_bindings.go"
+        "{projectRoot}/internal/restapi/types.gen.go",
+        "{projectRoot}/internal/restapi/server.gen.go",
+        "{projectRoot}/internal/restapi/spec.gen.go"
       ]
     },
     "build": {

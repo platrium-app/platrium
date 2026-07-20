@@ -27,11 +27,11 @@ import (
 // @host            localhost:3000
 // @BasePath        /
 func main() {
-	store, err := kvstore.NewFromEnv()
+	kvStore, err := kvstore.NewFromEnv()
 	if err != nil {
 		log.Fatalf("failed to initialize KV store: %v", err)
 	}
-	defer store.Close()
+	defer kvStore.Close()
 	log.Println("kv store initialized successfully")
 
 	graphStore, err := graph.NewFromEnv()
@@ -41,13 +41,19 @@ func main() {
 	defer graphStore.Close(context.Background())
 	log.Println("graph store initialized successfully")
 
-	// Wire up dependencies
-	attachedFSStore := storage.NewAttachedFSStore(store)
+	// Initialize Chunk Store
+	chunkStore := fsops.NewChunkStore(kvStore)
 
-	storageProvider := storage.NewStorageProvider(attachedFSStore)
-	attachedFS := storage.NewAttachedFSBackend(attachedFSStore)
+	// Setup Attached FS
+	attachedfsStore := storage.NewAttachedFSStore(kvStore)
 
-	manifestRepo := fsops.NewManifestRepo(store)
+	// Setup Storage Manager
+	storageManager := storage.NewManager()
+	storageManager.StartChunkValidationWorker(context.Background(), chunkStore)
+
+	storageManager.RegisterBackendType("attachedfs", storage.AttachedFSBackendFactory(attachedfsStore))
+
+	manifestRepo := fsops.NewManifestRepo(kvStore)
 	fsOps := fsops.NewFSOps(graphStore, manifestRepo)
 
 	// Setup Identity Domain
@@ -55,7 +61,7 @@ func main() {
 	userStore := identity.NewUserStore(graphStore)
 
 	// Setup Instance Config Store
-	instanceConfigStore := setup.NewInstanceConfigStore(store)
+	instanceConfigStore := setup.NewInstanceConfigStore(kvStore)
 
 	// Setup Cross-Domain Orchestrator
 	setupOrchestrator := setup.NewOrchestrator(instanceConfigStore, tenantStore, userStore, fsOps)
@@ -64,13 +70,14 @@ func main() {
 	}
 
 	// Setup HTTP Routers
-	objectsRouter := objects.NewRouter(storageProvider)
-	attachedFsHandler := api.NewAttachedFSHandler(attachedFS)
+	objectsRouter := objects.NewRouter(storageManager)
+	attachedFsHandler := api.NewAttachedFSHandler(storageManager) // we should give it storageManager isntead.
 
 	identityHandler := identity.NewTenantHandler(tenantStore, userStore, fsOps)
 	identityRouter := identity.NewRouter(identityHandler)
 
-	restAPI := restapi.NewRestAPI(fsOps)
+	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager)
+	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -83,8 +90,8 @@ func main() {
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
 		r.Mount("/tenants", identityRouter.Routes())
 
-		// OpenAPI Generated Routes
-		restapi.HandlerFromMux(restAPI, r)
+		// OpenAPI Generated Routes (Strict Server Mode)
+		restapi.HandlerFromMux(strictHandler, r)
 	})
 
 	port := os.Getenv("PORT")

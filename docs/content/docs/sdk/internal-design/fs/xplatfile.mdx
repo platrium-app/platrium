@@ -1,0 +1,158 @@
+---
+title: Cross-Platform Files
+description: Unifying File Descriptors, File Paths, and Browser Blobs into one API.
+---
+
+One of the biggest headaches when building a true cross-platform SDK in Rust is file handling. 
+
+- On a desktop, you read a file by providing a **File Path**.
+- On the Web, there is no file system at all! We have to deal with JavaScript `File` or `Blob` objects.
+- On iOS or Android, files are heavily sandboxed. Native languages (Swift/Kotlin) must open the file and pass a raw POSIX **File Descriptor (FD)** down to Rust.
+
+If we let this complexity leak into the chunking or networking logic, our codebase would become an unmaintainable nightmare of `#[cfg(target_arch)]` blocks. 
+
+To solve this, we built **`UploadSource`** and **`XPlatFile`**.
+
+## Shielding the Consumer: `UploadSource`
+
+We don't want SDK consumers (or even our internal chunkers) worrying about platform-specific file APIs. We created an `UploadSource` object that exposes completely different constructors depending on the target platform!
+
+<Tabs items={['Android & iOS', 'Desktop & CLI', 'WebAssembly']}>
+  <Tab value="Android & iOS">
+  **Requires a raw POSIX File Descriptor (FD).**
+  ```rust
+  #[cfg(any(target_os = "android", target_os = "ios"))]
+  #[uniffi::export]
+  impl UploadSource {
+      #[uniffi::constructor]
+      pub fn new(file_name: String, fd: i32) -> Self {
+          use std::os::unix::io::FromRawFd;
+          Self {
+              file_name,
+              xplat: XPlatFile::new(unsafe { std::fs::File::from_raw_fd(fd) }),
+          }
+      }
+  }
+  ```
+  </Tab>
+
+  <Tab value="Desktop & CLI">
+  **Requires a standard string file path.**
+  ```rust
+  #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "ios")))]
+  #[uniffi::export]
+  impl UploadSource {
+      #[uniffi::constructor]
+      pub fn new(file_name: String, path: String) -> Self {
+          let file = std::fs::File::open(path).unwrap();
+          Self {
+              file_name,
+              xplat: XPlatFile::new(file),
+          }
+      }
+  }
+  ```
+  </Tab>
+
+  <Tab value="WebAssembly">
+  **Requires a browser `File` object from an HTML input.**
+  ```rust
+  #[cfg(target_arch = "wasm32")]
+  impl UploadSource {
+      pub fn new(file_name: String, file: web_sys::File) -> Self {
+          Self {
+              file_name,
+              xplat: XPlatFile::new(file),
+          }
+      }
+  }
+  ```
+  </Tab>
+</Tabs>
+
+By doing this, a Swift developer simply passes an `Int32` descriptor, a Web developer passes an HTML `<input>` file object, and the SDK instantly standardizes it into our internal `XPlatFile` structure!
+
+## Unifying the Engine: `XPlatFile`
+
+Once `UploadSource` wraps the OS-specific file handle, it's passed into our `XPlatFile` enum. This is the magical boundary that completely isolates the rest of the SDK from platform differences.
+
+```rust twoslash
+// 1. The Core Enum
+pub enum XPlatFile {
+    #[cfg(not(target_arch = "wasm32"))]
+    Native(std::fs::File),
+
+    #[cfg(target_arch = "wasm32")]
+    Wasm(web_sys::File),
+}
+```
+
+The rest of the SDK (like the Chunking Engine) only interacts with `XPlatFile` through a unified async trait interface. 
+
+The most important method is `read_exact_at`, which grabs a specific byte slice of the file for chunk uploading:
+
+<Tabs items={['Native', 'WebAssembly']}>
+  <Tab value="Native">
+  **Uses standard Rust Seek & Read**
+  ```rust
+  impl XPlatFile {
+      pub async fn read_exact_at(&self, offset: u64, size: usize) -> Result<Vec<u8>, String> {
+          match self {
+              #[cfg(not(target_arch = "wasm32"))]
+              XPlatFile::Native(file) => {
+                  let mut f = file.try_clone().map_err(|e| e.to_string())?;
+                  f.seek(std::io::SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+                  let mut buffer = vec![0; size];
+                  f.read_exact(&mut buffer).map_err(|e| e.to_string())?;
+                  Ok(buffer)
+              }
+              
+              // ... WASM branch omitted
+              #[cfg(target_arch = "wasm32")]
+              XPlatFile::Wasm(file) => unimplemented!(),
+          }
+      }
+  }
+  ```
+  </Tab>
+
+  <Tab value="WebAssembly">
+  **Uses browser `Blob.slice()` and JS Promises**
+  ```rust
+  impl XPlatFile {
+      pub async fn read_exact_at(&self, offset: u64, size: usize) -> Result<Vec<u8>, String> {
+          match self {
+              // ... Native branch omitted
+              #[cfg(not(target_arch = "wasm32"))]
+              XPlatFile::Native(file) => unimplemented!(),
+              
+              #[cfg(target_arch = "wasm32")]
+              XPlatFile::Wasm(file) => {
+                  let blob = file
+                      .slice_with_f64_and_f64(offset as f64, (offset + size as u64) as f64)
+                      .map_err(|_| "Failed to slice blob".to_string())?;
+
+                  // Convert JS Promise -> Rust Future
+                  let promise = blob.array_buffer();
+                  let future = wasm_bindgen_futures::JsFuture::from(promise);
+                  let js_val = future.await.unwrap();
+
+                  let array_buffer = js_val.unchecked_into::<js_sys::ArrayBuffer>();
+                  let uint8_array = js_sys::Uint8Array::new(&array_buffer);
+                  
+                  let mut buffer = vec![0; size];
+                  uint8_array.copy_to(&mut buffer);
+
+                  Ok(buffer)
+              }
+          }
+      }
+  }
+  ```
+  </Tab>
+</Tabs>
+
+### The Magic of Blob Slicing on the Web
+Notice how the WASM implementation works. We don't try to load the entire JavaScript file into Wasm memory (which would instantly crash the browser). Instead, we utilize the native browser `Blob.slice()` API to carve out just the 4MB chunk we need, request an `ArrayBuffer`, await the JS Promise natively in Rust via `wasm_bindgen_futures`, and copy only those specific bytes into our Rust vector! 
+
+This abstraction allows our core chunking loop to run identical logic on both an iPhone and a Chrome browser, completely unaware of how vastly different the underlying file I/O operations are!

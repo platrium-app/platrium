@@ -1,87 +1,82 @@
-use crate::CHUNK_SIZE;
 use crate::xplat::file::XPlatFile;
 use sha2::{Digest, Sha256};
-//TODO: WIP, Add comments, Tests, etc.
+
+pub const CHUNK_SIZE_BYTES: u64 = 4 * 1024 * 1024; // 4MB
+
+#[derive(Debug, Clone)]
 pub struct ChunkMetadata {
     pub index: usize,
     pub hash: String,
-    pub offset: u64,
-    pub size: u64,
 }
 
-pub struct ChunkDef {
-    pub index: usize,
-    pub offset: u64,
-    pub size: u64,
+pub struct ChunkProcessor<'a> {
+    pub xplat_file: &'a XPlatFile,
+    pub file_size: u64,
+    pub total_chunks: usize,
 }
 
-pub struct ChunkIterator {
-    file_size: u64,
-    current_index: usize,
-    num_chunks: usize,
-}
+impl<'a> ChunkProcessor<'a> {
+    pub fn new(xplat_file: &'a XPlatFile) -> Self {
+        let file_size = xplat_file.size();
+        let total_chunks = if file_size == 0 {
+            0
+        } else {
+            ((file_size + CHUNK_SIZE_BYTES - 1) / CHUNK_SIZE_BYTES) as usize
+        };
 
-impl ChunkIterator {
-    pub fn new(file_size: u64) -> Self {
-        let num_chunks = (file_size as f64 / CHUNK_SIZE as f64).ceil() as usize;
         Self {
+            xplat_file,
             file_size,
-            current_index: 0,
-            num_chunks,
+            total_chunks,
         }
     }
-}
 
-impl Iterator for ChunkIterator {
-    type Item = ChunkDef;
+    /// Checks if a given chunk index is the final EOF chunk of the file.
+    pub fn is_eof_chunk(&self, index: usize) -> bool {
+        index == self.total_chunks - 1
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_index >= self.num_chunks {
-            return None;
+    /// Scans a window of chunks starting from `start_index` up to `batch_size`.
+    /// Reads 1 chunk at a time into memory, calculates SHA-256 hash, and immediately drops the byte buffer.
+    /// Peak memory footprint: 4MB MAX regardless of file size.
+    pub async fn scan_chunk_hashes(
+        &self,
+        start_index: usize,
+        batch_size: usize,
+    ) -> Result<Vec<ChunkMetadata>, String> {
+        let end_index = (start_index + batch_size).min(self.total_chunks);
+        let mut scanned = Vec::with_capacity(end_index - start_index);
+
+        for idx in start_index..end_index {
+            let offset = (idx as u64) * CHUNK_SIZE_BYTES;
+            let size = if self.is_eof_chunk(idx) {
+                self.file_size - offset
+            } else {
+                CHUNK_SIZE_BYTES
+            };
+
+            let buffer = self.xplat_file.read_exact_at(offset, size as usize).await?;
+
+            let mut hasher = Sha256::new();
+            hasher.update(&buffer);
+            let hash = format!("{:x}", hasher.finalize());
+
+            scanned.push(ChunkMetadata { index: idx, hash });
+            // buffer dropped here at end of loop iteration -> 4MB MAX RAM!
         }
 
-        let offset = (self.current_index as u64) * CHUNK_SIZE;
-        let size = if offset + CHUNK_SIZE > self.file_size {
+        Ok(scanned)
+    }
+
+    /// Re-reads the exact byte payload for a specific chunk index on-demand (used for targeted HTTP PUTs or range requests).
+    pub async fn read_single_chunk(&self, index: usize) -> Result<Vec<u8>, String> {
+        let offset = (index as u64) * CHUNK_SIZE_BYTES;
+        let size = if self.is_eof_chunk(index) {
             self.file_size - offset
         } else {
-            CHUNK_SIZE
+            CHUNK_SIZE_BYTES
         };
 
-        let chunk = ChunkDef {
-            index: self.current_index,
-            offset,
-            size,
-        };
-
-        self.current_index += 1;
-        Some(chunk)
+        self.xplat_file.read_exact_at(offset, size as usize).await
     }
-}
-
-pub async fn hash_chunks(xplat_file: &XPlatFile) -> Result<Vec<ChunkMetadata>, String> {
-    let size = xplat_file.size();
-    if size == 0 {
-        return Ok(Vec::new());
-    }
-
-    let mut chunks = Vec::new();
-    let iter = ChunkIterator::new(size);
-
-    for chunk_def in iter {
-        let buffer = xplat_file
-            .read_exact_at(chunk_def.offset, chunk_def.size as usize)
-            .await?;
-        let mut hasher = Sha256::new();
-        hasher.update(&buffer);
-        let hash = format!("{:x}", hasher.finalize());
-
-        chunks.push(ChunkMetadata {
-            index: chunk_def.index,
-            hash,
-            offset: chunk_def.offset,
-            size: chunk_def.size,
-        });
-    }
-
-    Ok(chunks)
 }

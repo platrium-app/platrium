@@ -1,0 +1,81 @@
+---
+title: Network Transfer Manager
+description: The blazing-fast, memory-safe engine powering our cross-platform file transfers!
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+Welcome to the heart of the SDK's networking pipeline! 🚀
+
+When you're dealing with massive files, transferring data concurrently is the key to blazing-fast speeds. But if you aren't careful, reading hundreds of chunks into memory at once will instantly crash a mobile phone or a browser tab. 
+
+Enter the **Network Transfer Manager** (`NetworkTransferManager`). This module acts as the global choke-point for all network I/O, ensuring we max out the network bandwidth while keeping our memory footprint incredibly tiny!
+
+## The Architecture
+
+Here is a high-level look at how the FFI boundaries, concurrency limits, and event streams all tie together:
+
+```mermaid
+flowchart TD
+    classDef ui fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef api fill:#ed1a38,stroke:#b91c1c,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef core fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+
+    UI(Frontend):::ui
+    API(Rust SDK):::api
+    
+    UI -->|upload() / cancel()| API
+
+    subgraph "Network Transfer Manager"
+        Sem["Semaphore (Max 5)"]:::core
+        Tokens["Cancellation Tokens"]:::core
+        Queue[("Event Queue (broadcast)")]:::core
+    end
+
+    API -->|acquire_slot()| Sem
+    API -->|cancel_transfer()| Tokens
+    API -->|emit_progress()| Queue
+    
+    Queue -.->|TransferObserver / JS Callback| UI
+```
+
+## Global Concurrency via Semaphores
+
+Instead of manually managing complex chunk queues or buffers, we leverage a simple but incredibly powerful `tokio::sync::Semaphore`.
+
+When a file upload starts, we spin up to **500 concurrent async tasks** for the chunks. However, *before* any task is allowed to read a single byte from the disk, it must call `.await` on our global semaphore! 
+
+Because the semaphore only has 5 slots available, 495 tasks sit frozen in a zero-memory state. Only 5 tasks will pull their 4MB chunk into memory at any given time. This guarantees that our upload pipeline will never exceed ~20MB of RAM, even if you are uploading a massive 50GB file!
+
+:::info
+**Future Optimization:** Currently, the concurrency limit is hardcoded to 5 slots. In the future, the `NetworkTransferManager` will dynamically scale the number of semaphore slots in real-time based on the client's network bandwidth and device capabilities (e.g., allocating more slots for a 5G iPhone and fewer for a constrained browser tab).
+:::
+
+## Cross-Platform Cancellation
+
+Building an SDK that targets iOS, Android, and WebAssembly means dealing with very different async lifecycles. 
+
+:::info
+On native platforms (Swift/Kotlin), cancelling a UI Task instantly drops the underlying Rust `Future`. Thanks to Rust's ownership model, the moment the future is dropped, the local `SemaphorePermit` is automatically released back to the manager. Zero leaks, zero cleanup!
+:::
+
+If native cancellation is so magical, why do we manually track `tokio_util::sync::CancellationToken`s in a HashMap?
+
+### The WASM Promise Problem
+
+In the browser, WebAssembly executes Rust futures using `wasm_bindgen_futures::spawn_local`. 
+
+The moment you hand a future to the browser's JavaScript event loop, you completely lose ownership of it. JavaScript Promises have **no native concept of cancellation**. If a user clicks "Cancel Upload" on the web, there is no way to forcefully drop that future from the outside. 
+
+If we didn't use `CancellationToken`s, hitting cancel on the web would leave the future running invisibly in the background, permanently locking up our 5 precious semaphore slots! By wrapping our HTTP calls in `tokio::select!`, we give ourselves a "remote control" to forcefully abort the task and trigger the native JS `AbortController`, saving our WASM builds from catastrophic lockups.
+
+## FFI Event Streaming
+
+To update progress bars in the UI, we need to send thousands of chunk updates over the FFI boundary without slowing down the network loop.
+
+Instead of exposing the messy `broadcast` channels directly, we created a clean `TransferEvent` Enum. 
+
+- **Native (iOS/Android):** We expose a simple Callback Interface (`TransferObserver`) via UniFFI. The SDK spins up a single background Tokio task that listens to the `NetworkTransferManager`'s event queue and funnels those pure `TransferEvent` structs directly to the Swift/Kotlin callbacks!
+- **WebAssembly:** We bypass UniFFI entirely and use `wasm-bindgen` to accept a standard JavaScript closure (`js_sys::Function`). The internal event loop simply calls the JS function whenever an event fires.
+
+This architecture completely shields the complex internal network state from the presentation layer, while keeping the API feeling completely native for the developers!

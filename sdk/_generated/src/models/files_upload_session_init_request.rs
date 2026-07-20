@@ -12,24 +12,24 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FilesCreateFileRequest {
+pub struct FilesUploadSessionInitRequest {
     /// ID of the parent folder or drive
     #[serde(rename = "parent_id")]
     pub parent_id: String,
     /// Name of the file
     #[serde(rename = "file_name")]
     pub file_name: String,
-    /// Array of chunk hashes
-    #[serde(rename = "hashes")]
-    pub hashes: Vec<String>,
+    /// Size of the file in bytes. Max size 2TiB.
+    #[serde(rename = "file_size")]
+    pub file_size: i64,
 }
 
-impl FilesCreateFileRequest {
-    pub fn new(parent_id: String, file_name: String, hashes: Vec<String>) -> FilesCreateFileRequest {
-        FilesCreateFileRequest {
+impl FilesUploadSessionInitRequest {
+    pub fn new(parent_id: String, file_name: String, file_size: i64) -> FilesUploadSessionInitRequest {
+        FilesUploadSessionInitRequest {
             parent_id,
             file_name,
-            hashes,
+            file_size,
         }
     }
 }
