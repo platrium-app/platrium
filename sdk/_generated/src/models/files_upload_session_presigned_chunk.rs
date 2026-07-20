@@ -12,8 +12,8 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FilesChunkUploadInfo {
-    /// The client-direct S3/AttachedFS upload URL. Null if the chunk already exists globally (Deduplicated).
+pub struct FilesUploadSessionPresignedChunk {
+    /// The client-direct Presigned upload URL. Null if the chunk already exists.
     #[serde(rename = "upload_url", deserialize_with = "Option::deserialize")]
     pub upload_url: Option<String>,
     /// Symmetric HMAC authorization receipt bound to this specific session and chunk.
@@ -21,9 +21,9 @@ pub struct FilesChunkUploadInfo {
     pub receipt: String,
 }
 
-impl FilesChunkUploadInfo {
-    pub fn new(upload_url: Option<String>, receipt: String) -> FilesChunkUploadInfo {
-        FilesChunkUploadInfo {
+impl FilesUploadSessionPresignedChunk {
+    pub fn new(upload_url: Option<String>, receipt: String) -> FilesUploadSessionPresignedChunk {
+        FilesUploadSessionPresignedChunk {
             upload_url,
             receipt,
         }

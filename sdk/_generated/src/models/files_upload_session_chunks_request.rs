@@ -13,15 +13,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilesUploadSessionChunksRequest {
-    /// Batch of SHA-256 chunk hashes to authorize. Capped at 500 items (2GB window).
+    /// Batch of SHA-256 chunk hashes to authorize. Capped at 512 items (2GiB window).
     #[serde(rename = "hashes")]
     pub hashes: Vec<String>,
+    /// Flag indicating if last element in hashes is the last (EOF) chunk in the file. Allows Chunk to be < 4MiB.
+    #[serde(rename = "contains_eof_chunk", skip_serializing_if = "Option::is_none")]
+    pub contains_eof_chunk: Option<bool>,
 }
 
 impl FilesUploadSessionChunksRequest {
     pub fn new(hashes: Vec<String>) -> FilesUploadSessionChunksRequest {
         FilesUploadSessionChunksRequest {
             hashes,
+            contains_eof_chunk: None,
         }
     }
 }

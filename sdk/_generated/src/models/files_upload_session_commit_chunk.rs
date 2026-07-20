@@ -12,8 +12,8 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FilesChunkCommitInfo {
-    /// Strict SHA-256 Hex Hash validation pattern (64 characters, lowercase hex)
+pub struct FilesUploadSessionCommitChunk {
+    /// SHA-256 Hash of Chunk Previously used to obtain Presign Status
     #[serde(rename = "hash")]
     pub hash: String,
     /// Cryptographic HMAC receipt authorized by the server for this chunk
@@ -21,9 +21,9 @@ pub struct FilesChunkCommitInfo {
     pub receipt: String,
 }
 
-impl FilesChunkCommitInfo {
-    pub fn new(hash: String, receipt: String) -> FilesChunkCommitInfo {
-        FilesChunkCommitInfo {
+impl FilesUploadSessionCommitChunk {
+    pub fn new(hash: String, receipt: String) -> FilesUploadSessionCommitChunk {
+        FilesUploadSessionCommitChunk {
             hash,
             receipt,
         }

@@ -1,0 +1,6 @@
+{
+    "root": true,
+    "title": "REST API Internals",
+    "description": "Explore internal endpoints and test requests live",
+    "icon": "GlobeCheck"
+}

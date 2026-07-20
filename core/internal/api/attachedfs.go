@@ -10,6 +10,7 @@ import (
 	"platrium/pkg/constants"
 )
 
+// TODO: This needs moving. API folder needs to be removed.
 // AttachedFSHandler manages direct stream uploads for the local attached file system backend.
 type AttachedFSHandler struct {
 	storageManager *storage.Manager

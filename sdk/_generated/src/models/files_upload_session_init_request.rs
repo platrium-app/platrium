@@ -19,13 +19,17 @@ pub struct FilesUploadSessionInitRequest {
     /// Name of the file
     #[serde(rename = "file_name")]
     pub file_name: String,
+    /// Size of the file in bytes. Max size 2TiB.
+    #[serde(rename = "file_size")]
+    pub file_size: i64,
 }
 
 impl FilesUploadSessionInitRequest {
-    pub fn new(parent_id: String, file_name: String) -> FilesUploadSessionInitRequest {
+    pub fn new(parent_id: String, file_name: String, file_size: i64) -> FilesUploadSessionInitRequest {
         FilesUploadSessionInitRequest {
             parent_id,
             file_name,
+            file_size,
         }
     }
 }

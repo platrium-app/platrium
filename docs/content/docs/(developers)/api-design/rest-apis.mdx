@@ -57,7 +57,9 @@ The backend logic lives in the [`core/`](https://github.com/platrium-app/platriu
 
 This target runs `oapi-codegen` to translate the OpenAPI YAML into strongly-typed Go structs and interfaces for the Chi router:
 ```bash
-go tool oapi-codegen -generate types,chi-server,spec -package restapi -o internal/restapi/generated_bindings.go ../api/rest/_generated/openapi.yaml
+go tool oapi-codegen -generate types -package restapi -o internal/restapi/types.gen.go ../api/rest/_generated/openapi.yaml
+go tool oapi-codegen -generate chi-server,strict-server -package restapi -o internal/restapi/server.gen.go ../api/rest/_generated/openapi.yaml
+go tool oapi-codegen -generate spec -package restapi -o internal/restapi/spec.gen.go ../api/rest/_generated/openapi.yaml
 ```
 If your implementation in `core/` no longer satisfies the generated interfaces, the subsequent `go build` step will fail immediately.
 

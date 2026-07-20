@@ -14,12 +14,12 @@ pub enum XPlatFile {
 
 impl XPlatFile {
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn new_native(file: File) -> Self {
+    pub fn new(file: File) -> Self {
         XPlatFile::Native(file)
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn new_wasm(file: WebFile) -> Self {
+    pub fn new(file: WebFile) -> Self {
         XPlatFile::Wasm(file)
     }
 

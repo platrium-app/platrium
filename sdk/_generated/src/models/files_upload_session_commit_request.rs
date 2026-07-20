@@ -13,13 +13,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilesUploadSessionCommitRequest {
-    /// Strictly ordered list of chunks forming the master file manifest sequence. Max items support a 2TB file.
+    /// Strictly ordered list of chunks forming the master file manifest sequence. Max items support a 2TiB file.
     #[serde(rename = "chunks")]
-    pub chunks: Vec<models::FilesChunkCommitInfo>,
+    pub chunks: Vec<models::FilesUploadSessionCommitChunk>,
 }
 
 impl FilesUploadSessionCommitRequest {
-    pub fn new(chunks: Vec<models::FilesChunkCommitInfo>) -> FilesUploadSessionCommitRequest {
+    pub fn new(chunks: Vec<models::FilesUploadSessionCommitChunk>) -> FilesUploadSessionCommitRequest {
         FilesUploadSessionCommitRequest {
             chunks,
         }

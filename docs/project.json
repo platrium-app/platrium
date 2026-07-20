@@ -5,6 +5,9 @@
     "targets": {
         "build": {
             "executor": "nx:run-commands",
+            "dependsOn": [
+                "api-rest"
+            ],
             "options": {
                 "command": "npm install && npm run build",
                 "cwd": "docs"

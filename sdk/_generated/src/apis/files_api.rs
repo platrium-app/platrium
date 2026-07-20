@@ -118,7 +118,7 @@ pub async fn upload_session_commit(configuration: &configuration::Configuration,
     }
 }
 
-/// Stage 1: Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
+/// Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
 pub async fn upload_session_initialize(configuration: &configuration::Configuration, files_upload_session_init_request: models::FilesUploadSessionInitRequest) -> Result<models::FilesUploadSessionInitResponse, Error<UploadSessionInitializeError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_body_files_upload_session_init_request = files_upload_session_init_request;

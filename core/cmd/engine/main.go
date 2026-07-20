@@ -76,7 +76,8 @@ func main() {
 	identityHandler := identity.NewTenantHandler(tenantStore, userStore, fsOps)
 	identityRouter := identity.NewRouter(identityHandler)
 
-	restAPI := restapi.NewRestAPI(fsOps)
+	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager)
+	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -89,8 +90,8 @@ func main() {
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
 		r.Mount("/tenants", identityRouter.Routes())
 
-		// OpenAPI Generated Routes
-		restapi.HandlerFromMux(restAPI, r)
+		// OpenAPI Generated Routes (Strict Server Mode)
+		restapi.HandlerFromMux(strictHandler, r)
 	})
 
 	port := os.Getenv("PORT")

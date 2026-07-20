@@ -15,11 +15,11 @@ use serde::{Deserialize, Serialize};
 pub struct FilesUploadSessionChunksResponse {
     /// A key-value map mapping each authorized ChunkHash string directly to its metadata and receipts.
     #[serde(rename = "chunks")]
-    pub chunks: std::collections::HashMap<String, models::FilesChunkUploadInfo>,
+    pub chunks: std::collections::HashMap<String, models::FilesUploadSessionPresignedChunk>,
 }
 
 impl FilesUploadSessionChunksResponse {
-    pub fn new(chunks: std::collections::HashMap<String, models::FilesChunkUploadInfo>) -> FilesUploadSessionChunksResponse {
+    pub fn new(chunks: std::collections::HashMap<String, models::FilesUploadSessionPresignedChunk>) -> FilesUploadSessionChunksResponse {
         FilesUploadSessionChunksResponse {
             chunks,
         }
