@@ -20,11 +20,11 @@ type ServerInterface interface {
 	// (POST /files/uploadsession)
 	UploadSessionInitialize(w http.ResponseWriter, r *http.Request)
 	// Presign a batch of chunks for upload
-	// (POST /files/uploadsession/{sessionId}/chunks)
-	UploadSessionChunks(w http.ResponseWriter, r *http.Request, sessionId string)
+	// (POST /files/uploadsession/chunks)
+	UploadSessionChunks(w http.ResponseWriter, r *http.Request, params UploadSessionChunksParams)
 	// Commit an upload session and finalize the file
-	// (POST /files/uploadsession/{sessionId}/commit)
-	UploadSessionCommit(w http.ResponseWriter, r *http.Request, sessionId string)
+	// (POST /files/uploadsession/commit)
+	UploadSessionCommit(w http.ResponseWriter, r *http.Request, params UploadSessionCommitParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -38,14 +38,14 @@ func (_ Unimplemented) UploadSessionInitialize(w http.ResponseWriter, r *http.Re
 }
 
 // Presign a batch of chunks for upload
-// (POST /files/uploadsession/{sessionId}/chunks)
-func (_ Unimplemented) UploadSessionChunks(w http.ResponseWriter, r *http.Request, sessionId string) {
+// (POST /files/uploadsession/chunks)
+func (_ Unimplemented) UploadSessionChunks(w http.ResponseWriter, r *http.Request, params UploadSessionChunksParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // Commit an upload session and finalize the file
-// (POST /files/uploadsession/{sessionId}/commit)
-func (_ Unimplemented) UploadSessionCommit(w http.ResponseWriter, r *http.Request, sessionId string) {
+// (POST /files/uploadsession/commit)
+func (_ Unimplemented) UploadSessionCommit(w http.ResponseWriter, r *http.Request, params UploadSessionCommitParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -78,17 +78,36 @@ func (siw *ServerInterfaceWrapper) UploadSessionChunks(w http.ResponseWriter, r 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "sessionId" -------------
-	var sessionId string
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UploadSessionChunksParams
 
-	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+	headers := r.Header
+
+	// ------------- Required header parameter "x-platrium-uploadsession" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("x-platrium-uploadsession")]; found {
+		var XPlatriumUploadsession string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "x-platrium-uploadsession", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "x-platrium-uploadsession", valueList[0], &XPlatriumUploadsession, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "x-platrium-uploadsession", Err: err})
+			return
+		}
+
+		params.XPlatriumUploadsession = XPlatriumUploadsession
+
+	} else {
+		err := fmt.Errorf("Header parameter x-platrium-uploadsession is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "x-platrium-uploadsession", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UploadSessionChunks(w, r, sessionId)
+		siw.Handler.UploadSessionChunks(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -104,17 +123,36 @@ func (siw *ServerInterfaceWrapper) UploadSessionCommit(w http.ResponseWriter, r 
 	var err error
 	_ = err
 
-	// ------------- Path parameter "sessionId" -------------
-	var sessionId string
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UploadSessionCommitParams
 
-	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+	headers := r.Header
+
+	// ------------- Required header parameter "x-platrium-uploadsession" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("x-platrium-uploadsession")]; found {
+		var XPlatriumUploadsession string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "x-platrium-uploadsession", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "x-platrium-uploadsession", valueList[0], &XPlatriumUploadsession, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "x-platrium-uploadsession", Err: err})
+			return
+		}
+
+		params.XPlatriumUploadsession = XPlatriumUploadsession
+
+	} else {
+		err := fmt.Errorf("Header parameter x-platrium-uploadsession is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "x-platrium-uploadsession", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UploadSessionCommit(w, r, sessionId)
+		siw.Handler.UploadSessionCommit(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -241,10 +279,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/files/uploadsession", wrapper.UploadSessionInitialize)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/files/uploadsession/{sessionId}/chunks", wrapper.UploadSessionChunks)
+		r.Post(options.BaseURL+"/files/uploadsession/chunks", wrapper.UploadSessionChunks)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/files/uploadsession/{sessionId}/commit", wrapper.UploadSessionCommit)
+		r.Post(options.BaseURL+"/files/uploadsession/commit", wrapper.UploadSessionCommit)
 	})
 
 	return r
@@ -287,8 +325,8 @@ func (response UploadSessionInitialize500JSONResponse) VisitUploadSessionInitial
 }
 
 type UploadSessionChunksRequestObject struct {
-	SessionId string `json:"sessionId"`
-	Body      *UploadSessionChunksJSONRequestBody
+	Params UploadSessionChunksParams
+	Body   *UploadSessionChunksJSONRequestBody
 }
 
 type UploadSessionChunksResponseObject interface {
@@ -324,8 +362,8 @@ func (response UploadSessionChunks500JSONResponse) VisitUploadSessionChunksRespo
 }
 
 type UploadSessionCommitRequestObject struct {
-	SessionId string `json:"sessionId"`
-	Body      *UploadSessionCommitJSONRequestBody
+	Params UploadSessionCommitParams
+	Body   *UploadSessionCommitJSONRequestBody
 }
 
 type UploadSessionCommitResponseObject interface {
@@ -366,10 +404,10 @@ type StrictServerInterface interface {
 	// (POST /files/uploadsession)
 	UploadSessionInitialize(ctx context.Context, request UploadSessionInitializeRequestObject) (UploadSessionInitializeResponseObject, error)
 	// Presign a batch of chunks for upload
-	// (POST /files/uploadsession/{sessionId}/chunks)
+	// (POST /files/uploadsession/chunks)
 	UploadSessionChunks(ctx context.Context, request UploadSessionChunksRequestObject) (UploadSessionChunksResponseObject, error)
 	// Commit an upload session and finalize the file
-	// (POST /files/uploadsession/{sessionId}/commit)
+	// (POST /files/uploadsession/commit)
 	UploadSessionCommit(ctx context.Context, request UploadSessionCommitRequestObject) (UploadSessionCommitResponseObject, error)
 }
 
@@ -434,10 +472,10 @@ func (sh *strictHandler) UploadSessionInitialize(w http.ResponseWriter, r *http.
 }
 
 // UploadSessionChunks operation middleware
-func (sh *strictHandler) UploadSessionChunks(w http.ResponseWriter, r *http.Request, sessionId string) {
+func (sh *strictHandler) UploadSessionChunks(w http.ResponseWriter, r *http.Request, params UploadSessionChunksParams) {
 	var request UploadSessionChunksRequestObject
 
-	request.SessionId = sessionId
+	request.Params = params
 
 	var body UploadSessionChunksJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -467,10 +505,10 @@ func (sh *strictHandler) UploadSessionChunks(w http.ResponseWriter, r *http.Requ
 }
 
 // UploadSessionCommit operation middleware
-func (sh *strictHandler) UploadSessionCommit(w http.ResponseWriter, r *http.Request, sessionId string) {
+func (sh *strictHandler) UploadSessionCommit(w http.ResponseWriter, r *http.Request, params UploadSessionCommitParams) {
 	var request UploadSessionCommitRequestObject
 
-	request.SessionId = sessionId
+	request.Params = params
 
 	var body UploadSessionCommitJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

@@ -92,19 +92,21 @@ interface UploadSession {
         | UploadSessionInitResponse
         | Platrium.Errors.EngineInternal;
 
-    @route("/{sessionId}/chunks")
+    @route("/chunks")
     @post
     @summary("Presign a batch of chunks for upload")
     @doc("Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.")
-    chunks(@path sessionId: string, @body body: UploadSessionChunksRequest):
-        | UploadSessionChunksResponse
-        | Platrium.Errors.EngineInternal;
+    chunks(
+        @header("x-platrium-uploadsession") sessionId: string,
+        @body body: UploadSessionChunksRequest,
+    ): UploadSessionChunksResponse | Platrium.Errors.EngineInternal;
 
-    @route("/{sessionId}/commit")
+    @route("/commit")
     @post
     @summary("Commit an upload session and finalize the file")
     @doc("Commit an upload session and finalize the file layout using the provided cryptographic receipts.")
-    commit(@path sessionId: string, @body body: UploadSessionCommitRequest):
-        | UploadSessionCommitResponse
-        | Platrium.Errors.EngineInternal;
+    commit(
+        @header("x-platrium-uploadsession") sessionId: string,
+        @body body: UploadSessionCommitRequest,
+    ): UploadSessionCommitResponse | Platrium.Errors.EngineInternal;
 }

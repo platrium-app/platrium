@@ -41,17 +41,18 @@ pub enum UploadSessionInitializeError {
 
 
 /// Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.
-pub async fn upload_session_chunks(configuration: &configuration::Configuration, session_id: &str, files_upload_session_chunks_request: models::FilesUploadSessionChunksRequest) -> Result<models::FilesUploadSessionChunksResponse, Error<UploadSessionChunksError>> {
+pub async fn upload_session_chunks(configuration: &configuration::Configuration, x_platrium_uploadsession: &str, files_upload_session_chunks_request: models::FilesUploadSessionChunksRequest) -> Result<models::FilesUploadSessionChunksResponse, Error<UploadSessionChunksError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_session_id = session_id;
+    let p_header_x_platrium_uploadsession = x_platrium_uploadsession;
     let p_body_files_upload_session_chunks_request = files_upload_session_chunks_request;
 
-    let uri_str = format!("{}/files/uploadsession/{sessionId}/chunks", configuration.base_path, sessionId=crate::apis::urlencode(p_path_session_id));
+    let uri_str = format!("{}/files/uploadsession/chunks", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = req_builder.header("x-platrium-uploadsession", p_header_x_platrium_uploadsession.to_string());
     req_builder = req_builder.json(&p_body_files_upload_session_chunks_request);
 
     let req = req_builder.build()?;
@@ -80,17 +81,18 @@ pub async fn upload_session_chunks(configuration: &configuration::Configuration,
 }
 
 /// Commit an upload session and finalize the file layout using the provided cryptographic receipts.
-pub async fn upload_session_commit(configuration: &configuration::Configuration, session_id: &str, files_upload_session_commit_request: models::FilesUploadSessionCommitRequest) -> Result<models::FilesUploadSessionCommitResponse, Error<UploadSessionCommitError>> {
+pub async fn upload_session_commit(configuration: &configuration::Configuration, x_platrium_uploadsession: &str, files_upload_session_commit_request: models::FilesUploadSessionCommitRequest) -> Result<models::FilesUploadSessionCommitResponse, Error<UploadSessionCommitError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_session_id = session_id;
+    let p_header_x_platrium_uploadsession = x_platrium_uploadsession;
     let p_body_files_upload_session_commit_request = files_upload_session_commit_request;
 
-    let uri_str = format!("{}/files/uploadsession/{sessionId}/commit", configuration.base_path, sessionId=crate::apis::urlencode(p_path_session_id));
+    let uri_str = format!("{}/files/uploadsession/commit", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
+    req_builder = req_builder.header("x-platrium-uploadsession", p_header_x_platrium_uploadsession.to_string());
     req_builder = req_builder.json(&p_body_files_upload_session_commit_request);
 
     let req = req_builder.build()?;

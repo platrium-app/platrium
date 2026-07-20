@@ -78,7 +78,7 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 
 	sessionID := uuid.New().String()
 	// TODO: Replace with authenticated tenant ID from JWT middleware
-	tenantID := "f6105961-cd9f-492a-8657-33f7e14ff1b2"
+	tenantID := "3e19d7be-0af1-4a93-9d0d-5e175d7e3285"
 
 	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, tenantID)
 	if err != nil {
@@ -90,9 +90,9 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 	}, nil
 }
 
-// UploadSessionChunks handles POST /files/uploadsession/{sessionId}/chunks (Stage 2: Batch Presigning).
+// UploadSessionChunks handles POST /files/uploadsession/chunks (Stage 2: Batch Presigning).
 func (api *RestAPI) UploadSessionChunks(ctx context.Context, request UploadSessionChunksRequestObject) (UploadSessionChunksResponseObject, error) {
-	claims, err := api.VerifyUploadSessionPassport(request.SessionId)
+	claims, err := api.VerifyUploadSessionPassport(request.Params.XPlatriumUploadsession)
 	if err != nil {
 		return UploadSessionChunks500JSONResponse{Debuginfo: err.Error()}, nil
 	}
@@ -164,9 +164,9 @@ func (api *RestAPI) UploadSessionChunks(ctx context.Context, request UploadSessi
 	}, nil
 }
 
-// UploadSessionCommit handles POST /files/uploadsession/{sessionId}/commit (Stage 3: Zero-Read Commit).
+// UploadSessionCommit handles POST /files/uploadsession/commit (Stage 3: Zero-Read Commit).
 func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessionCommitRequestObject) (UploadSessionCommitResponseObject, error) {
-	claims, err := api.VerifyUploadSessionPassport(request.SessionId)
+	claims, err := api.VerifyUploadSessionPassport(request.Params.XPlatriumUploadsession)
 	if err != nil {
 		return UploadSessionCommit500JSONResponse{Debuginfo: err.Error()}, nil
 	}

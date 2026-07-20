@@ -32,14 +32,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Files.UploadSessionInitRequest'
-  /files/uploadsession/{sessionId}/chunks:
+  /files/uploadsession/chunks:
     post:
       operationId: UploadSession_chunks
       summary: Presign a batch of chunks for upload
       description: Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.
       parameters:
-        - name: sessionId
-          in: path
+        - name: x-platrium-uploadsession
+          in: header
           required: true
           schema:
             type: string
@@ -64,14 +64,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Files.UploadSessionChunksRequest'
-  /files/uploadsession/{sessionId}/commit:
+  /files/uploadsession/commit:
     post:
       operationId: UploadSession_commit
       summary: Commit an upload session and finalize the file
       description: Commit an upload session and finalize the file layout using the provided cryptographic receipts.
       parameters:
-        - name: sessionId
-          in: path
+        - name: x-platrium-uploadsession
+          in: header
           required: true
           schema:
             type: string

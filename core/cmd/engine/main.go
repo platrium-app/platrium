@@ -52,6 +52,10 @@ func main() {
 	storageManager.StartChunkValidationWorker(context.Background(), chunkStore)
 
 	storageManager.RegisterBackendType("attachedfs", storage.AttachedFSBackendFactory(attachedfsStore))
+	storageManager.StartBackend(context.Background(), "default", storage.BackendConfig{
+		Type:   "attachedfs",
+		Config: json.RawMessage(`{"mount_path":"./data"}`),
+	})
 
 	manifestRepo := fsops.NewManifestRepo(kvStore)
 	fsOps := fsops.NewFSOps(graphStore, manifestRepo)

@@ -70,8 +70,8 @@ This token contains everything needed to complete the upload. The client must at
 
 ## Stage 2: Validated Chunks & HMAC Receipts
 
-Next, the client sends a batch of up to 500 chunk hashes to `POST /files/uploadsession/{sessionId}/chunks`.
-The backend reads the JWT, then queries the `ChunkStore` for those hashes. 
+Next, the client sends a batch of up to 500 chunk hashes to `POST /files/uploadsession/chunks`.
+The backend reads the JWT provided via header `x-platrium-uploadsession`, then queries the `ChunkStore` for those hashes. 
 
 ### Deduplication (The `VALIDATED` State)
 If the backend finds a chunk in the store and its state is `fsops.ChunkStateValidated`, it means we already have those exact bytes securely stored. The backend will return `UploadUrl: nil`, telling the client they can instantly skip the upload and save 4MB of bandwidth!
@@ -117,7 +117,7 @@ The `StorageManager` requires all backends to hook into their respective native 
 
 ## Stage 4: Zero-Read Commit
 
-After the client has uploaded all missing chunks to Object Storage, they hit `POST /files/uploadsession/{sessionId}/commit` and provide the JWT Passport and the ordered list of `(Hash, Receipt)` pairs.
+After the client has uploaded all missing chunks to Object Storage, they hit `POST /files/uploadsession/commit`, provide the JWT Passport in the `x-platrium-uploadsession` header and the ordered list of `(Hash, Receipt)` pairs.
 
 :::info
 **Zero-Read In-Memory Validation**

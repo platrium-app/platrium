@@ -74,6 +74,16 @@ type FilesUploadSessionPresignedChunk struct {
 	UploadUrl *string `json:"upload_url"`
 }
 
+// UploadSessionChunksParams defines parameters for UploadSessionChunks.
+type UploadSessionChunksParams struct {
+	XPlatriumUploadsession string `json:"x-platrium-uploadsession"`
+}
+
+// UploadSessionCommitParams defines parameters for UploadSessionCommit.
+type UploadSessionCommitParams struct {
+	XPlatriumUploadsession string `json:"x-platrium-uploadsession"`
+}
+
 // UploadSessionInitializeJSONRequestBody defines body for UploadSessionInitialize for application/json ContentType.
 type UploadSessionInitializeJSONRequestBody = FilesUploadSessionInitRequest
 
