@@ -9,9 +9,10 @@ type Namespace string
 
 // These constants are used to globally guarantee collision-free prefixes.
 const (
-	NSAttachedFSWrites Namespace = "afsw"
+	NSAttachedFSWrites Namespace = "afsw" // move to microservice, use its internal DB?
 	NSManifest         Namespace = "mfst"
 	NSInstanceConfig   Namespace = "icfg"
+	NSChunkMetadata    Namespace = "chnk"
 )
 
 // Key strictly enforces that every KV operation is Namespaced, completely

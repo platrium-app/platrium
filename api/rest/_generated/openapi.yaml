@@ -5,11 +5,11 @@ info:
 tags:
   - name: Files
 paths:
-  /files/create:
+  /files/uploadsession:
     post:
-      operationId: Files_createFile
-      summary: Create a new file
-      description: Creates a New File for the Current User
+      operationId: UploadSession_initialize
+      summary: Initialize a new upload session
+      description: Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
       parameters: []
       responses:
         '201':
@@ -17,13 +17,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Files.CreateFileResponse'
-        '404':
-          description: The server cannot find the requested resource.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Errors.MissingChunks'
+                $ref: '#/components/schemas/Files.UploadSessionInitResponse'
         '500':
           description: Server error
           content:
@@ -37,7 +31,71 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Files.CreateFileRequest'
+              $ref: '#/components/schemas/Files.UploadSessionInitRequest'
+  /files/uploadsession/{sessionId}/chunks:
+    post:
+      operationId: UploadSession_chunks
+      summary: Presign a batch of chunks for upload
+      description: Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.UploadSessionChunksResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.UploadSessionChunksRequest'
+  /files/uploadsession/{sessionId}/commit:
+    post:
+      operationId: UploadSession_commit
+      summary: Commit an upload session and finalize the file
+      description: Commit an upload session and finalize the file layout using the provided cryptographic receipts.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.UploadSessionCommitResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.UploadSessionCommitRequest'
 components:
   schemas:
     Errors.EngineInternal:
@@ -56,12 +114,74 @@ components:
           type: array
           items:
             type: string
-    Files.CreateFileRequest:
+    Files.ChunkHash:
+      type: string
+      pattern: ^[a-f0-9]{64}$
+      description: Strict SHA-256 Hex Hash validation pattern (64 characters, lowercase hex)
+    Files.UploadSessionChunksRequest:
+      type: object
+      required:
+        - hashes
+      properties:
+        hashes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Files.ChunkHash'
+          minItems: 1
+          maxItems: 512
+          description: Batch of SHA-256 chunk hashes to authorize. Capped at 512 items (2GiB window).
+        contains_eof_chunk:
+          type: boolean
+          description: Flag indicating if last element in hashes is the last (EOF) chunk in the file. Allows Chunk to be < 4MiB.
+    Files.UploadSessionChunksResponse:
+      type: object
+      required:
+        - chunks
+      properties:
+        chunks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Files.UploadSessionPresignedChunk'
+          description: A key-value map mapping each authorized ChunkHash string directly to its metadata and receipts.
+    Files.UploadSessionCommitChunk:
+      type: object
+      required:
+        - hash
+        - receipt
+      properties:
+        hash:
+          allOf:
+            - $ref: '#/components/schemas/Files.ChunkHash'
+          description: SHA-256 Hash of Chunk Previously used to obtain Presign Status
+        receipt:
+          type: string
+          description: Cryptographic HMAC receipt authorized by the server for this chunk
+    Files.UploadSessionCommitRequest:
+      type: object
+      required:
+        - chunks
+      properties:
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Files.UploadSessionCommitChunk'
+          minItems: 1
+          maxItems: 524288
+          description: Strictly ordered list of chunks forming the master file manifest sequence. Max items support a 2TiB file.
+    Files.UploadSessionCommitResponse:
+      type: object
+      required:
+        - file_id
+      properties:
+        file_id:
+          type: string
+          description: The created FileNode ID
+    Files.UploadSessionInitRequest:
       type: object
       required:
         - parent_id
         - file_name
-        - hashes
+        - file_size
       properties:
         parent_id:
           type: string
@@ -69,18 +189,33 @@ components:
         file_name:
           type: string
           description: Name of the file
-        hashes:
-          type: array
-          items:
-            type: string
-          description: Array of chunk hashes
-    Files.CreateFileResponse:
+        file_size:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2199023255552
+          description: Size of the file in bytes. Max size 2TiB.
+    Files.UploadSessionInitResponse:
       type: object
       required:
-        - file_id
+        - session_id
       properties:
-        file_id:
+        session_id:
           type: string
+          description: Cryptographically sealed JWT token acting as the session_id passport
+    Files.UploadSessionPresignedChunk:
+      type: object
+      required:
+        - upload_url
+        - receipt
+      properties:
+        upload_url:
+          type: string
+          nullable: true
+          description: The client-direct Presigned upload URL. Null if the chunk already exists.
+        receipt:
+          type: string
+          description: Symmetric HMAC authorization receipt bound to this specific session and chunk.
 servers:
   - url: http://localhost:3000/api
     description: Local development server

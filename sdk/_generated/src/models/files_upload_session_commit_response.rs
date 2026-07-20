@@ -12,14 +12,15 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FilesCreateFileResponse {
+pub struct FilesUploadSessionCommitResponse {
+    /// The created FileNode ID
     #[serde(rename = "file_id")]
     pub file_id: String,
 }
 
-impl FilesCreateFileResponse {
-    pub fn new(file_id: String) -> FilesCreateFileResponse {
-        FilesCreateFileResponse {
+impl FilesUploadSessionCommitResponse {
+    pub fn new(file_id: String) -> FilesUploadSessionCommitResponse {
+        FilesUploadSessionCommitResponse {
             file_id,
         }
     }
