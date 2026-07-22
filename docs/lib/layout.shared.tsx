@@ -4,6 +4,7 @@ import { Code2Icon } from 'lucide-react';
 
 export function baseOptions(): BaseLayoutProps {
     return {
+        githubUrl: 'https://github.com/platrium-app/platrium',
         nav: {
             title: (
                 <div className="flex items-center gap-2">

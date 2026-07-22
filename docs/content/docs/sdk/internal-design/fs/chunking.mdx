@@ -1,11 +1,11 @@
 ---
 title: Chunking Strategy
-description: Slicing massive files into bite-sized 4MB payloads.
+description: High-performance parallel chunking while keeping memory footprints strictly bounded.
 ---
 
-When uploading a 50GB video file, we can't load it into memory. Doing so will immediately invoke an OOM killer, regardless of whether you are running on an iPhone, a Linux Desktop or a Chrome browser tab.
+When uploading massive files (like a 50GB video), we cannot load them entirely into memory. Doing so will immediately invoke the OOM killer, regardless of whether you are running on an iPhone, a Linux desktop, or a Chrome browser tab.
 
-To safely process these massive files, Platrium's SDK relies on a zero-buffer **Chunking Engine**.
+To safely and rapidly process these massive files, Platrium's SDK relies on a parallelized **Chunking Engine** with built-in concurrency controls and backpressure.
 
 ## The 4MB Rule
 
@@ -16,56 +16,82 @@ pub const CHUNK_SIZE_BYTES: u64 = 4 * 1024 * 1024; // 4MB
 ```
 
 Why 4MB? It is the perfect Goldilocks zone for network transfers:
-- **Small enough** to keep our RAM footprint virtually non-existent.
+- **Small enough** to keep our RAM footprint extremely low during IO operations.
 - **Large enough** that we don't spam our backend or object storage with millions of tiny chunk records and API requests.
 
 ## The `ChunkProcessor`
 
-The core of our strategy is the `ChunkProcessor`. It acts like a high-performance iterator over the file, calculating byte offsets on the fly without ever holding the actual file contents in memory.
+The core of our strategy is the `ChunkProcessor`. It calculates byte offsets on the fly without holding the actual file contents in memory.
 
 ### Zero-Copy References
 
 The processor takes an immutable reference to our [XPlatFile abstraction](/sdk/internal-design/fs/xplatfile). By using a lifetime reference `&'a XPlatFile`, we ensure that the chunking engine never takes ownership of the file handle or wastes CPU cycles trying to clone it.
 
-```rust
-pub struct ChunkProcessor<'a> {
-    pub xplat_file: &'a XPlatFile,
-    pub file_size: u64,
-    pub total_chunks: usize,
-}
-```
+## Parallel Hashing with Concurrency Control
 
-### The Magic of `scan_chunk_hashes`
+Before uploading chunks, we generate their SHA-256 hashes to ask the server if they already exist. This process is heavily parallelized for performance but tightly throttled to prevent memory spikes.
 
-Before we upload a batch of chunks, we need to generate their SHA-256 hashes to ask the server if it already has them. This is the most dangerous part of the pipeline—if we accidentally buffered the chunk payloads into a vector, memory would instantly explode!
+### 128-Chunk Batches
 
-Look at how the `scan_chunk_hashes` loop elegantly avoids this:
+Instead of hashing the entire file upfront (which delays the upload from starting) or doing it strictly sequentially, we process the file in batches of **128 chunks** (approx. 512MB windows). This drastically reduces the *time-to-first-chunk* upload. Network requests for the first batch begin immediately while the next batch is being hashed in the background.
+
+### Tokio Offloading & CPU-bound Blocking
+
+Hashing is a CPU-bound operation. To avoid starving the async network runtime, the SDK spawns lightweight `tokio` tasks to orchestrate the I/O, which internally offload the actual SHA-256 math to a dedicated OS thread via `tokio::task::spawn_blocking`:
 
 ```rust
-pub async fn scan_chunk_hashes(&self, start_index: usize, batch_size: usize) -> Result<Vec<ChunkMetadata>, String> {
-    // ...
-    for idx in start_index..end_index {
-        let offset = (idx as u64) * CHUNK_SIZE_BYTES;
-        let size = /* 4MB or remaining bytes for EOF */;
+handles.push(tokio::spawn(async move {
+    // 1. Acquire permit to throttle memory usage
+    let _permit = CHUNK_SEMAPHORE.acquire().await?;
+    
+    // 2. Read exactly 4MB into memory
+    let buffer = xplat_file.read_exact_at(offset, size).await?;
 
-        // 1. Read exactly 4MB into memory using our XPlatFile abstraction
-        let buffer = self.xplat_file.read_exact_at(offset, size as usize).await?;
-
-        // 2. Compute the SHA-256 Hash
+    // 3. Offload CPU-heavy SHA-256 hashing to a blocking thread
+    let hash = tokio::task::spawn_blocking(move || {
         let mut hasher = Sha256::new();
         hasher.update(&buffer);
-        let hash = format!("{:x}", hasher.finalize());
-
-        scanned.push(ChunkMetadata { index: idx, hash });
-        
-        // 3. The `buffer` goes out of scope here and is DROPPED! 
-        // Our peak RAM usage instantly drops back to zero.
-    }
+        format!("{:x}", hasher.finalize())
+    }).await?;
     
-    Ok(scanned)
-}
+    // ...
+}));
 ```
 
-Because the `buffer` variable is scoped *inside* the `for` loop iteration, Rust's ownership model automatically frees that 4MB chunk of memory the absolute microsecond the hash is computed. 
+### Chunking Backpressure
 
-Whether you are hashing a 10MB PDF or a 50GB 8K video, this loop mathematically guarantees that **peak memory usage will never exceed 4MB!**
+Spawning 128 parallel 4MB reads would instantly load 512MB into memory, crashing lower-end mobile devices. To prevent this, we introduce a strictly enforced bottleneck in `fs/chunks.rs`:
+
+```rust
+// Allow at most 5 concurrent chunking tasks to limit memory footprint (5 * 4MB = 20MB max overhead)
+static CHUNK_SEMAPHORE: Semaphore = Semaphore::const_new(5);
+```
+
+By requiring tasks to acquire a permit from a global `tokio::sync::Semaphore` before performing the disk read, we mathematically guarantee that our **peak memory footprint for chunk reading will never exceed ~20MB**.
+
+## Global Backpressure
+
+The SDK guarantees stable resource usage across both disk and network:
+- **Disk/CPU Backpressure**: Handled by the `CHUNK_SEMAPHORE` in the Chunking Engine (limits I/O and memory overhead to 5 concurrent chunks).
+- **Network Backpressure**: Handled by the `NetworkTransferManager` (limits concurrent active HTTP connections and chunk uploads).
+
+This unified strategy allows the SDK to maximize I/O and Network parallelism, processing gigabytes of data on devices without breaking a sweat.
+
+## Performance Benchmarks
+:::info
+Evaluated across full payload transfers and deduplicated chunk lookups on an **Apple MacBook Pro 16" (M4 Pro)** hitting a **localhost** Platrium server instance. 
+Future updates to this page may add benchmarks on mobile devices and browser environments.
+:::
+
+| Metric | Test Run 1: Full Transfer | Test Run 2: Full Transfer | Test Run 3: Deduplicated |
+| --- | --- | --- | --- |
+| **File Name** | `raspios-trixie-arm64.img.xz` | `lubuntu-24.04.3-desktop-amd64.iso` | `lubuntu-24.04.3-desktop-amd64.iso` |
+| **File Size** | 1.33 GB (1,327,702,860 bytes) | 3.38 GB (3,388,037,120 bytes) | 3.38 GB (3,388,037,120 bytes) |
+| **Transfer Status** | Full Payload Upload | Full Payload Upload | **Zero-Byte Dedup** |
+| **Wall-Clock Time** | ~3.00s (active transfer) | **9.11s** | **2.61s** |
+| **User CPU Time** | 3.52s | 8.40s | 8.32s |
+| **System CPU Time** | 1.41s | 1.29s | 0.49s |
+| **CPU Utilization** | 106% | 106% | **338%** (multi-core sweep) |
+| **Peak RAM (Max RSS)** | **30.8 MB** (30,832 KB) | **29.8 MB** (30,592 KB) | **29.7 MB** (30,496 KB) |
+| **Socket Messages** | 757 sent | 1,809 sent | **18 sent** |
+| **Throughput** | ~442 MB/s | ~372 MB/s | **~1.30 GB/s** (hash rate) |
