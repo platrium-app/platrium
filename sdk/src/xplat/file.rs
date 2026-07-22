@@ -4,9 +4,12 @@ use std::fs::File;
 #[cfg(target_arch = "wasm32")]
 use web_sys::File as WebFile;
 
+use std::sync::Arc;
+
+#[derive(Clone)]
 pub enum XPlatFile {
     #[cfg(not(target_arch = "wasm32"))]
-    Native(File),
+    Native(Arc<File>),
 
     #[cfg(target_arch = "wasm32")]
     Wasm(WebFile),
@@ -15,7 +18,7 @@ pub enum XPlatFile {
 impl XPlatFile {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(file: File) -> Self {
-        XPlatFile::Native(file)
+        XPlatFile::Native(Arc::new(file))
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -36,11 +39,9 @@ impl XPlatFile {
         match self {
             #[cfg(not(target_arch = "wasm32"))]
             XPlatFile::Native(file) => {
-                use std::io::{Read, Seek, SeekFrom};
-                let mut f = file.try_clone().map_err(|e| e.to_string())?;
-                f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+                use std::os::unix::fs::FileExt;
                 let mut buffer = vec![0; size];
-                f.read_exact(&mut buffer).map_err(|e| e.to_string())?;
+                file.read_exact_at(&mut buffer, offset).map_err(|e| e.to_string())?;
                 Ok(buffer)
             }
             #[cfg(target_arch = "wasm32")]

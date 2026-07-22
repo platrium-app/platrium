@@ -1,6 +1,6 @@
 use crate::net::manager::NetworkTransferManager;
 use crate::xplat::file::XPlatFile;
-use futures::stream::StreamExt;
+use futures::stream::{FuturesUnordered, StreamExt};
 use platrium_restapi::apis::configuration::Configuration;
 use platrium_restapi::apis::files_api;
 use platrium_restapi::models;
@@ -71,7 +71,7 @@ impl Api {
         }
     }
 
-    async fn upload_internal(
+    async fn start_uploadsession(
         &self,
         parent_id: &str,
         file_name: &str,
@@ -94,14 +94,15 @@ impl Api {
             })?;
 
         let session_id = init_res.session_id;
+        let client_file_id = format!("{}/{}", parent_id, file_name);
 
         let cancel_token = self
             .transfer_manager
-            .register_transfer(session_id.clone(), total_size)
+            .register_transfer(client_file_id.clone(), total_size)
             .await;
 
-        // Stage 2: Batch Window Scanning & Targeted Presign (500 chunks max per batch)
-        const BATCH_SIZE: usize = 500;
+        // Stage 2: Batch Window Scanning & Targeted Presign (128 chunks = 512MB max per batch)
+        const BATCH_SIZE: usize = 128;
         let mut master_commit_chunks = Vec::with_capacity(processor.total_chunks);
 
         for start_idx in (0..processor.total_chunks).step_by(BATCH_SIZE) {
@@ -129,84 +130,94 @@ impl Api {
                 })?;
 
             // 3. Pass 2 (On-Demand Targeted Upload): Re-read ONLY missing chunks for HTTP PUT
-            let upload_results: Vec<
-                Result<models::FilesUploadSessionCommitChunk, crate::errors::PlatriumError>,
-            > = futures::stream::iter(scanned_batch)
-                .map(|chunk| {
-                    let presign_res = &presign_res;
-                    let client = &self.api_config.client;
-                    let processor = &processor;
-                    let transfer_manager = &self.transfer_manager;
-                    let cancel_token = cancel_token.clone();
-                    let session_id_clone = session_id.clone();
+            let mut uploads = FuturesUnordered::new();
 
-                    async move {
-                        let presigned = presign_res.chunks.get(&chunk.hash).ok_or_else(|| {
-                            crate::errors::PlatriumError::ApiError(format!(
-                                "Missing presigned info for chunk {}",
-                                chunk.hash
-                            ))
-                        })?;
+            for chunk in &scanned_batch {
+                let presign_res = &presign_res;
+                let client = &self.api_config.client;
+                let processor = &processor;
+                let transfer_manager = &self.transfer_manager;
+                let cancel_token = cancel_token.clone();
+                let client_file_id_clone = client_file_id.clone();
 
-                        if let Some(upload_url) = &presigned.upload_url {
-                            // Acquire Global Transfer Slot from Network Transfer Manager
-                            let _transfer_slot = transfer_manager.acquire_slot().await;
+                uploads.push(async move {
+                    let presigned = presign_res.chunks.get(&chunk.hash).ok_or_else(|| {
+                        crate::errors::PlatriumError::ApiError(format!(
+                            "Missing presigned info for chunk {}",
+                            chunk.hash
+                        ))
+                    })?;
 
-                            // Re-read ONLY this single chunk's bytes on demand from the file handle!
-                            let chunk_bytes = processor
-                                .read_single_chunk(chunk.index)
-                                .await
-                                .map_err(|e| crate::errors::PlatriumError::InternalError(e))?;
+                    if let Some(upload_url) = &presigned.upload_url {
+                        // Acquire Global Transfer Slot from Network Transfer Manager
+                        let _transfer_slot = transfer_manager.acquire_slot().await;
 
-                            let chunk_len = chunk_bytes.len();
+                        // Re-read ONLY this single chunk's bytes on demand from the file handle!
+                        let chunk_bytes = processor
+                            .read_single_chunk(chunk.index)
+                            .await
+                            .map_err(|e| crate::errors::PlatriumError::InternalError(e))?;
 
-                            let put_future = client
-                                .put(upload_url) // Object Stores have standardized PUT
-                                .body(chunk_bytes)
-                                .send();
+                        let chunk_len = chunk_bytes.len();
 
-                            let res = tokio::select! {
-                                _ = cancel_token.cancelled() => {
-                                    return Err(crate::errors::PlatriumError::InternalError(
-                                        "Transfer cancelled".into(),
-                                    ));
-                                }
-                                result = put_future => {
-                                    result.map_err(|e| {
-                                        crate::errors::PlatriumError::ApiError(format!(
-                                            "Chunk PUT failed for hash {}: {:?}",
-                                            chunk.hash, e
-                                        ))
-                                    })?
-                                }
-                            };
+                        let put_future = client
+                            .put(upload_url) // Object Stores have standardized PUT
+                            .body(chunk_bytes)
+                            .send();
 
-                            if !res.status().is_success() {
-                                let status = res.status();
-                                let err_text = res.text().await.unwrap_or_default();
-                                return Err(crate::errors::PlatriumError::ApiError(format!(
-                                    "Chunk PUT HTTP {} for hash {}: {}",
-                                    status, chunk.hash, err_text
-                                )));
+                        let res = tokio::select! {
+                            _ = cancel_token.cancelled() => {
+                                return Err(crate::errors::PlatriumError::InternalError(
+                                    "Transfer cancelled".into(),
+                                ));
                             }
+                            result = put_future => {
+                                result.map_err(|e| {
+                                    crate::errors::PlatriumError::ApiError(format!(
+                                        "Chunk PUT failed for hash {}: {:?}",
+                                        chunk.hash, e
+                                    ))
+                                })?
+                            }
+                        };
 
-                            transfer_manager
-                                .emit_progress(&session_id_clone, chunk_len)
-                                .await;
+                        if !res.status().is_success() {
+                            let status = res.status();
+                            let err_text = res.text().await.unwrap_or_default();
+                            return Err(crate::errors::PlatriumError::ApiError(format!(
+                                "Chunk PUT HTTP {} for hash {}: {}",
+                                status, chunk.hash, err_text
+                            )));
                         }
 
-                        Ok(models::FilesUploadSessionCommitChunk::new(
-                            chunk.hash,
-                            presigned.receipt.clone(),
-                        ))
+                        transfer_manager
+                            .emit_progress(&client_file_id_clone, chunk_len)
+                            .await;
                     }
-                })
-                .buffer_unordered(BATCH_SIZE)
-                .collect()
-                .await;
 
-            for res in upload_results {
-                master_commit_chunks.push(res?);
+                    Ok::<(), crate::errors::PlatriumError>(())
+                });
+            }
+
+            while let Some(res) = uploads.next().await {
+                res?;
+            }
+
+            // Explicitly drop `uploads` to release the borrow on `scanned_batch` before consuming it
+            drop(uploads);
+
+            for chunk in scanned_batch {
+                let presigned = presign_res.chunks.get(&chunk.hash).ok_or_else(|| {
+                    crate::errors::PlatriumError::ApiError(format!(
+                        "Missing presigned info for chunk {}",
+                        chunk.hash
+                    ))
+                })?;
+
+                master_commit_chunks.push(models::FilesUploadSessionCommitChunk::new(
+                    chunk.hash,
+                    presigned.receipt.clone(),
+                ));
             }
         }
 
@@ -217,13 +228,13 @@ impl Api {
             match files_api::upload_session_commit(&self.api_config, &session_id, commit_req).await
             {
                 Ok(res) => {
-                    self.transfer_manager.emit_completed(&session_id).await;
+                    self.transfer_manager.emit_completed(&client_file_id).await;
                     res
                 }
                 Err(e) => {
                     let err_msg = format!("Session commit error: {:?}", e);
                     self.transfer_manager
-                        .emit_error(&session_id, err_msg.clone())
+                        .emit_error(&client_file_id, err_msg.clone())
                         .await;
                     return Err(crate::errors::PlatriumError::ApiError(err_msg));
                 }
@@ -242,12 +253,12 @@ impl Api {
         parent_id: &str,
         source: Arc<UploadSource>,
     ) -> Result<String, crate::errors::PlatriumError> {
-        self.upload_internal(parent_id, &source.file_name, &source.xplat)
+        self.start_uploadsession(parent_id, &source.file_name, &source.xplat)
             .await
     }
 
     /// Cancels a running upload
-    pub async fn cancel_upload(&self, session_id: String) {
-        self.transfer_manager.cancel_transfer(&session_id).await;
+    pub async fn cancel_upload(&self, client_file_id: String) {
+        self.transfer_manager.cancel_transfer(&client_file_id).await;
     }
 }

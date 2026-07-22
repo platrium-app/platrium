@@ -24,14 +24,20 @@ impl PlatriumClient {
         let mut api_config = Configuration::new();
         api_config.base_path = base_url.to_string();
         let api_config = Arc::new(api_config);
-        
+
         let transfer_manager = Arc::new(NetworkTransferManager::new(5));
 
-        Ok(Self { api_config, transfer_manager })
+        Ok(Self {
+            api_config,
+            transfer_manager,
+        })
     }
 
     /// Access the Files API module
     pub fn files(&self) -> Arc<files::Api> {
-        Arc::new(files::Api::new(self.api_config.clone(), self.transfer_manager.clone()))
+        Arc::new(files::Api::new(
+            self.api_config.clone(),
+            self.transfer_manager.clone(),
+        ))
     }
 }

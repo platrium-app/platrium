@@ -30,3 +30,8 @@ tokio = { version = "1.0", features = ["sync", "macros"] }
 # Android Only dependencies
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
+
+
+# Native Dependencies (Linux, MacOS, Windows, etc.)
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "ios")))'.dependencies]
+env_logger = "0.11.11"

@@ -1,8 +1,8 @@
+use crate::net::transfers::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore, SemaphorePermit, broadcast};
 use tokio_util::sync::CancellationToken;
-use crate::net::transfers::*;
 
 pub struct NetworkTransferManager {
     io_semaphore: Arc<Semaphore>,
@@ -10,6 +10,7 @@ pub struct NetworkTransferManager {
     active_transfers: RwLock<HashMap<String, TransferState>>,
 }
 
+const TAG: &str = "NetworkTransferManager";
 impl NetworkTransferManager {
     pub fn new(concurrency_limit: usize) -> Self {
         let (progress_tx, _) = broadcast::channel(1024);
@@ -37,6 +38,7 @@ impl NetworkTransferManager {
         };
 
         let mut lock = self.active_transfers.write().await;
+        log::debug!(target: TAG, "Registered Transfer: File ID {} ({} bytes)", file_id, total_bytes);
         lock.insert(file_id, state);
 
         token
@@ -46,6 +48,9 @@ impl NetworkTransferManager {
     pub async fn emit_progress(&self, file_id: &str, bytes_transferred: usize) {
         let lock = self.active_transfers.read().await;
         if let Some(state) = lock.get(file_id) {
+            // Transfer process bytes will be represented inaccurately since emits are 4M once and we dont accumulate.
+            log::debug!(target: TAG, "Transfer Progress: File ID {} ({}/{} bytes)", file_id, bytes_transferred, state.total_bytes);
+
             let _ = self.progress_tx.send(TransferEvent::Progress {
                 file_id: file_id.to_string(),
                 bytes_transferred: bytes_transferred as u64,
