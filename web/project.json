@@ -1,0 +1,24 @@
+{
+    "name": "web",
+    "projectType": "application",
+    "sourceRoot": "web",
+    "targets": {
+        "build": {
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "sdk"
+            ],
+            "options": {
+                "command": "npm install && npm run build",
+                "cwd": "web"
+            }
+        },
+        "serve": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "npm install && npm run dev",
+                "cwd": "web"
+            }
+        }
+    }
+}
