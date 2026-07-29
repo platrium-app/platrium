@@ -6,7 +6,7 @@
         "build": {
             "executor": "nx:run-commands",
             "dependsOn": [
-                "sdk"
+                "sdk:build:wasm"
             ],
             "options": {
                 "command": "npm install && npm run build",
@@ -15,6 +15,9 @@
         },
         "serve": {
             "executor": "nx:run-commands",
+            "dependsOn": [
+                "sdk:build:wasm"
+            ],
             "options": {
                 "command": "npm install && npm run dev",
                 "cwd": "web"

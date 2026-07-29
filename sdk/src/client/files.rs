@@ -7,6 +7,7 @@ use platrium_restapi::models;
 use std::fs::File;
 use std::sync::Arc;
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 #[derive(uniffi::Object)]
 pub struct UploadSource {
     pub(crate) file_name: String,
@@ -27,7 +28,9 @@ impl UploadSource {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
 impl UploadSource {
+    #[wasm_bindgen(constructor)]
     pub fn new(file_name: String, file: web_sys::File) -> Self {
         Self {
             file_name,
@@ -53,6 +56,7 @@ impl UploadSource {
     }
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 #[derive(Clone, uniffi::Object)]
 pub struct Api {
     api_config: Arc<Configuration>,
@@ -259,6 +263,28 @@ impl Api {
 
     /// Cancels a running upload
     pub async fn cancel_upload(&self, client_file_id: String) {
+        self.transfer_manager.cancel_transfer(&client_file_id).await;
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+impl Api {
+    /// Uploads a file by chunking, hashing, and registering it with the backend.
+    #[wasm_bindgen(js_name = upload)]
+    pub async fn upload_wasm(
+        &self,
+        parent_id: &str,
+        source: UploadSource,
+    ) -> Result<String, wasm_bindgen::JsValue> {
+        self.start_uploadsession(parent_id, &source.file_name, &source.xplat)
+            .await
+            .map_err(|e| wasm_bindgen::JsValue::from_str(&format!("{:?}", e)))
+    }
+
+    /// Cancels a running upload
+    #[wasm_bindgen(js_name = cancel_upload)]
+    pub async fn cancel_upload_wasm(&self, client_file_id: String) {
         self.transfer_manager.cancel_transfer(&client_file_id).await;
     }
 }

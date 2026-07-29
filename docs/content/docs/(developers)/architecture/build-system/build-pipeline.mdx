@@ -54,7 +54,7 @@ flowchart TD
     style Rust fill:#ed1a38,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-When you run the build commands (like `nx run sdk:generate-ffi-android`), the pipeline compiles the Rust code into massive `.so` binaries, automatically generates the Kotlin wrapper code, and drops everything into the `sdk/_ffi/android/` folder, ready to be consumed by the Android app!
+When you run the build commands (like `nx run sdk:build:android`), the pipeline compiles the Rust code into massive `.so` binaries, automatically generates the Kotlin wrapper code, and drops everything into the `sdk/_ffi/android/` folder, ready to be consumed by the Android app!
 
 ## Design Decisions
 

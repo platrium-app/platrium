@@ -5,6 +5,11 @@ import { defineConfig } from "vite"
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    fs: {
+      allow: ["../sdk", "./"],
+    },
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

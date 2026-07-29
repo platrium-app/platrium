@@ -32,7 +32,7 @@
                 "{projectRoot}/_generated"
             ]
         },
-        "generate-ffi-android": {
+        "build:android": {
             "executor": "nx:run-commands",
             "cache": true,
             "options": {
@@ -96,6 +96,21 @@
                 "{projectRoot}/src/**/*.rs",
                 "{projectRoot}/Cargo.toml",
                 "{projectRoot}/_generated/**/*.rs"
+            ]
+        },
+        "build:wasm": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "wasm-pack build --target web --out-dir _ffi/wasm --out-name platrium_sdk",
+                "cwd": "sdk"
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*.rs",
+                "{projectRoot}/Cargo.toml"
+            ],
+            "outputs": [
+                "{projectRoot}/_ffi/wasm"
             ]
         }
     }

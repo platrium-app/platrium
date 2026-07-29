@@ -78,7 +78,7 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 
 	sessionID := uuid.New().String()
 	// TODO: Replace with authenticated tenant ID from JWT middleware
-	tenantID := "3e19d7be-0af1-4a93-9d0d-5e175d7e3285"
+	tenantID := "585ab4ae-e2be-45da-9715-c2df7298f810"
 
 	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, tenantID)
 	if err != nil {
