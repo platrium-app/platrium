@@ -23,7 +23,7 @@ flowchart TD
 
     Start((Start Batch))
     
-    Start --> Scan[Hash upto 500 Chunks]
+    Start --> Scan[Hash upto 128 chunks]
     Scan --> API[Fetch Presigned URLs]:::api
     
     API --> Split{Chunk exists on server?}
@@ -45,14 +45,14 @@ flowchart TD
 
 ## The Two-Pass Batch System
 
-We process the file in batches of **500 chunks**. This batching is critical to avoid spamming the backend with thousands of individual API requests.
+We process the file in batches of **128 chunks**. This batching is critical to avoid spamming the backend with thousands of individual API requests.
 
 ### Pass 1: Lightweight Hash Scanning
 For the current batch, we read one chunk from the disk at a time, compute its hash, and **immediately discard the bytes from memory!** 
 
 :::info
 **Why discard the bytes?** 
-If we kept 500 chunks of 4MB in memory while waiting for the network API, we would instantly consume 2GB of RAM. By discarding the bytes after hashing, the hash scan phase never exceeds 4MB of memory!
+If we kept 128 chunks of 4MB in memory while waiting for the network API, we would instantly consume 2GB of RAM. By discarding the bytes after hashing, the hash scan phase never exceeds 4MB of memory!
 :::
 
 ### Requesting Presigned URLs
@@ -66,7 +66,7 @@ Now we look at the response from the server. If a chunk requires uploading, we e
 3. **HTTP PUT:** We stream the bytes directly to the Object Storage (S3, Cloudflare R2, etc.) using `reqwest`. We wrap this in a `tokio::select!` block tied to our cancellation token.
 4. **Emitting Progress:** We tell the `NetworkTransferManager` how many bytes we just pushed, and it funnels that event back to the UI!
 
-By leveraging this two-pass system, if the server already has 499 of the 500 chunks, we completely skip reading 499 chunks back into RAM and skip 499 HTTP PUTs! 
+By leveraging this two-pass system, if the server already has 499 of the 128 chunks, we completely skip reading 499 chunks back into RAM and skip 499 HTTP PUTs! 
 
 ## Committing the Session
 
