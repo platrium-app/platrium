@@ -182,6 +182,7 @@ components:
         - parent_id
         - file_name
         - file_size
+        - mime_type
       properties:
         parent_id:
           type: string
@@ -195,6 +196,9 @@ components:
           minimum: 1
           maximum: 2199023255552
           description: Size of the file in bytes. Max size 2TiB.
+        mime_type:
+          type: string
+          description: MIME Content-Type of the file (e.g. application/pdf, image/png)
     Files.UploadSessionInitResponse:
       type: object
       required:

@@ -30,11 +30,27 @@
         "{projectRoot}/internal/restapi/spec.gen.go"
       ]
     },
+    "_generate_graphql_bindings": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go tool gqlgen generate",
+        "cwd": "core"
+      },
+      "cache": false,
+      "inputs": [
+        "{workspaceRoot}/api/graphql/**/*.graphql",
+        "{projectRoot}/gqlgen.yml"
+      ],
+      "outputs": [
+        "{projectRoot}/internal/graphql/**/*.go"
+      ]
+    },
     "build": {
       "cache": true,
       "executor": "nx:run-commands",
       "dependsOn": [
-        "_generate_restapi_bindings"
+        "_generate_restapi_bindings",
+        "_generate_graphql_bindings"
       ],
       "options": {
         "command": "go build -o bin/core-engine cmd/engine/main.go",

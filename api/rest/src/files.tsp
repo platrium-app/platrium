@@ -24,6 +24,9 @@ model UploadSessionInitRequest {
     @maxValue(2199023255552)
     @minValue(1)
     file_size: int64;
+
+    @doc("MIME Content-Type of the file (e.g. application/pdf, image/png)")
+    mime_type: string;
 }
 
 model UploadSessionInitResponse {

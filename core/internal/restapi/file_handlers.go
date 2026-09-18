@@ -19,17 +19,19 @@ type UploadSessionPassportClaims struct {
 	ParentFolderID string `json:"parent_folder_id"`
 	Filename       string `json:"filename"`
 	FileSize       int64  `json:"file_size"`
+	MimeType       string `json:"mime_type"`
 	TenantID       string `json:"tenant_id"`
 	jwt.RegisteredClaims
 }
 
 // GenerateUploadSessionPassport issues a cryptographically signed JWT passport for the upload session.
-func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, filename string, fileSize int64, tenantID string) (string, error) {
+func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, filename string, fileSize int64, mimeType string, tenantID string) (string, error) {
 	claims := UploadSessionPassportClaims{
 		SessionID:      sessionID,
 		ParentFolderID: parentFolderID,
 		Filename:       filename,
 		FileSize:       fileSize,
+		MimeType:       mimeType,
 		TenantID:       tenantID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
@@ -72,15 +74,16 @@ func (api *RestAPI) GenerateHMACReceipt(sessionID, hash string, isEOF bool) stri
 
 // UploadSessionInitialize handles POST /files/uploadsession (Stage 1: Session Init).
 func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadSessionInitializeRequestObject) (UploadSessionInitializeResponseObject, error) {
-	if request.Body == nil || request.Body.FileName == "" || request.Body.ParentId == "" {
-		return UploadSessionInitialize500JSONResponse{Debuginfo: "file_name and parent_id are required"}, nil
+	// TODO: see if we can use a validator to make this simpler.
+	if request.Body == nil || request.Body.FileName == "" || request.Body.ParentId == "" || request.Body.MimeType == "" {
+		return UploadSessionInitialize500JSONResponse{Debuginfo: "file_name, parent_id, and mime_type are required"}, nil
 	}
 
 	sessionID := uuid.New().String()
 	// TODO: Replace with authenticated tenant ID from JWT middleware
-	tenantID := "585ab4ae-e2be-45da-9715-c2df7298f810"
+	tenantID := "b92c86d9-56aa-4686-a448-04aae5efbb7f"
 
-	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, tenantID)
+	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, request.Body.MimeType, tenantID)
 	if err != nil {
 		return UploadSessionInitialize500JSONResponse{Debuginfo: fmt.Sprintf("failed to generate session passport: %v", err)}, nil
 	}
@@ -193,7 +196,14 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 	}
 
 	// 2. Commit file node and chunk manifest sequence to Graph DB / Manifest KV Store
-	fileId, err := api.FSOps.CreateFile(ctx, claims.TenantID, claims.ParentFolderID, claims.Filename, hexHashes)
+	fileId, err := api.FSOps.CreateFile(ctx, fsops.CreateFileParams{
+		TenantID:  claims.TenantID,
+		ParentID:  claims.ParentFolderID,
+		Name:      claims.Filename,
+		Size:      claims.FileSize,
+		MimeType:  claims.MimeType,
+		HexHashes: hexHashes,
+	})
 	if err != nil {
 		return UploadSessionCommit500JSONResponse{
 			Debuginfo: fmt.Sprintf("failed to commit file node: %v", err),

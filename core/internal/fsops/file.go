@@ -23,9 +23,21 @@ type File struct {
 	TenantID     string   `json:"tenant_id"`
 	Name         string   `json:"name"`
 	Size         int64    `json:"size"`
+	MimeType     string   `json:"mime_type"`
 	CreatedAt    int64    `json:"created_at"`
+	UpdatedAt    int64    `json:"updated_at"`
 	ManifestPath string   `json:"manifest_path,omitempty"`
 	InlineChunks []string `json:"inline_chunks,omitempty"`
+}
+
+// CreateFileParams encapsulates the input fields required to create a new File node.
+type CreateFileParams struct {
+	TenantID  string
+	ParentID  string
+	Name      string
+	Size      int64
+	MimeType  string
+	HexHashes []string
 }
 
 func NewFSOps(g graph.Graph, m *ManifestRepo) *FSOps {
@@ -62,11 +74,11 @@ func (f *FSOps) processHashes(ctx context.Context, fileId string, version int, h
 
 // CreateFile assigns a file into the resource graph, strictly verifying the parent
 // container exists and isn't a file, all within a single Neo4j transaction.
-func (f *FSOps) CreateFile(ctx context.Context, tenantId, parentId, name string, hexHashes []string) (string, error) {
+func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string, error) {
 	fileId := uuid.New().String()
 	version := 1 // Initial creation is always v1
 
-	manifestPath, inlineChunks, err := f.processHashes(ctx, fileId, version, hexHashes)
+	manifestPath, inlineChunks, err := f.processHashes(ctx, fileId, version, params.HexHashes)
 	if err != nil {
 		return "", err
 	}
@@ -79,8 +91,10 @@ func (f *FSOps) CreateFile(ctx context.Context, tenantId, parentId, name string,
 			file:File,
 			file.name = $name, 
 			file.tenant_id = $tenant_id,
-			file.size = 0,
+			file.size = $size,
+			file.mime_type = $mime_type,
 			file.created_at = timestamp(),
+			file.updated_at = timestamp(),
 			file.manifest_path = $manifest_path,
 			file.inline_chunks = $inline_chunks
 		
@@ -88,17 +102,19 @@ func (f *FSOps) CreateFile(ctx context.Context, tenantId, parentId, name string,
 		RETURN file
 	`
 
-	params := map[string]any{
-		"tenant_id":     tenantId,
-		"parent_id":     parentId,
+	cypherParams := map[string]any{
+		"tenant_id":     params.TenantID,
+		"parent_id":     params.ParentID,
 		"file_id":       fileId,
-		"name":          name,
+		"name":          params.Name,
+		"size":          params.Size,
+		"mime_type":     params.MimeType,
 		"manifest_path": manifestPath,
 		"inline_chunks": inlineChunks,
 	}
 
 	err = f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, cypher, params)
+		res, err := tx.Query(ctx, cypher, cypherParams)
 		if err != nil {
 			return err
 		}
@@ -131,7 +147,9 @@ func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, er
 			file.tenant_id AS tenant_id,
 			file.name AS name,
 			file.size AS size,
+			file.mime_type AS mime_type,
 			file.created_at AS created_at,
+			file.updated_at AS updated_at,
 			file.manifest_path AS manifest_path, 
 			file.inline_chunks AS inline_chunks
 	`

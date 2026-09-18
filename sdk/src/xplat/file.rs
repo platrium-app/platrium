@@ -4,6 +4,7 @@ use std::fs::File;
 #[cfg(target_arch = "wasm32")]
 use web_sys::File as WebFile;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -40,8 +41,10 @@ impl XPlatFile {
             #[cfg(not(target_arch = "wasm32"))]
             XPlatFile::Native(file) => {
                 use std::os::unix::fs::FileExt;
-                let mut buffer = vec![0; size];
-                file.read_exact_at(&mut buffer, offset).map_err(|e| e.to_string())?;
+                let mut buffer: Vec<u8> = vec![0; size];
+                file.read_exact_at(&mut buffer, offset)
+                    .map_err(|e| e.to_string())?;
+
                 Ok(buffer)
             }
             #[cfg(target_arch = "wasm32")]

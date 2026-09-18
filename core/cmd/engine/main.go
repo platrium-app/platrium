@@ -13,10 +13,13 @@ import (
 	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
+	"platrium/internal/graphql"
 	"platrium/internal/objects"
 	"platrium/internal/restapi"
 	"platrium/internal/setup"
 
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -90,13 +93,21 @@ func main() {
 
 	// CORS Settings for Browser Fetch APIs
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"http://localhost:5173"},
+		AllowedOrigins: []string{"http://localhost:5173", "http://*:5173"},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "User-Agent", "x-platrium-uploadsession"},
 		ExposedHeaders: []string{"Link"},
 	}))
 
+	// Setup GraphQL
+	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
+		FSOps: fsOps,
+	}}))
+
 	// Routes
+	router.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
+	router.Handle("/graphql", graphqlSrv)
+
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/health", HealthHandler)
 		r.Mount("/objects", objectsRouter)

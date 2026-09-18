@@ -55,6 +55,9 @@ type FilesUploadSessionInitRequest struct {
 	// FileSize Size of the file in bytes. Max size 2TiB.
 	FileSize int64 `json:"file_size"`
 
+	// MimeType MIME Content-Type of the file (e.g. application/pdf, image/png)
+	MimeType string `json:"mime_type"`
+
 	// ParentId ID of the parent folder or drive
 	ParentId string `json:"parent_id"`
 }

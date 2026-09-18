@@ -35,7 +35,7 @@ export function FolderContextMenu({ children }: FolderContextMenuProps) {
                 <ContextMenuGroup>
                     <ContextMenuItem
                         className="cursor-pointer"
-                        onClick={() => triggerUpload("067a70fb-a911-442f-9d06-1f5ce3f6364d")}
+                        onClick={() => triggerUpload("351c377f-ee11-4a30-90df-ba4cdd729251")}
                     >
                         <FileUp className="mr-2 h-4 w-4" />
                         <span>Upload File</span>

@@ -1,0 +1,83 @@
+scalar DateTime
+scalar Int64
+
+enum DriveType {
+  PRIVATE
+  SHARED
+}
+
+enum DriveItemType {
+  FILE
+  FOLDER
+}
+
+type Drive {
+  id: ID!
+  name: String!
+  type: DriveType!
+  storageUsed: Int64!
+  storageQuota: Int64
+  createdAt: DateTime!
+}
+
+interface DriveItem {
+  id: ID!
+  parentId: ID
+  name: String!
+  type: DriveItemType!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type FileVersion {
+  version: Int!
+  size: Int64!
+  createdAt: DateTime!
+}
+
+type FileItem implements DriveItem {
+  id: ID!
+  parentId: ID!
+  name: String!
+  type: DriveItemType!
+  size: Int64!
+  mimeType: String!
+  version: Int!
+  versions: [FileVersion!]
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type FolderItem implements DriveItem {
+  id: ID!
+  parentId: ID
+  name: String!
+  type: DriveItemType!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Query {
+  # Fetch metadata for any drive item (File or Folder) by ID
+  item(id: ID!): DriveItem
+
+  # Fetch all items (files & subfolders) inside a parent folder or drive
+  folderContents(folderId: ID!): [DriveItem!]!
+
+  # Fetch all accessible drives for current user
+  drives: [Drive!]!
+}
+
+type Mutation {
+  # Create a new folder inside a parent folder or drive
+  createFolder(parentId: ID!, name: String!): FolderItem!
+
+  # Rename a file or folder
+  renameItem(id: ID!, newName: String!): DriveItem!
+
+  # Move a file or folder to a new parent container
+  moveItem(id: ID!, newParentId: ID!): DriveItem!
+
+  # Delete an item (file or folder sub-tree)
+  deleteItem(id: ID!): Boolean!
+}

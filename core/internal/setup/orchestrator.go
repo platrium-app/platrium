@@ -56,7 +56,13 @@ func (o *Orchestrator) Bootstrap(ctx context.Context) error {
 	log.Printf("Setup: Created Native Super Admin (ID: %s, Email: %s)", user.ID, user.Email)
 
 	// Hardcode a private drive creation for the user (to be moved to user creation flow later)
-	drive, err := o.fsOps.CreatePrivateDrive(ctx, tenant.ID, user.ID)
+	drive, err := o.fsOps.CreateDrive(ctx, fsops.CreateDriveParams{
+		TenantID: tenant.ID,
+		OwnerID:  user.ID,
+		Name:     "My Drive",
+		Type:     "PRIVATE",
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to create private drive for native super admin: %w", err)
 	}

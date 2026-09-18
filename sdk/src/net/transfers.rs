@@ -1,25 +1,50 @@
-use tokio_util::sync::CancellationToken;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, uniffi::Enum)]
-pub enum TransferEvent {
-    Progress {
-        file_id: String,
-        bytes_transferred: u64,
-        total_bytes: u64,
-    },
-    Completed {
-        file_id: String,
-    },
-    Error {
-        file_id: String,
-        error: String,
-    },
-    Cancelled {
-        file_id: String,
-    },
+#[derive(Clone, Debug, Serialize, Deserialize, uniffi::Enum)]
+#[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
+#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
+pub enum TransferDirection {
+    Upload,
+    Download,
 }
 
-pub struct TransferState {
+#[derive(Clone, Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(tag = "type")]
+#[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
+#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
+pub enum TransferMetadata {
+    FileChunk {
+        folder_id: String,
+        file_name: String,
+    },
+    // Example of Future Transfer Type:
+    // StaticAsset {
+    //     asset_id: String,
+    // },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(tag = "type")]
+#[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
+#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
+pub enum TransferStatus {
+    Preparing,
+    Transferring,
+    Completed,
+    Error { message: String },
+    Cancelled,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, uniffi::Record)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
+#[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
+pub struct NetTransferEvent {
+    pub transfer_id: String,
+    pub direction: TransferDirection,
+    pub status: TransferStatus,
+    pub bytes_transferred: u64,
     pub total_bytes: u64,
-    pub token: CancellationToken,
+    pub metadata: TransferMetadata,
 }
+
