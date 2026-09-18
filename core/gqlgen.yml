@@ -20,3 +20,11 @@ models:
     model: github.com/99designs/gqlgen/graphql.Time
   Int64:
     model: github.com/99designs/gqlgen/graphql.Int64
+  File:
+    fields:
+      path:
+        resolver: true
+  Folder:
+    fields:
+      path:
+        resolver: true

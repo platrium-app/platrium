@@ -12,6 +12,16 @@ import (
 	"platrium/internal/fsops"
 )
 
+// Path is the resolver for the path field.
+func (r *fileResolver) Path(ctx context.Context, obj *File) ([]*Folder, error) {
+	return r.resolveItemPath(ctx, obj.ID)
+}
+
+// Path is the resolver for the path field.
+func (r *folderResolver) Path(ctx context.Context, obj *Folder) ([]*Folder, error) {
+	return r.resolveItemPath(ctx, obj.ID)
+}
+
 // CreateFolder is the resolver for the createFolder field.
 func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, name string) (*Folder, error) {
 	panic(fmt.Errorf("not implemented: CreateFolder - createFolder"))
@@ -34,12 +44,74 @@ func (r *mutationResolver) DeleteItem(ctx context.Context, id string) (bool, err
 
 // Item is the resolver for the item field.
 func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) {
-	panic(fmt.Errorf("not implemented: Item - item"))
+	sess, ok := session.FromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	item, err := r.FSOps.GetItem(ctx, sess.TenantID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return mapDriveItemRecord(item), nil
 }
 
 // FolderContents is the resolver for the folderContents field.
 func (r *queryResolver) FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error) {
-	panic(fmt.Errorf("not implemented: FolderContents - folderContents"))
+	sess, ok := session.FromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("unauthorized")
+	}
+
+	limit := 50
+	if first != nil && *first > 0 {
+		limit = *first
+	}
+
+	afterCursor := ""
+	if after != nil {
+		afterCursor = *after
+	}
+
+	// We fetch limit + 1 to determine if there's a next page
+	items, err := r.FSOps.GetFolderContents(ctx, sess.TenantID, folderID, limit+1, afterCursor)
+	if err != nil {
+		return nil, err
+	}
+
+	hasNextPage := len(items) > limit
+	if hasNextPage {
+		items = items[:limit]
+	}
+
+	var edges []*DriveItemEdge
+	for _, item := range items {
+		edges = append(edges, &DriveItemEdge{
+			Cursor: item.ID,
+			Node:   mapDriveItemRecord(item),
+		})
+	}
+
+	var endCursor *string
+	if len(edges) > 0 {
+		c := edges[len(edges)-1].Cursor
+		endCursor = &c
+	}
+
+	total, err := r.FSOps.GetFolderContentsTotalCount(ctx, sess.TenantID, folderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DriveItemConnection{
+		Edges: edges,
+		PageInfo: &PageInfo{
+			HasNextPage: hasNextPage,
+			EndCursor:   endCursor,
+		},
+		TotalCount: total,
+	}, nil
 }
 
 // Drives is the resolver for the drives field.
@@ -84,6 +156,12 @@ func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
 	return folders, nil
 }
 
+// File returns FileResolver implementation.
+func (r *Resolver) File() FileResolver { return &fileResolver{r} }
+
+// Folder returns FolderResolver implementation.
+func (r *Resolver) Folder() FolderResolver { return &folderResolver{r} }
+
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
@@ -91,6 +169,8 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
 type (
+	fileResolver     struct{ *Resolver }
+	folderResolver   struct{ *Resolver }
 	mutationResolver struct{ *Resolver }
 	queryResolver    struct{ *Resolver }
 )
