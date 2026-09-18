@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import { TelescopeIcon } from "lucide-react"
 import RootLayout from "./layouts/RootLayout"
 import FolderRootView from "./pages/folder/FolderRootView"
 import { UploadProvider } from "./contexts/UploadContext"
 import { BreadcrumbProvider } from "./contexts/BreadcrumbContext"
+import { PlaceholderView } from "./components/custom/PlaceholderView"
 
 import HomeView from "./pages/HomeView"
 
@@ -16,7 +18,16 @@ export function App() {
               <Route index element={<Navigate to="/home" replace />} />
               <Route path="home" element={<HomeView />} />
               <Route path="folder/:id" element={<FolderRootView />} />
-              <Route path="*" element={<p>Page Not Found</p>} />
+              <Route
+                path="*"
+                element={
+                  <PlaceholderView
+                    icon={TelescopeIcon}
+                    title="Page Not Found"
+                    description="We've looked everywhere and the page you're looking for does not exist or has been moved."
+                  />
+                }
+              />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -26,3 +37,4 @@ export function App() {
 }
 
 export default App
+

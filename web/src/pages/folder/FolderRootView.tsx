@@ -1,32 +1,135 @@
 import { useParams } from "react-router-dom"
-import { FolderOpen } from "lucide-react"
+import { FolderOpen, AlertTriangle, FolderRoot, Folder } from "lucide-react"
 import { FolderContextMenu } from "./FolderContextMenu"
-import { useSetBreadcrumbs } from "@/contexts/BreadcrumbContext"
+import { useSetBreadcrumbs, type BreadcrumbItemType } from "@/contexts/BreadcrumbContext"
+import { useQuery } from "@apollo/client/react"
+import { graphql } from "@/graphql"
+import { useMemo } from "react"
+import { PlaceholderView } from "@/components/custom/PlaceholderView"
+import { Spinner } from "@/components/ui/spinner"
+
+const GET_FOLDER_INFO = graphql(`
+  query GetFolderInfo($id: ID!) {
+    item(id: $id) {
+      id
+      name
+      path {
+        id
+        name
+      }
+    }
+  }
+`)
 
 export default function FolderRootView() {
   const { id } = useParams()
 
-  useSetBreadcrumbs([
-    { id: id, label: id ? `Folder ${id.slice(0, 8)}...` : "Folder", href: `/folder/${id}` },
-  ])
+  const { data, loading, error } = useQuery(GET_FOLDER_INFO, {
+    variables: { id: id! },
+    skip: !id,
+  })
+
+  const item = data?.item
+
+  const breadcrumbs = useMemo<BreadcrumbItemType[]>(() => {
+    const crumbs: BreadcrumbItemType[] = []
+
+    if (loading) {
+      crumbs.push({
+        id: id,
+        label: "Loading...",
+        href: `/folder/${id}`,
+        icon: Spinner,
+      })
+      return crumbs
+    }
+
+    if (item) {
+      if (item.path && item.path.length > 0) {
+        item.path.forEach((folder, index) => {
+          crumbs.push({
+            id: folder.id,
+            label: folder.name,
+            href: `/folder/${folder.id}`,
+            icon: index === 0 ? FolderRoot : Folder,
+          })
+        })
+        crumbs.push({
+          id: id,
+          label: item.name,
+          href: `/folder/${id}`,
+          icon: Folder,
+        })
+      } else {
+        crumbs.push({
+          id: id,
+          label: item.name,
+          href: `/folder/${id}`,
+          icon: FolderRoot,
+        })
+      }
+    } else {
+      crumbs.push({
+        id: id,
+        label: "Invalid Resource",
+        href: `/folder/${id}`,
+        icon: AlertTriangle,
+      })
+    }
+
+    return crumbs
+  }, [id, item, loading])
+
+  useSetBreadcrumbs(breadcrumbs)
+
+  if (loading) {
+    return (
+      <div className="flex h-full min-h-[50vh] w-full flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+        <Spinner className="size-8 text-muted-foreground" />
+        <p className="mt-3 text-sm text-muted-foreground">Loading this Resource</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <PlaceholderView
+        icon={AlertTriangle}
+        variant="error"
+        title="Error Accessing Resource"
+        description={error.message || "Failed to load folder information."}
+      />
+    )
+  }
+
+  if (!item) {
+    return (
+      <PlaceholderView
+        icon={AlertTriangle}
+        variant="error"
+        title="Resource Not Found"
+        description="The requested folder could not be found."
+      />
+    )
+  }
 
   return (
     <FolderContextMenu folderId={id!}>
-      <div className="flex h-full min-h-[50vh] w-full animate-in flex-col items-center justify-center p-8 text-center duration-300 fade-in">
-        <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-muted/50">
-          <FolderOpen
-            className="size-10 text-muted-foreground"
-            strokeWidth={1.5}
-          />
-        </div>
-        <h2 className="text-xl font-semibold tracking-tight">
-          This folder is empty
-        </h2>
-        <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">
-          Right-click anywhere to create a new folder, or upload files directly
-          into <span className="font-medium text-foreground">{id}</span>.
-        </p>
-      </div>
+      <PlaceholderView
+        icon={FolderOpen}
+        title="This folder is empty"
+        description={
+          <>
+            Right-click anywhere to create a new folder, or upload files directly into{" "}
+            <span className="font-semibold text-foreground">{item.name}</span>.
+          </>
+        }
+      />
     </FolderContextMenu>
   )
 }
+
+
+
+
+

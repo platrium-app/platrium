@@ -4,6 +4,7 @@ export type BreadcrumbItemType = {
   id?: string
   label: string
   href?: string
+  icon?: React.ElementType
 }
 
 type BreadcrumbContextType = {

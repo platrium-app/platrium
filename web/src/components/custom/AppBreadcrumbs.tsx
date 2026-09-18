@@ -9,6 +9,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { cn } from "@/lib/utils"
 
 export function AppBreadcrumbs() {
   const { breadcrumbs } = useBreadcrumbs()
@@ -22,16 +23,33 @@ export function AppBreadcrumbs() {
       <BreadcrumbList>
         {breadcrumbs.map((item, index) => {
           const isLast = index === breadcrumbs.length - 1
+          const Icon = item.icon
 
           return (
             <React.Fragment key={item.id || item.href || item.label || index}>
               <BreadcrumbItem>
-                {isLast || !item.href ? (
-                  <BreadcrumbPage>{item.label}</BreadcrumbPage>
-                ) : (
-                  <BreadcrumbLink render={<Link to={item.href} />}>
-                    {item.label}
+                {item.href ? (
+                  <BreadcrumbLink
+                    render={
+                      <Link
+                        to={item.href}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 transition-colors",
+                          isLast
+                            ? "font-normal text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      />
+                    }
+                  >
+                    {Icon && <Icon className="size-4 shrink-0" />}
+                    <span>{item.label}</span>
                   </BreadcrumbLink>
+                ) : (
+                  <BreadcrumbPage className="inline-flex items-center gap-1.5">
+                    {Icon && <Icon className="size-4 shrink-0" />}
+                    <span>{item.label}</span>
+                  </BreadcrumbPage>
                 )}
               </BreadcrumbItem>
               {!isLast && <BreadcrumbSeparator />}
@@ -42,3 +60,5 @@ export function AppBreadcrumbs() {
     </Breadcrumb>
   )
 }
+
+

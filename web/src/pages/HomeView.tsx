@@ -1,8 +1,8 @@
-import React from "react"
 import { useSetBreadcrumbs } from "@/contexts/BreadcrumbContext"
+import { Home } from "lucide-react"
 
 export default function HomeView() {
-  useSetBreadcrumbs([{ label: "Home" }])
+  useSetBreadcrumbs([{ label: "Home", icon: Home }])
 
   return (
     <div className="flex flex-col gap-2 p-2">
@@ -11,3 +11,4 @@ export default function HomeView() {
     </div>
   )
 }
+

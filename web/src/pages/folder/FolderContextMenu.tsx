@@ -20,11 +20,9 @@ export function FolderContextMenu({ children, folderId }: FolderContextMenuProps
 
     return (
         <ContextMenu>
-            <ContextMenuTrigger
-                render={
-                    React.isValidElement(children) ? children : <span>{children}</span>
-                }
-            />
+            <ContextMenuTrigger className="flex min-h-full w-full flex-1 flex-col outline-none">
+                {children}
+            </ContextMenuTrigger>
             <ContextMenuContent className="w-64">
                 <ContextMenuGroup>
                     <ContextMenuItem className="cursor-pointer">
@@ -50,3 +48,4 @@ export function FolderContextMenu({ children, folderId }: FolderContextMenuProps
         </ContextMenu>
     )
 }
+
