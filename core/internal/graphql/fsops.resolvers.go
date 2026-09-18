@@ -8,6 +8,7 @@ package graphql
 import (
 	"context"
 	"fmt"
+	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
 )
 
@@ -53,11 +54,12 @@ func (r *queryResolver) FolderContents(ctx context.Context, folderID string) ([]
 
 // Drives is the resolver for the drives field.
 func (r *queryResolver) Drives(ctx context.Context) ([]*fsops.Drive, error) {
-	// TODO: Replace with authenticated tenant ID and user ID from context/middleware
-	tenantID := "d6c794a2-004a-4f23-b1ce-c2c7dda82d2c"
-	userID := "cb89e30c-ad7c-413a-9e7a-981ee8a460e4"
+	sess, ok := session.FromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("unauthorized: missing session context")
+	}
 
-	return r.FSOps.GetUserDrives(ctx, tenantID, userID)
+	return r.FSOps.GetUserDrives(ctx, sess.TenantID, sess.UserID)
 }
 
 // Drive returns DriveResolver implementation.

@@ -8,12 +8,13 @@ import (
 	"os"
 
 	"platrium/internal/api"
+	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
+	"platrium/internal/graphql"
 	"platrium/internal/identity"
 	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
-	"platrium/internal/graphql"
 	"platrium/internal/objects"
 	"platrium/internal/restapi"
 	"platrium/internal/setup"
@@ -77,6 +78,14 @@ func main() {
 		log.Fatalf("failed to bootstrap native tenant: %v", err)
 	}
 
+	// Setup Session Manager & Dev Fallback
+	sessionManager := session.NewManager()
+	devFallback := &session.PlatriumSession{
+		UserID:   "cb89e30c-ad7c-413a-9e7a-981ee8a460e4",
+		TenantID: "d6c794a2-004a-4f23-b1ce-c2c7dda82d2c",
+		Email:    "admin@example.com",
+	}
+
 	// Setup HTTP Routers
 	objectsRouter := objects.NewRouter(storageManager)
 	attachedFsHandler := api.NewAttachedFSHandler(storageManager) // we should give it storageManager isntead.
@@ -104,9 +113,14 @@ func main() {
 		FSOps: fsOps,
 	}}))
 
-	// Routes
+	// GraphQL Routes
+	router.Route("/graphql", func(r chi.Router) {
+		r.Use(sessionManager.LoadAndSave)
+		r.Use(session.Middleware(sessionManager, devFallback))
+		r.Handle("/", graphqlSrv)
+		r.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
+	})
 	router.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
-	router.Handle("/graphql", graphqlSrv)
 
 	router.Route("/api", func(r chi.Router) {
 		r.Get("/health", HealthHandler)

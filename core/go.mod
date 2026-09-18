@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/99designs/gqlgen v0.17.94
+	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/dgraph-io/badger/v4 v4.9.2
 	github.com/getkin/kin-openapi v0.135.0
