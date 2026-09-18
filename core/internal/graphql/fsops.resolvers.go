@@ -13,7 +13,7 @@ import (
 )
 
 // CreateFolder is the resolver for the createFolder field.
-func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, name string) (*FolderItem, error) {
+func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, name string) (*Folder, error) {
 	panic(fmt.Errorf("not implemented: CreateFolder - createFolder"))
 }
 
@@ -38,18 +38,50 @@ func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) 
 }
 
 // FolderContents is the resolver for the folderContents field.
-func (r *queryResolver) FolderContents(ctx context.Context, folderID string) ([]DriveItem, error) {
+func (r *queryResolver) FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error) {
 	panic(fmt.Errorf("not implemented: FolderContents - folderContents"))
 }
 
 // Drives is the resolver for the drives field.
-func (r *queryResolver) Drives(ctx context.Context) ([]*fsops.Drive, error) {
+func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
 	sess, ok := session.FromContext(ctx)
 	if !ok {
 		return nil, fmt.Errorf("unauthorized: missing session context")
 	}
 
-	return r.FSOps.GetUserDrives(ctx, sess.TenantID, sess.UserID)
+	drives, err := r.FSOps.GetUserDrives(ctx, sess.TenantID, sess.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	var folders []*Folder
+	for _, d := range drives {
+		driveType := DriveTypePrivate
+		if d.Type == fsops.DriveTypeShared {
+			driveType = DriveTypeShared
+		}
+
+		var quota *int64
+		if d.StorageQuota > 0 {
+			q := d.StorageQuota
+			quota = &q
+		}
+
+		folders = append(folders, &Folder{
+			ID:   d.ID,
+			Name: d.Name,
+			Type: DriveItemTypeFolder,
+			DriveMetadata: &DriveMetadata{
+				DriveType:    driveType,
+				StorageUsed:  d.StorageUsed,
+				StorageQuota: quota,
+			},
+			CreatedAt: d.CreatedAt,
+			UpdatedAt: d.CreatedAt,
+		})
+	}
+
+	return folders, nil
 }
 
 // Mutation returns MutationResolver implementation.

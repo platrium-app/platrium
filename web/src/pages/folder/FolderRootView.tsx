@@ -1,12 +1,17 @@
 import { useParams } from "react-router-dom"
 import { FolderOpen } from "lucide-react"
 import { FolderContextMenu } from "./FolderContextMenu"
+import { useSetBreadcrumbs } from "@/contexts/BreadcrumbContext"
 
 export default function FolderRootView() {
   const { id } = useParams()
 
+  useSetBreadcrumbs([
+    { id: id, label: id ? `Folder ${id.slice(0, 8)}...` : "Folder", href: `/folder/${id}` },
+  ])
+
   return (
-    <FolderContextMenu>
+    <FolderContextMenu folderId={id!}>
       <div className="flex h-full min-h-[50vh] w-full animate-in flex-col items-center justify-center p-8 text-center duration-300 fade-in">
         <div className="mb-4 flex size-20 items-center justify-center rounded-full bg-muted/50">
           <FolderOpen

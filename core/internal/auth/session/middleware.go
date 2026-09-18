@@ -25,6 +25,7 @@ func Middleware(sm *scs.SessionManager, devFallback *PlatriumSession) func(http.
 
 			if sess == nil && devFallback != nil {
 				sess = devFallback
+				PutSession(sm, r, sess)
 			}
 
 			if sess != nil {

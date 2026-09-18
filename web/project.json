@@ -3,23 +3,63 @@
     "projectType": "application",
     "sourceRoot": "web",
     "targets": {
+        "_generate_graphql_bindings": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "graphql-codegen --config graphql_codegen.ts",
+                "cwd": "web"
+            }
+        },
         "build": {
             "executor": "nx:run-commands",
             "dependsOn": [
-                "sdk:build:wasm"
+                "sdk:build:wasm",
+                "_generate_graphql_bindings"
             ],
             "options": {
-                "command": "npm install && npm run build",
+                "command": "tsc -b && vite build",
                 "cwd": "web"
             }
         },
         "serve": {
             "executor": "nx:run-commands",
             "dependsOn": [
-                "sdk:build:wasm"
+                "sdk:build:wasm",
+                "_generate_graphql_bindings"
             ],
             "options": {
-                "command": "npm install && npm run dev",
+                "command": "vite",
+                "cwd": "web"
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "eslint .",
+                "cwd": "web"
+            }
+        },
+        "format": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "prettier --write \"**/*.{ts,tsx}\"",
+                "cwd": "web"
+            }
+        },
+        "typecheck": {
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_graphql_bindings"
+            ],
+            "options": {
+                "command": "tsc --noEmit",
+                "cwd": "web"
+            }
+        },
+        "preview": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "vite preview",
                 "cwd": "web"
             }
         }

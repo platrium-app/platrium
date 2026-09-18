@@ -102,10 +102,11 @@ func main() {
 
 	// CORS Settings for Browser Fetch APIs
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"http://localhost:5173", "http://*:5173"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "User-Agent", "x-platrium-uploadsession"},
-		ExposedHeaders: []string{"Link"},
+		AllowedOrigins:   []string{"http://localhost:5173", "http://*:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "User-Agent", "x-platrium-uploadsession"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
 	}))
 
 	// Setup GraphQL
@@ -123,6 +124,9 @@ func main() {
 	router.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
 
 	router.Route("/api", func(r chi.Router) {
+		r.Use(sessionManager.LoadAndSave)
+		r.Use(session.Middleware(sessionManager, devFallback))
+
 		r.Get("/health", HealthHandler)
 		r.Mount("/objects", objectsRouter)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())

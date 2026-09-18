@@ -16,11 +16,29 @@ type DriveItem interface {
 	GetParentID() *string
 	GetName() string
 	GetType() DriveItemType
+	GetPath() []*Folder
 	GetCreatedAt() time.Time
 	GetUpdatedAt() time.Time
 }
 
-type FileItem struct {
+type DriveItemConnection struct {
+	Edges      []*DriveItemEdge `json:"edges"`
+	PageInfo   *PageInfo        `json:"pageInfo"`
+	TotalCount int              `json:"totalCount"`
+}
+
+type DriveItemEdge struct {
+	Cursor string    `json:"cursor"`
+	Node   DriveItem `json:"node"`
+}
+
+type DriveMetadata struct {
+	DriveType    DriveType `json:"driveType"`
+	StorageUsed  int64     `json:"storageUsed"`
+	StorageQuota *int64    `json:"storageQuota,omitempty"`
+}
+
+type File struct {
 	ID        string         `json:"id"`
 	ParentID  string         `json:"parentId"`
 	Name      string         `json:"name"`
@@ -29,17 +47,28 @@ type FileItem struct {
 	MimeType  string         `json:"mimeType"`
 	Version   int            `json:"version"`
 	Versions  []*FileVersion `json:"versions,omitempty"`
+	Path      []*Folder      `json:"path"`
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
 }
 
-func (FileItem) IsDriveItem()                 {}
-func (this FileItem) GetID() string           { return this.ID }
-func (this FileItem) GetParentID() *string    { return &this.ParentID }
-func (this FileItem) GetName() string         { return this.Name }
-func (this FileItem) GetType() DriveItemType  { return this.Type }
-func (this FileItem) GetCreatedAt() time.Time { return this.CreatedAt }
-func (this FileItem) GetUpdatedAt() time.Time { return this.UpdatedAt }
+func (File) IsDriveItem()                {}
+func (this File) GetID() string          { return this.ID }
+func (this File) GetParentID() *string   { return &this.ParentID }
+func (this File) GetName() string        { return this.Name }
+func (this File) GetType() DriveItemType { return this.Type }
+func (this File) GetPath() []*Folder {
+	if this.Path == nil {
+		return nil
+	}
+	interfaceSlice := make([]*Folder, 0, len(this.Path))
+	for _, concrete := range this.Path {
+		interfaceSlice = append(interfaceSlice, concrete)
+	}
+	return interfaceSlice
+}
+func (this File) GetCreatedAt() time.Time { return this.CreatedAt }
+func (this File) GetUpdatedAt() time.Time { return this.UpdatedAt }
 
 type FileVersion struct {
 	Version   int       `json:"version"`
@@ -47,24 +76,41 @@ type FileVersion struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-type FolderItem struct {
-	ID        string        `json:"id"`
-	ParentID  *string       `json:"parentId,omitempty"`
-	Name      string        `json:"name"`
-	Type      DriveItemType `json:"type"`
-	CreatedAt time.Time     `json:"createdAt"`
-	UpdatedAt time.Time     `json:"updatedAt"`
+type Folder struct {
+	ID            string         `json:"id"`
+	ParentID      *string        `json:"parentId,omitempty"`
+	Name          string         `json:"name"`
+	Type          DriveItemType  `json:"type"`
+	DriveMetadata *DriveMetadata `json:"driveMetadata,omitempty"`
+	Path          []*Folder      `json:"path"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
 }
 
-func (FolderItem) IsDriveItem()                 {}
-func (this FolderItem) GetID() string           { return this.ID }
-func (this FolderItem) GetParentID() *string    { return this.ParentID }
-func (this FolderItem) GetName() string         { return this.Name }
-func (this FolderItem) GetType() DriveItemType  { return this.Type }
-func (this FolderItem) GetCreatedAt() time.Time { return this.CreatedAt }
-func (this FolderItem) GetUpdatedAt() time.Time { return this.UpdatedAt }
+func (Folder) IsDriveItem()                {}
+func (this Folder) GetID() string          { return this.ID }
+func (this Folder) GetParentID() *string   { return this.ParentID }
+func (this Folder) GetName() string        { return this.Name }
+func (this Folder) GetType() DriveItemType { return this.Type }
+func (this Folder) GetPath() []*Folder {
+	if this.Path == nil {
+		return nil
+	}
+	interfaceSlice := make([]*Folder, 0, len(this.Path))
+	for _, concrete := range this.Path {
+		interfaceSlice = append(interfaceSlice, concrete)
+	}
+	return interfaceSlice
+}
+func (this Folder) GetCreatedAt() time.Time { return this.CreatedAt }
+func (this Folder) GetUpdatedAt() time.Time { return this.UpdatedAt }
 
 type Mutation struct {
+}
+
+type PageInfo struct {
+	HasNextPage bool    `json:"hasNextPage"`
+	EndCursor   *string `json:"endCursor,omitempty"`
 }
 
 type Query struct {
@@ -120,6 +166,61 @@ func (e *DriveItemType) UnmarshalJSON(b []byte) error {
 }
 
 func (e DriveItemType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type DriveType string
+
+const (
+	DriveTypePrivate DriveType = "PRIVATE"
+	DriveTypeShared  DriveType = "SHARED"
+)
+
+var AllDriveType = []DriveType{
+	DriveTypePrivate,
+	DriveTypeShared,
+}
+
+func (e DriveType) IsValid() bool {
+	switch e {
+	case DriveTypePrivate, DriveTypeShared:
+		return true
+	}
+	return false
+}
+
+func (e DriveType) String() string {
+	return string(e)
+}
+
+func (e *DriveType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DriveType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DriveType", str)
+	}
+	return nil
+}
+
+func (e DriveType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DriveType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DriveType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

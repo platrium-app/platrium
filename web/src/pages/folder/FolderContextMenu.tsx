@@ -12,9 +12,10 @@ import { useUpload } from "@/contexts/UploadContext"
 
 export interface FolderContextMenuProps {
     children: React.ReactNode
+    folderId: string
 }
 
-export function FolderContextMenu({ children }: FolderContextMenuProps) {
+export function FolderContextMenu({ children, folderId }: FolderContextMenuProps) {
     const { triggerUpload } = useUpload()
 
     return (
@@ -35,7 +36,7 @@ export function FolderContextMenu({ children }: FolderContextMenuProps) {
                 <ContextMenuGroup>
                     <ContextMenuItem
                         className="cursor-pointer"
-                        onClick={() => triggerUpload("351c377f-ee11-4a30-90df-ba4cdd729251")}
+                        onClick={() => triggerUpload(folderId)}
                     >
                         <FileUp className="mr-2 h-4 w-4" />
                         <span>Upload File</span>

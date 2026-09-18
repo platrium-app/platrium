@@ -11,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
 )
 
@@ -80,9 +81,12 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 	}
 
 	sessionID := uuid.New().String()
-	// TODO: Replace with authenticated tenant ID from JWT middleware
-	tenantID := "b92c86d9-56aa-4686-a448-04aae5efbb7f"
+	sess, ok := session.FromContext(ctx)
+	if !ok {
+		return UploadSessionInitialize500JSONResponse{Debuginfo: "unauthorized: missing session"}, nil
+	}
 
+	tenantID := sess.TenantID
 	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, request.Body.MimeType, tenantID)
 	if err != nil {
 		return UploadSessionInitialize500JSONResponse{Debuginfo: fmt.Sprintf("failed to generate session passport: %v", err)}, nil

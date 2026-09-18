@@ -1,9 +1,6 @@
 schema:
   - ../api/graphql/*.graphql
 
-autobind:
-  - "platrium/internal/fsops"
-
 exec:
   filename: internal/graphql/generated.go
   package: graphql
