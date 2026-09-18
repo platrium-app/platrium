@@ -3,21 +3,29 @@ package fsops
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
 	"platrium/internal/infra/graph"
 )
 
+type DriveType string
+
+const (
+	DriveTypePrivate DriveType = "PRIVATE"
+	DriveTypeShared  DriveType = "SHARED"
+)
+
 type Drive struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	TenantID     string `json:"tenant_id"`
-	OwnerID      string `json:"owner_id"`
-	Type         string `json:"type"` // "PRIVATE" or "SHARED"
-	StorageUsed  int64  `json:"storage_used"`
-	StorageQuota int64  `json:"storage_quota"`
-	CreatedAt    int64  `json:"created_at"`
+	OwnerID      string    `json:"owner_id"`
+	Type         DriveType `json:"type"` // "PRIVATE" or "SHARED"
+	StorageUsed  int64     `json:"storage_used"`
+	StorageQuota int64     `json:"storage_quota"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // CreateDriveParams encapsulates inputs for creating a new Drive node.
@@ -25,7 +33,7 @@ type CreateDriveParams struct {
 	TenantID string
 	OwnerID  string
 	Name     string
-	Type     string // "PRIVATE" or "SHARED"
+	Type     DriveType // "PRIVATE" or "SHARED"
 }
 
 // CreateDrive creates a root Drive node in Graph DB and links it to the owner user via [:OWNS].
@@ -37,7 +45,7 @@ func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Dri
 	}
 	driveType := params.Type
 	if driveType == "" {
-		driveType = "PRIVATE"
+		driveType = DriveTypePrivate
 	}
 
 	query := `
@@ -48,7 +56,7 @@ func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Dri
 			tenant_id: $tenant_id,
 			owner_id: $owner_id,
 			drive_type: $drive_type,
-			created_at: timestamp()
+			created_at: datetime()
 		})
 		CREATE (u)-[:OWNS]->(d)
 		RETURN d.id AS id, d.name AS name, d.tenant_id AS tenant_id, d.owner_id AS owner_id, d.drive_type AS type, 0 AS storage_used, 0 AS storage_quota, d.created_at AS created_at

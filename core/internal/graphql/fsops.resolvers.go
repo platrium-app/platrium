@@ -12,16 +12,6 @@ import (
 	"platrium/internal/fsops"
 )
 
-// Type is the resolver for the type field.
-func (r *driveResolver) Type(ctx context.Context, obj *fsops.Drive) (DriveType, error) {
-	panic(fmt.Errorf("not implemented: Type - type"))
-}
-
-// CreatedAt is the resolver for the createdAt field.
-func (r *driveResolver) CreatedAt(ctx context.Context, obj *fsops.Drive) (string, error) {
-	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
-}
-
 // CreateFolder is the resolver for the createFolder field.
 func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, name string) (*FolderItem, error) {
 	panic(fmt.Errorf("not implemented: CreateFolder - createFolder"))
@@ -62,9 +52,6 @@ func (r *queryResolver) Drives(ctx context.Context) ([]*fsops.Drive, error) {
 	return r.FSOps.GetUserDrives(ctx, sess.TenantID, sess.UserID)
 }
 
-// Drive returns DriveResolver implementation.
-func (r *Resolver) Drive() DriveResolver { return &driveResolver{r} }
-
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
@@ -72,7 +59,6 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
 type (
-	driveResolver    struct{ *Resolver }
 	mutationResolver struct{ *Resolver }
 	queryResolver    struct{ *Resolver }
 )

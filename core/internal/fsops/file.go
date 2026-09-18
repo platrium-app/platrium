@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -23,9 +24,9 @@ type File struct {
 	TenantID     string   `json:"tenant_id"`
 	Name         string   `json:"name"`
 	Size         int64    `json:"size"`
-	MimeType     string   `json:"mime_type"`
-	CreatedAt    int64    `json:"created_at"`
-	UpdatedAt    int64    `json:"updated_at"`
+	MimeType     string    `json:"mime_type"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 	ManifestPath string   `json:"manifest_path,omitempty"`
 	InlineChunks []string `json:"inline_chunks,omitempty"`
 }
@@ -93,8 +94,8 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 			file.tenant_id = $tenant_id,
 			file.size = $size,
 			file.mime_type = $mime_type,
-			file.created_at = timestamp(),
-			file.updated_at = timestamp(),
+			file.created_at = datetime(),
+			file.updated_at = datetime(),
 			file.manifest_path = $manifest_path,
 			file.inline_chunks = $inline_chunks
 		

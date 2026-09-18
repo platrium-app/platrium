@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"time"
 )
 
 type DriveItem interface {
@@ -15,8 +16,8 @@ type DriveItem interface {
 	GetParentID() *string
 	GetName() string
 	GetType() DriveItemType
-	GetCreatedAt() string
-	GetUpdatedAt() string
+	GetCreatedAt() time.Time
+	GetUpdatedAt() time.Time
 }
 
 type FileItem struct {
@@ -24,26 +25,26 @@ type FileItem struct {
 	ParentID  string         `json:"parentId"`
 	Name      string         `json:"name"`
 	Type      DriveItemType  `json:"type"`
-	Size      int            `json:"size"`
+	Size      int64          `json:"size"`
 	MimeType  string         `json:"mimeType"`
 	Version   int            `json:"version"`
 	Versions  []*FileVersion `json:"versions,omitempty"`
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt string         `json:"updatedAt"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
 }
 
-func (FileItem) IsDriveItem()                {}
-func (this FileItem) GetID() string          { return this.ID }
-func (this FileItem) GetParentID() *string   { return &this.ParentID }
-func (this FileItem) GetName() string        { return this.Name }
-func (this FileItem) GetType() DriveItemType { return this.Type }
-func (this FileItem) GetCreatedAt() string   { return this.CreatedAt }
-func (this FileItem) GetUpdatedAt() string   { return this.UpdatedAt }
+func (FileItem) IsDriveItem()                 {}
+func (this FileItem) GetID() string           { return this.ID }
+func (this FileItem) GetParentID() *string    { return &this.ParentID }
+func (this FileItem) GetName() string         { return this.Name }
+func (this FileItem) GetType() DriveItemType  { return this.Type }
+func (this FileItem) GetCreatedAt() time.Time { return this.CreatedAt }
+func (this FileItem) GetUpdatedAt() time.Time { return this.UpdatedAt }
 
 type FileVersion struct {
-	Version   int    `json:"version"`
-	Size      int    `json:"size"`
-	CreatedAt string `json:"createdAt"`
+	Version   int       `json:"version"`
+	Size      int64     `json:"size"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type FolderItem struct {
@@ -51,17 +52,17 @@ type FolderItem struct {
 	ParentID  *string       `json:"parentId,omitempty"`
 	Name      string        `json:"name"`
 	Type      DriveItemType `json:"type"`
-	CreatedAt string        `json:"createdAt"`
-	UpdatedAt string        `json:"updatedAt"`
+	CreatedAt time.Time     `json:"createdAt"`
+	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
-func (FolderItem) IsDriveItem()                {}
-func (this FolderItem) GetID() string          { return this.ID }
-func (this FolderItem) GetParentID() *string   { return this.ParentID }
-func (this FolderItem) GetName() string        { return this.Name }
-func (this FolderItem) GetType() DriveItemType { return this.Type }
-func (this FolderItem) GetCreatedAt() string   { return this.CreatedAt }
-func (this FolderItem) GetUpdatedAt() string   { return this.UpdatedAt }
+func (FolderItem) IsDriveItem()                 {}
+func (this FolderItem) GetID() string           { return this.ID }
+func (this FolderItem) GetParentID() *string    { return this.ParentID }
+func (this FolderItem) GetName() string         { return this.Name }
+func (this FolderItem) GetType() DriveItemType  { return this.Type }
+func (this FolderItem) GetCreatedAt() time.Time { return this.CreatedAt }
+func (this FolderItem) GetUpdatedAt() time.Time { return this.UpdatedAt }
 
 type Mutation struct {
 }
@@ -119,61 +120,6 @@ func (e *DriveItemType) UnmarshalJSON(b []byte) error {
 }
 
 func (e DriveItemType) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type DriveType string
-
-const (
-	DriveTypePrivate DriveType = "PRIVATE"
-	DriveTypeShared  DriveType = "SHARED"
-)
-
-var AllDriveType = []DriveType{
-	DriveTypePrivate,
-	DriveTypeShared,
-}
-
-func (e DriveType) IsValid() bool {
-	switch e {
-	case DriveTypePrivate, DriveTypeShared:
-		return true
-	}
-	return false
-}
-
-func (e DriveType) String() string {
-	return string(e)
-}
-
-func (e *DriveType) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = DriveType(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid DriveType", str)
-	}
-	return nil
-}
-
-func (e DriveType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *DriveType) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e DriveType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

@@ -11,6 +11,7 @@ import (
 	"platrium/internal/fsops"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
@@ -28,7 +29,6 @@ func NewExecutableSchema(cfg Config) graphql.ExecutableSchema {
 type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 
 type ResolverRoot interface {
-	Drive() DriveResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
 }
@@ -92,11 +92,6 @@ type ComplexityRoot struct {
 
 // region    ************************** generated!.gotpl **************************
 
-type DriveResolver interface {
-	Type(ctx context.Context, obj *fsops.Drive) (DriveType, error)
-
-	CreatedAt(ctx context.Context, obj *fsops.Drive) (string, error)
-}
 type MutationResolver interface {
 	CreateFolder(ctx context.Context, parentID string, name string) (*FolderItem, error)
 	RenameItem(ctx context.Context, id string, newName string) (DriveItem, error)
@@ -930,18 +925,18 @@ func (ec *executionContext) _Drive_type(ctx context.Context, field graphql.Colle
 			return ec.fieldContext_Drive_type(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Drive().Type(ctx, obj)
+			return obj.Type, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v DriveType) graphql.Marshaler {
-			return ec.marshalNDriveType2platriumᚋinternalᚋgraphqlᚐDriveType(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v fsops.DriveType) graphql.Marshaler {
+			return ec.marshalNDriveType2platriumᚋinternalᚋfsopsᚐDriveType(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
 func (ec *executionContext) fieldContext_Drive_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("Drive", field, true, true, errors.New("field of type DriveType does not have child fields"))
+	return graphql.NewScalarFieldContext("Drive", field, false, false, errors.New("field of type DriveType does not have child fields"))
 }
 
 func (ec *executionContext) _Drive_storageUsed(ctx context.Context, field graphql.CollectedField, obj *fsops.Drive) (ret graphql.Marshaler) {
@@ -999,18 +994,18 @@ func (ec *executionContext) _Drive_createdAt(ctx context.Context, field graphql.
 			return ec.fieldContext_Drive_createdAt(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.Drive().CreatedAt(ctx, obj)
+			return obj.CreatedAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNDateTime2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
 func (ec *executionContext) fieldContext_Drive_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("Drive", field, true, true, errors.New("field of type DateTime does not have child fields"))
+	return graphql.NewScalarFieldContext("Drive", field, false, false, errors.New("field of type DateTime does not have child fields"))
 }
 
 func (ec *executionContext) _FileItem_id(ctx context.Context, field graphql.CollectedField, obj *FileItem) (ret graphql.Marshaler) {
@@ -1117,8 +1112,8 @@ func (ec *executionContext) _FileItem_size(ctx context.Context, field graphql.Co
 			return obj.Size, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
-			return ec.marshalNInt642int(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v int64) graphql.Marshaler {
+			return ec.marshalNInt642int64(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1218,8 +1213,8 @@ func (ec *executionContext) _FileItem_createdAt(ctx context.Context, field graph
 			return obj.CreatedAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNDateTime2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1241,8 +1236,8 @@ func (ec *executionContext) _FileItem_updatedAt(ctx context.Context, field graph
 			return obj.UpdatedAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNDateTime2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1287,8 +1282,8 @@ func (ec *executionContext) _FileVersion_size(ctx context.Context, field graphql
 			return obj.Size, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
-			return ec.marshalNInt642int(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v int64) graphql.Marshaler {
+			return ec.marshalNInt642int64(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1310,8 +1305,8 @@ func (ec *executionContext) _FileVersion_createdAt(ctx context.Context, field gr
 			return obj.CreatedAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNDateTime2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1425,8 +1420,8 @@ func (ec *executionContext) _FolderItem_createdAt(ctx context.Context, field gra
 			return obj.CreatedAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNDateTime2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1448,8 +1443,8 @@ func (ec *executionContext) _FolderItem_updatedAt(ctx context.Context, field gra
 			return obj.UpdatedAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNDateTime2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
 		},
 		true,
 		true,
@@ -2940,99 +2935,33 @@ func (ec *executionContext) _Drive(ctx context.Context, sel ast.SelectionSet, ob
 		case "id":
 			out.Values[i] = ec._Drive_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "name":
 			out.Values[i] = ec._Drive_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "type":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Drive_type(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
+			out.Values[i] = ec._Drive_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
 			}
-
-			if field.IsDeferred() {
-				deferredFieldSet.AddField(field)
-				fieldIndex := len(deferredFieldSet.Values) - 1
-				deferredFieldSet.Concurrently(fieldIndex, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, deferredFieldSet)
-				})
-
-				for _, deferrable := range field.Deferrables {
-					view, ok := deferLabelToView[deferrable.Label]
-					if !ok {
-						view = deferredFieldSet.NewView()
-						deferLabelToView[deferrable.Label] = view
-					}
-					view.AddIndices(fieldIndex)
-				}
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "storageUsed":
 			out.Values[i] = ec._Drive_storageUsed(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "storageQuota":
 			out.Values[i] = ec._Drive_storageQuota(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "createdAt":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Drive_createdAt(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
+			out.Values[i] = ec._Drive_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
 			}
-
-			if field.IsDeferred() {
-				deferredFieldSet.AddField(field)
-				fieldIndex := len(deferredFieldSet.Values) - 1
-				deferredFieldSet.Concurrently(fieldIndex, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, deferredFieldSet)
-				})
-
-				for _, deferrable := range field.Deferrables {
-					view, ok := deferLabelToView[deferrable.Label]
-					if !ok {
-						view = deferredFieldSet.NewView()
-						deferLabelToView[deferrable.Label] = view
-					}
-					view.AddIndices(fieldIndex)
-				}
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3846,14 +3775,14 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) unmarshalNDateTime2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalString(v)
+func (ec *executionContext) unmarshalNDateTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
+	res, err := graphql.UnmarshalTime(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNDateTime2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
+func (ec *executionContext) marshalNDateTime2timeᚐTime(ctx context.Context, sel ast.SelectionSet, v time.Time) graphql.Marshaler {
 	_ = sel
-	res := graphql.MarshalString(v)
+	res := graphql.MarshalTime(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -3924,14 +3853,21 @@ func (ec *executionContext) marshalNDriveItemType2platriumᚋinternalᚋgraphql�
 	return v
 }
 
-func (ec *executionContext) unmarshalNDriveType2platriumᚋinternalᚋgraphqlᚐDriveType(ctx context.Context, v any) (DriveType, error) {
-	var res DriveType
-	err := res.UnmarshalGQL(v)
+func (ec *executionContext) unmarshalNDriveType2platriumᚋinternalᚋfsopsᚐDriveType(ctx context.Context, v any) (fsops.DriveType, error) {
+	tmp, err := graphql.UnmarshalString(v)
+	res := fsops.DriveType(tmp)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNDriveType2platriumᚋinternalᚋgraphqlᚐDriveType(ctx context.Context, sel ast.SelectionSet, v DriveType) graphql.Marshaler {
-	return v
+func (ec *executionContext) marshalNDriveType2platriumᚋinternalᚋfsopsᚐDriveType(ctx context.Context, sel ast.SelectionSet, v fsops.DriveType) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalString(string(v))
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
 }
 
 func (ec *executionContext) marshalNFileVersion2ᚖplatriumᚋinternalᚋgraphqlᚐFileVersion(ctx context.Context, sel ast.SelectionSet, v *FileVersion) graphql.Marshaler {
@@ -3980,22 +3916,6 @@ func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, 
 }
 
 func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
-	_ = sel
-	res := graphql.MarshalInt(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
-}
-
-func (ec *executionContext) unmarshalNInt642int(ctx context.Context, v any) (int, error) {
-	res, err := graphql.UnmarshalInt(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNInt642int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
 	_ = sel
 	res := graphql.MarshalInt(v)
 	if res == graphql.Null {

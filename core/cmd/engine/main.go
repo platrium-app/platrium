@@ -81,8 +81,8 @@ func main() {
 	// Setup Session Manager & Dev Fallback
 	sessionManager := session.NewManager()
 	devFallback := &session.PlatriumSession{
-		UserID:   "cb89e30c-ad7c-413a-9e7a-981ee8a460e4",
-		TenantID: "d6c794a2-004a-4f23-b1ce-c2c7dda82d2c",
+		UserID:   "99dff953-bdf8-40b9-859d-897c363455da",
+		TenantID: "c6038c5b-6a37-4c52-ad3c-1fa3c631fe1a",
 		Email:    "admin@example.com",
 	}
 
