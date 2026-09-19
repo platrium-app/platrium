@@ -10,11 +10,6 @@ import {
     ChevronUp,
     ChevronDown,
     MoreVertical,
-    Download,
-    Share2,
-    Pencil,
-    Trash2,
-    Info,
 } from "lucide-react"
 import type { FolderViewProps, SortField } from "./FolderViewTypes"
 import { ItemContextMenu } from "./ItemContextMenu"
@@ -93,7 +88,7 @@ export function FolderContentListView({
     }
 
     return (
-        <div className="flex max-h-full w-full flex-col overflow-hidden shrink-0">
+        <div className="flex min-h-full w-full flex-col">
             {/* Table Header */}
             <div className="grid grid-cols-12 gap-2 border-b px-4 py-3 text-sm font-medium text-muted-foreground select-none">
                 <div
@@ -128,7 +123,7 @@ export function FolderContentListView({
             </div>
 
             {/* Virtualized Rows Container */}
-            <div ref={parentRef} className="flex-1 overflow-auto">
+            <div ref={parentRef} className="w-full">
                 <div
                     style={{
                         height: `${rowVirtualizer.getTotalSize()}px`,
@@ -143,6 +138,7 @@ export function FolderContentListView({
                         return (
                             <ItemContextMenu key={item.id} item={item}>
                                 <div
+                                    data-selection-id={item.id}
                                     data-index={virtualRow.index}
                                     ref={rowVirtualizer.measureElement}
                                     style={{

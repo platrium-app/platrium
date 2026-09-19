@@ -3,16 +3,17 @@ import {
   FolderPlus,
   FileUp,
   FolderUp,
-  List,
-  LayoutGrid,
   ArrowUpDown,
   X,
   Download,
   Share2,
   Pencil,
   Trash2,
+  LayoutGridIcon,
+  ListIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,7 +73,7 @@ export function FolderHeaderToolbar({
           )}
         >
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="default" />}>
+            <DropdownMenuTrigger render={<Button variant="default" />}>
               <Plus className="size-4" />
               <span>New</span>
             </DropdownMenuTrigger>
@@ -176,8 +177,7 @@ export function FolderHeaderToolbar({
             render={
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               />
             }
           >
@@ -200,26 +200,26 @@ export function FolderHeaderToolbar({
         </DropdownMenu>
 
         {/* View Mode Switcher */}
-        <div className="flex items-center rounded-md border p-0.5 bg-muted/40">
+        <ButtonGroup>
           <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
+            variant="outline"
             size="icon"
-            className="h-7 w-7"
             onClick={() => onViewModeChange("list")}
             title="List view"
+            className={viewMode == "list" ? "bg-muted dark:bg-muted/40" : ""}
           >
-            <List className="size-3.5" />
+            <ListIcon />
           </Button>
           <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            variant="outline"
             size="icon"
-            className="h-7 w-7"
             onClick={() => onViewModeChange("grid")}
             title="Grid view"
+            className={viewMode == "grid" ? "bg-muted dark:bg-muted/40" : ""}
           >
-            <LayoutGrid className="size-3.5" />
+            <LayoutGridIcon />
           </Button>
-        </div>
+        </ButtonGroup>
       </div>
     </div>
   )

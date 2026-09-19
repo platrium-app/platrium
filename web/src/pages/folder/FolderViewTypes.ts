@@ -21,6 +21,7 @@ export type ViewMode = "list" | "grid"
 export interface FolderViewProps {
   items: DriveItemNode[]
   selectedIds: Set<string>
+  onSelectionChange: (selectedIds: Set<string>) => void
   onItemClick: (item: DriveItemNode, e: React.MouseEvent) => void
   onItemDoubleClick: (item: DriveItemNode) => void
   onItemContextMenu: (item: DriveItemNode, e: React.MouseEvent) => void

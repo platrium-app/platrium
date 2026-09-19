@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { FolderHeaderToolbar } from "./FolderHeaderToolbar"
 import { FolderContentListView } from "./FolderContentListView"
 import { FolderContentGridView } from "./FolderContentGridView"
+import { SelectionArea } from "@/components/custom/SelectionArea"
 import type { DriveItemNode, SortField, SortDirection, ViewMode } from "./FolderViewTypes"
 
 const GET_FOLDER_INFO = graphql(`
@@ -259,10 +260,7 @@ export default function FolderRootView() {
 
   return (
     <FolderContextMenu folderId={id!}>
-      <div
-        className="flex h-full w-full flex-1 flex-col overflow-hidden"
-        onClick={() => setSelectedIds(new Set())}
-      >
+      <div className="flex h-full w-full flex-1 flex-col overflow-hidden">
         {/* Permanent Toolbar */}
         <FolderHeaderToolbar
           selectedCount={selectedIds.size}
@@ -275,41 +273,49 @@ export default function FolderRootView() {
           folderId={id!}
         />
 
-        {/* Content View / Empty State */}
-        {items.length === 0 ? (
-          <PlaceholderView
-            icon={FolderOpen}
-            title="This folder is empty"
-            description={
-              <>
-                Right-click anywhere to create a new folder, or upload files directly into{" "}
-                <span className="font-semibold text-foreground">{item.name}</span>.
-              </>
-            }
-          />
-        ) : viewMode === "list" ? (
-          <FolderContentListView
-            items={items}
-            selectedIds={selectedIds}
-            onItemClick={handleItemClick}
-            onItemDoubleClick={handleItemDoubleClick}
-            onItemContextMenu={handleItemContextMenu}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            onSortChange={handleSortChange}
-          />
-        ) : (
-          <FolderContentGridView
-            items={items}
-            selectedIds={selectedIds}
-            onItemClick={handleItemClick}
-            onItemDoubleClick={handleItemDoubleClick}
-            onItemContextMenu={handleItemContextMenu}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            onSortChange={handleSortChange}
-          />
-        )}
+        {/* Content View / Empty State wrapped with SelectionArea spanning the entire canvas below header */}
+        <SelectionArea
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          className="flex-1 w-full min-h-0 overflow-auto"
+        >
+          {items.length === 0 ? (
+            <PlaceholderView
+              icon={FolderOpen}
+              title="This folder is empty"
+              description={
+                <>
+                  Right-click anywhere to create a new folder, or upload files directly into{" "}
+                  <span className="font-semibold text-foreground">{item.name}</span>.
+                </>
+              }
+            />
+          ) : viewMode === "list" ? (
+            <FolderContentListView
+              items={items}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              onItemClick={handleItemClick}
+              onItemDoubleClick={handleItemDoubleClick}
+              onItemContextMenu={handleItemContextMenu}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              onSortChange={handleSortChange}
+            />
+          ) : (
+            <FolderContentGridView
+              items={items}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+              onItemClick={handleItemClick}
+              onItemDoubleClick={handleItemDoubleClick}
+              onItemContextMenu={handleItemContextMenu}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              onSortChange={handleSortChange}
+            />
+          )}
+        </SelectionArea>
       </div>
     </FolderContextMenu>
   )

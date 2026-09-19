@@ -60,7 +60,7 @@ export function FolderContentGridView({
   onItemContextMenu,
 }: FolderViewProps) {
   return (
-    <div className="w-full max-h-full overflow-auto py-2">
+    <div className="w-full min-h-full py-2">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
         {items.map((item) => {
           const isSelected = selectedIds.has(item.id)
@@ -68,6 +68,7 @@ export function FolderContentGridView({
           return (
             <ItemContextMenu key={item.id} item={item}>
               <div
+                data-selection-id={item.id}
                 className={cn(
                   "group relative flex flex-col items-center justify-between rounded-xl border p-3 text-center transition-all cursor-pointer select-none",
                   isSelected
