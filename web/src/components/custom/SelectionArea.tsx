@@ -203,7 +203,7 @@ export function SelectionArea({
       {rectStyle && (
         <div
           style={rectStyle}
-          className="absolute z-50 pointer-events-none rounded-sm border border-primary/60 bg-primary/20 shadow-xs backdrop-blur-[1px] transition-none"
+          className="absolute z-50 pointer-events-none border bg-muted/40 transition-none"
         />
       )}
     </div>
