@@ -53,8 +53,8 @@ func main() {
 	attachedfsStore := storage.NewAttachedFSStore(kvStore)
 
 	// Setup Storage Manager
-	storageManager := storage.NewManager()
-	storageManager.StartChunkValidationWorker(context.Background(), chunkStore)
+	storageManager := storage.NewManager(chunkStore)
+	storageManager.StartChunkValidationWorker(context.Background())
 
 	storageManager.RegisterBackendType("attachedfs", storage.AttachedFSBackendFactory(attachedfsStore))
 	storageManager.StartBackend(context.Background(), "default", storage.BackendConfig{

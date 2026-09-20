@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/google/uuid"
@@ -94,9 +96,20 @@ func (l *AttachedFSBackend) GenerateChunkUploadURLs(ctx context.Context, chunks 
 	return urls, nil
 }
 
-// GenerateChunkDownloadURLs explicitly hits the brakes and throws an unimplemented error for now.
+// GenerateChunkDownloadURLs implements stateless time-bound URL generation for chunk hashes.
 func (l *AttachedFSBackend) GenerateChunkDownloadURLs(ctx context.Context, chunkHashes []string) (map[string]string, error) {
-	return nil, fmt.Errorf("direct chunk download URLs are unimplemented for the attached filesystem backend")
+	urls := make(map[string]string)
+
+	// Set expiration to 15 minutes from now
+	// TODO: Take an arg for expiry if default isn't the preferred one.
+	expires := time.Now().Add(15 * time.Minute).Unix()
+	expiresStr := strconv.FormatInt(expires, 10)
+
+	for _, hash := range chunkHashes {
+		sig := l.SignReadURL(hash, expiresStr)
+		urls[hash] = fmt.Sprintf("%s/api/attachedfs/%s/%s?expires=%s&sig=%s", l.apiBaseURL, l.backendId, hash, expiresStr, sig)
+	}
+	return urls, nil
 }
 
 // CommitLocalWrite safely streams the HTTP request body directly to disk, performing real-time cryptographic hash validation.
@@ -206,4 +219,25 @@ func (l *AttachedFSBackend) SignWriteURL(writeId string) string {
 func (l *AttachedFSBackend) VerifyWriteURL(writeId string, signature string) bool {
 	expected := l.SignWriteURL(writeId)
 	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
+// SignReadURL generates a stateless time-bound HMAC signature for a read request.
+func (l *AttachedFSBackend) SignReadURL(hash string, expiresStr string) string {
+	h := hmac.New(sha256.New, []byte(l.hmacSecret))
+	h.Write([]byte(l.backendId + ":" + hash + ":" + expiresStr))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// VerifyReadURL checks if the provided signature matches the chunk hash and expiry.
+func (l *AttachedFSBackend) VerifyReadURL(hash string, expiresStr string, signature string) bool {
+	expected := l.SignReadURL(hash, expiresStr)
+	return hmac.Equal([]byte(expected), []byte(signature))
+}
+
+// GetChunkReader opens a chunk and returns a stream that supports seeking.
+// The caller is responsible for closing the stream.
+func (l *AttachedFSBackend) GetChunkReader(hash string) (io.ReadSeekCloser, error) {
+	relPath := GetShardedPath(ObjectTypeChunk, hash)
+	chunkPath := filepath.Join(l.mountPath, relPath)
+	return os.Open(chunkPath)
 }

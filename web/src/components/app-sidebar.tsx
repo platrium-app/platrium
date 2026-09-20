@@ -137,7 +137,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   // Helper function for the generic tree (deferring sub-folder fetches for now)
-  const getChildren = React.useCallback((parentId: string) => {
+  const getChildren = React.useCallback((_parentId: string) => {
     return []
   }, [])
 

@@ -16,24 +16,36 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Initialize a new upload session
-	// (POST /files/uploadsession)
-	UploadSessionInitialize(w http.ResponseWriter, r *http.Request)
+	// Presign a batch of chunks for download
+	// (POST /files/downloadsession/chunks)
+	DownloadSessionChunks(w http.ResponseWriter, r *http.Request, params DownloadSessionChunksParams)
+	// Initialize a new download session
+	// (POST /files/downloadsession/init)
+	DownloadSessionInitialize(w http.ResponseWriter, r *http.Request)
 	// Presign a batch of chunks for upload
 	// (POST /files/uploadsession/chunks)
 	UploadSessionChunks(w http.ResponseWriter, r *http.Request, params UploadSessionChunksParams)
 	// Commit an upload session and finalize the file
 	// (POST /files/uploadsession/commit)
 	UploadSessionCommit(w http.ResponseWriter, r *http.Request, params UploadSessionCommitParams)
+	// Initialize a new upload session
+	// (POST /files/uploadsession/init)
+	UploadSessionInitialize(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// Initialize a new upload session
-// (POST /files/uploadsession)
-func (_ Unimplemented) UploadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+// Presign a batch of chunks for download
+// (POST /files/downloadsession/chunks)
+func (_ Unimplemented) DownloadSessionChunks(w http.ResponseWriter, r *http.Request, params DownloadSessionChunksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Initialize a new download session
+// (POST /files/downloadsession/init)
+func (_ Unimplemented) DownloadSessionInitialize(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -49,6 +61,12 @@ func (_ Unimplemented) UploadSessionCommit(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Initialize a new upload session
+// (POST /files/uploadsession/init)
+func (_ Unimplemented) UploadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler            ServerInterface
@@ -58,11 +76,56 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// UploadSessionInitialize operation middleware
-func (siw *ServerInterfaceWrapper) UploadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+// DownloadSessionChunks operation middleware
+func (siw *ServerInterfaceWrapper) DownloadSessionChunks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DownloadSessionChunksParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "x-platrium-downloadsession" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("x-platrium-downloadsession")]; found {
+		var XPlatriumDownloadsession string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "x-platrium-downloadsession", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "x-platrium-downloadsession", valueList[0], &XPlatriumDownloadsession, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "x-platrium-downloadsession", Err: err})
+			return
+		}
+
+		params.XPlatriumDownloadsession = XPlatriumDownloadsession
+
+	} else {
+		err := fmt.Errorf("Header parameter x-platrium-downloadsession is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "x-platrium-downloadsession", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UploadSessionInitialize(w, r)
+		siw.Handler.DownloadSessionChunks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadSessionInitialize operation middleware
+func (siw *ServerInterfaceWrapper) DownloadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadSessionInitialize(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -153,6 +216,20 @@ func (siw *ServerInterfaceWrapper) UploadSessionCommit(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UploadSessionCommit(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadSessionInitialize operation middleware
+func (siw *ServerInterfaceWrapper) UploadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadSessionInitialize(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -276,7 +353,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/files/uploadsession", wrapper.UploadSessionInitialize)
+		r.Post(options.BaseURL+"/files/downloadsession/chunks", wrapper.DownloadSessionChunks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/files/downloadsession/init", wrapper.DownloadSessionInitialize)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/files/uploadsession/chunks", wrapper.UploadSessionChunks)
@@ -284,35 +364,103 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/files/uploadsession/commit", wrapper.UploadSessionCommit)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/files/uploadsession/init", wrapper.UploadSessionInitialize)
+	})
 
 	return r
 }
 
-type UploadSessionInitializeRequestObject struct {
-	Body *UploadSessionInitializeJSONRequestBody
+type DownloadSessionChunksRequestObject struct {
+	Params DownloadSessionChunksParams
+	Body   *DownloadSessionChunksJSONRequestBody
 }
 
-type UploadSessionInitializeResponseObject interface {
-	VisitUploadSessionInitializeResponse(w http.ResponseWriter) error
+type DownloadSessionChunksResponseObject interface {
+	VisitDownloadSessionChunksResponse(w http.ResponseWriter) error
 }
 
-type UploadSessionInitialize201JSONResponse FilesUploadSessionInitResponse
+type DownloadSessionChunks200JSONResponse FilesDownloadSessionChunksResponse
 
-func (response UploadSessionInitialize201JSONResponse) VisitUploadSessionInitializeResponse(w http.ResponseWriter) error {
+func (response DownloadSessionChunks200JSONResponse) VisitDownloadSessionChunksResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
+	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
 }
 
-type UploadSessionInitialize500JSONResponse ErrorsEngineInternal
+type DownloadSessionChunks401JSONResponse ErrorsUnauthorized
 
-func (response UploadSessionInitialize500JSONResponse) VisitUploadSessionInitializeResponse(w http.ResponseWriter) error {
+func (response DownloadSessionChunks401JSONResponse) VisitDownloadSessionChunksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSessionChunks500JSONResponse ErrorsEngineInternal
+
+func (response DownloadSessionChunks500JSONResponse) VisitDownloadSessionChunksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSessionInitializeRequestObject struct {
+	Body *DownloadSessionInitializeJSONRequestBody
+}
+
+type DownloadSessionInitializeResponseObject interface {
+	VisitDownloadSessionInitializeResponse(w http.ResponseWriter) error
+}
+
+type DownloadSessionInitialize200JSONResponse FilesDownloadSessionInitResponse
+
+func (response DownloadSessionInitialize200JSONResponse) VisitDownloadSessionInitializeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSessionInitialize404JSONResponse ErrorsNotFound
+
+func (response DownloadSessionInitialize404JSONResponse) VisitDownloadSessionInitializeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSessionInitialize500JSONResponse ErrorsEngineInternal
+
+func (response DownloadSessionInitialize500JSONResponse) VisitDownloadSessionInitializeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -398,17 +546,59 @@ func (response UploadSessionCommit500JSONResponse) VisitUploadSessionCommitRespo
 	return err
 }
 
+type UploadSessionInitializeRequestObject struct {
+	Body *UploadSessionInitializeJSONRequestBody
+}
+
+type UploadSessionInitializeResponseObject interface {
+	VisitUploadSessionInitializeResponse(w http.ResponseWriter) error
+}
+
+type UploadSessionInitialize201JSONResponse FilesUploadSessionInitResponse
+
+func (response UploadSessionInitialize201JSONResponse) VisitUploadSessionInitializeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSessionInitialize500JSONResponse ErrorsEngineInternal
+
+func (response UploadSessionInitialize500JSONResponse) VisitUploadSessionInitializeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// Initialize a new upload session
-	// (POST /files/uploadsession)
-	UploadSessionInitialize(ctx context.Context, request UploadSessionInitializeRequestObject) (UploadSessionInitializeResponseObject, error)
+	// Presign a batch of chunks for download
+	// (POST /files/downloadsession/chunks)
+	DownloadSessionChunks(ctx context.Context, request DownloadSessionChunksRequestObject) (DownloadSessionChunksResponseObject, error)
+	// Initialize a new download session
+	// (POST /files/downloadsession/init)
+	DownloadSessionInitialize(ctx context.Context, request DownloadSessionInitializeRequestObject) (DownloadSessionInitializeResponseObject, error)
 	// Presign a batch of chunks for upload
 	// (POST /files/uploadsession/chunks)
 	UploadSessionChunks(ctx context.Context, request UploadSessionChunksRequestObject) (UploadSessionChunksResponseObject, error)
 	// Commit an upload session and finalize the file
 	// (POST /files/uploadsession/commit)
 	UploadSessionCommit(ctx context.Context, request UploadSessionCommitRequestObject) (UploadSessionCommitResponseObject, error)
+	// Initialize a new upload session
+	// (POST /files/uploadsession/init)
+	UploadSessionInitialize(ctx context.Context, request UploadSessionInitializeRequestObject) (UploadSessionInitializeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -440,11 +630,13 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// UploadSessionInitialize operation middleware
-func (sh *strictHandler) UploadSessionInitialize(w http.ResponseWriter, r *http.Request) {
-	var request UploadSessionInitializeRequestObject
+// DownloadSessionChunks operation middleware
+func (sh *strictHandler) DownloadSessionChunks(w http.ResponseWriter, r *http.Request, params DownloadSessionChunksParams) {
+	var request DownloadSessionChunksRequestObject
 
-	var body UploadSessionInitializeJSONRequestBody
+	request.Params = params
+
+	var body DownloadSessionChunksJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -452,18 +644,49 @@ func (sh *strictHandler) UploadSessionInitialize(w http.ResponseWriter, r *http.
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UploadSessionInitialize(ctx, request.(UploadSessionInitializeRequestObject))
+		return sh.ssi.DownloadSessionChunks(ctx, request.(DownloadSessionChunksRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UploadSessionInitialize")
+		handler = middleware(handler, "DownloadSessionChunks")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UploadSessionInitializeResponseObject); ok {
-		if err := validResponse.VisitUploadSessionInitializeResponse(w); err != nil {
+	} else if validResponse, ok := response.(DownloadSessionChunksResponseObject); ok {
+		if err := validResponse.VisitDownloadSessionChunksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DownloadSessionInitialize operation middleware
+func (sh *strictHandler) DownloadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+	var request DownloadSessionInitializeRequestObject
+
+	var body DownloadSessionInitializeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DownloadSessionInitialize(ctx, request.(DownloadSessionInitializeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DownloadSessionInitialize")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DownloadSessionInitializeResponseObject); ok {
+		if err := validResponse.VisitDownloadSessionInitializeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -530,6 +753,37 @@ func (sh *strictHandler) UploadSessionCommit(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UploadSessionCommitResponseObject); ok {
 		if err := validResponse.VisitUploadSessionCommitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadSessionInitialize operation middleware
+func (sh *strictHandler) UploadSessionInitialize(w http.ResponseWriter, r *http.Request) {
+	var request UploadSessionInitializeRequestObject
+
+	var body UploadSessionInitializeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadSessionInitialize(ctx, request.(UploadSessionInitializeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadSessionInitialize")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadSessionInitializeResponseObject); ok {
+		if err := validResponse.VisitUploadSessionInitializeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

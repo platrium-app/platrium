@@ -8,8 +8,60 @@ type ErrorsEngineInternal struct {
 	Debuginfo string `json:"debuginfo"`
 }
 
+// ErrorsNotFound defines model for Errors.NotFound.
+type ErrorsNotFound struct {
+	Message *string `json:"message,omitempty"`
+}
+
+// ErrorsUnauthorized defines model for Errors.Unauthorized.
+type ErrorsUnauthorized struct {
+	Message *string `json:"message,omitempty"`
+}
+
 // FilesChunkHash Strict SHA-256 Hex Hash validation pattern (64 characters, lowercase hex)
 type FilesChunkHash = string
+
+// FilesDownloadSessionChunksRequest defines model for Files.DownloadSessionChunksRequest.
+type FilesDownloadSessionChunksRequest struct {
+	// Indices Batch of chunk indices to request presigned download URLs for. Capped at 512 items.
+	Indices []int32 `json:"indices"`
+}
+
+// FilesDownloadSessionChunksResponse defines model for Files.DownloadSessionChunksResponse.
+type FilesDownloadSessionChunksResponse struct {
+	// Chunks A key-value map mapping each requested index (as string) to its presigned chunk download details.
+	Chunks map[string]FilesDownloadSessionPresignedChunk `json:"chunks"`
+}
+
+// FilesDownloadSessionInitRequest defines model for Files.DownloadSessionInitRequest.
+type FilesDownloadSessionInitRequest struct {
+	// FileId ID of the file to download
+	FileId string `json:"file_id"`
+
+	// Version Optional file version to target. If not provided, the latest version is used.
+	Version *string `json:"version,omitempty"`
+}
+
+// FilesDownloadSessionInitResponse defines model for Files.DownloadSessionInitResponse.
+type FilesDownloadSessionInitResponse struct {
+	// FileName Name of the file
+	FileName string `json:"file_name"`
+
+	// FileSize Total size of the file in bytes
+	FileSize int64 `json:"file_size"`
+
+	// MimeType MIME Content-Type of the file
+	MimeType string `json:"mime_type"`
+
+	// SessionId Cryptographically sealed JWT token acting as the download passport
+	SessionId string `json:"session_id"`
+}
+
+// FilesDownloadSessionPresignedChunk defines model for Files.DownloadSessionPresignedChunk.
+type FilesDownloadSessionPresignedChunk struct {
+	// DownloadUrl The client-direct Presigned download URL for the chunk.
+	DownloadUrl string `json:"download_url"`
+}
 
 // FilesUploadSessionChunksRequest defines model for Files.UploadSessionChunksRequest.
 type FilesUploadSessionChunksRequest struct {
@@ -77,6 +129,11 @@ type FilesUploadSessionPresignedChunk struct {
 	UploadUrl *string `json:"upload_url"`
 }
 
+// DownloadSessionChunksParams defines parameters for DownloadSessionChunks.
+type DownloadSessionChunksParams struct {
+	XPlatriumDownloadsession string `json:"x-platrium-downloadsession"`
+}
+
 // UploadSessionChunksParams defines parameters for UploadSessionChunks.
 type UploadSessionChunksParams struct {
 	XPlatriumUploadsession string `json:"x-platrium-uploadsession"`
@@ -87,11 +144,17 @@ type UploadSessionCommitParams struct {
 	XPlatriumUploadsession string `json:"x-platrium-uploadsession"`
 }
 
-// UploadSessionInitializeJSONRequestBody defines body for UploadSessionInitialize for application/json ContentType.
-type UploadSessionInitializeJSONRequestBody = FilesUploadSessionInitRequest
+// DownloadSessionChunksJSONRequestBody defines body for DownloadSessionChunks for application/json ContentType.
+type DownloadSessionChunksJSONRequestBody = FilesDownloadSessionChunksRequest
+
+// DownloadSessionInitializeJSONRequestBody defines body for DownloadSessionInitialize for application/json ContentType.
+type DownloadSessionInitializeJSONRequestBody = FilesDownloadSessionInitRequest
 
 // UploadSessionChunksJSONRequestBody defines body for UploadSessionChunks for application/json ContentType.
 type UploadSessionChunksJSONRequestBody = FilesUploadSessionChunksRequest
 
 // UploadSessionCommitJSONRequestBody defines body for UploadSessionCommit for application/json ContentType.
 type UploadSessionCommitJSONRequestBody = FilesUploadSessionCommitRequest
+
+// UploadSessionInitializeJSONRequestBody defines body for UploadSessionInitialize for application/json ContentType.
+type UploadSessionInitializeJSONRequestBody = FilesUploadSessionInitRequest

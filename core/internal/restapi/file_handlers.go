@@ -25,6 +25,13 @@ type UploadSessionPassportClaims struct {
 	jwt.RegisteredClaims
 }
 
+type DownloadSessionPassportClaims struct {
+	FileID       string   `json:"file_id"`
+	Version      string   `json:"version,omitempty"`
+	InlineChunks []string `json:"inline_chunks"`
+	jwt.RegisteredClaims
+}
+
 // GenerateUploadSessionPassport issues a cryptographically signed JWT passport for the upload session.
 func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, filename string, fileSize int64, mimeType string, tenantID string) (string, error) {
 	claims := UploadSessionPassportClaims{
@@ -48,18 +55,52 @@ func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, fil
 func (api *RestAPI) VerifyUploadSessionPassport(sessionToken string) (*UploadSessionPassportClaims, error) {
 	token, err := jwt.ParseWithClaims(sessionToken, &UploadSessionPassportClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method")
 		}
 		return []byte(api.HMACSecret), nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("invalid or expired session token: %w", err)
+		return nil, err
+	}
+	claims, ok := token.Claims.(*UploadSessionPassportClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+	return claims, nil
+}
+
+// GenerateDownloadSessionPassport issues a cryptographically signed JWT passport for the download session.
+func (api *RestAPI) GenerateDownloadSessionPassport(fileID string, version string, inlineChunks []string) (string, error) {
+	claims := DownloadSessionPassportClaims{
+		FileID:       fileID,
+		Version:      version,
+		InlineChunks: inlineChunks,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 
-	if claims, ok := token.Claims.(*UploadSessionPassportClaims); ok && token.Valid {
-		return claims, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(api.HMACSecret))
+}
+
+// VerifyDownloadSessionPassport parses and validates an incoming JWT session passport token.
+func (api *RestAPI) VerifyDownloadSessionPassport(sessionToken string) (*DownloadSessionPassportClaims, error) {
+	token, err := jwt.ParseWithClaims(sessionToken, &DownloadSessionPassportClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(api.HMACSecret), nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("invalid session passport claims")
+	claims, ok := token.Claims.(*DownloadSessionPassportClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+	return claims, nil
 }
 
 // GenerateHMACReceipt calculates a symmetric cryptographic authorization signature for a chunk hash.
@@ -216,5 +257,109 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 
 	return UploadSessionCommit200JSONResponse{
 		FileId: fileId,
+	}, nil
+}
+
+// DownloadSessionInitialize handles POST /files/downloadsession (Stage 1: Passport Issuance).
+func (api *RestAPI) DownloadSessionInitialize(ctx context.Context, request DownloadSessionInitializeRequestObject) (DownloadSessionInitializeResponseObject, error) {
+	sessionInfo, ok := session.FromContext(ctx)
+	if !ok {
+		return DownloadSessionInitialize404JSONResponse{}, nil // Standard 404/Unauthorized placeholder
+	}
+
+	if request.Body == nil {
+		return DownloadSessionInitialize500JSONResponse{Debuginfo: "missing request body"}, nil
+	}
+	fileID := request.Body.FileId
+
+	// 1. Fetch File Metadata from FSOps to verify permissions and get file info
+	fileNode, err := api.FSOps.GetFile(ctx, sessionInfo.TenantID, fileID)
+	if err != nil {
+		// Log error internally, but return generic 404 to client
+		return DownloadSessionInitialize404JSONResponse{}, nil
+	}
+
+	// // Default to version "" if not provided
+	// // TODO: In the future, fsops.File will consist of current and existing versions where a version is a UUID.
+	// var version string = ""
+	// if request.Body.Version != nil {
+	// 	version = *request.Body.Version
+	// }
+	var version string = "" // Temporarily hardcoded until versioning is fully implemented
+
+	// 2. Generate the Download Passport
+	token, err := api.GenerateDownloadSessionPassport(fileID, version, fileNode.InlineChunks)
+	if err != nil {
+		return DownloadSessionInitialize500JSONResponse{Debuginfo: "failed to sign session passport"}, nil
+	}
+
+	return DownloadSessionInitialize200JSONResponse{
+		SessionId: token,
+		FileName:  fileNode.Name,
+		FileSize:  fileNode.Size,
+		MimeType:  fileNode.MimeType,
+	}, nil
+}
+
+// DownloadSessionChunks handles POST /files/downloadsession/chunks (Stage 2: Batch Presigning).
+func (api *RestAPI) DownloadSessionChunks(ctx context.Context, request DownloadSessionChunksRequestObject) (DownloadSessionChunksResponseObject, error) {
+	// 1. Verify Passport
+	claims, err := api.VerifyDownloadSessionPassport(request.Params.XPlatriumDownloadsession)
+	if err != nil {
+		return DownloadSessionChunks500JSONResponse{Debuginfo: "invalid or expired download session"}, nil
+	}
+
+	// 2. Extract requested indices
+	if request.Body == nil || len(request.Body.Indices) == 0 {
+		return DownloadSessionChunks500JSONResponse{Debuginfo: "indices array cannot be empty"}, nil
+	}
+
+	indices := request.Body.Indices
+	fileID := claims.FileID
+	version := claims.Version
+	inlineChunks := claims.InlineChunks
+
+	// 3. Map to hold our resolved hashes (index to SHA256 Chunk Hash)
+	resolvedHashes := make(map[int32]string)
+
+	if inlineChunks != nil {
+		for _, idx := range indices {
+			if int(idx) >= 0 && int(idx) < len(inlineChunks) {
+				resolvedHashes[idx] = inlineChunks[idx]
+			}
+		}
+	} else {
+		// TODO: File > 4 chunks -> Read manifest from ManifestRepo
+		// manifestRepo.ResolveIndices(fileID, version, indices)
+	}
+
+	// 4. Extract the hashes for the StorageManager
+	var chunkHashes []string
+	for _, hash := range resolvedHashes {
+		chunkHashes = append(chunkHashes, hash)
+	}
+
+	// 5. Fetch presigned URLs from StorageManager
+	downloadUrls, err := api.StorageManager.GenerateChunkDownloadURLs(ctx, chunkHashes)
+	if err != nil {
+		return DownloadSessionChunks500JSONResponse{Debuginfo: "failed to generate chunk download URLs"}, nil
+	}
+
+	// 6. Map URLs back to the requested indices
+	responseChunks := make(map[string]FilesDownloadSessionPresignedChunk)
+	for idx, hash := range resolvedHashes {
+		if url, ok := downloadUrls[hash]; ok {
+			responseChunks[fmt.Sprintf("%d", idx)] = FilesDownloadSessionPresignedChunk{
+				DownloadUrl: url,
+			}
+		}
+	}
+
+	// TODO: Temporary ignore to pass compiler checks until manifest logic is added
+	_ = fileID
+	_ = version
+
+	return DownloadSessionChunks200JSONResponse{
+		Chunks: responseChunks,
 	}, nil
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"platrium/internal/infra/graph"
-	"platrium/internal/infra/kvstore"
 )
 
 // FSOps encapsulates the domain logic for Platrium file system operations.
@@ -20,15 +19,14 @@ type FSOps struct {
 
 // File represents a file node in the graph database.
 type File struct {
-	ID           string   `json:"id"`
-	TenantID     string   `json:"tenant_id"`
-	Name         string   `json:"name"`
-	Size         int64    `json:"size"`
+	ID           string    `json:"id"`
+	TenantID     string    `json:"tenant_id"`
+	Name         string    `json:"name"`
+	Size         int64     `json:"size"`
 	MimeType     string    `json:"mime_type"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
-	ManifestPath string   `json:"manifest_path,omitempty"`
-	InlineChunks []string `json:"inline_chunks,omitempty"`
+	InlineChunks []string  `json:"inline_chunks,omitempty"`
 }
 
 // CreateFileParams encapsulates the input fields required to create a new File node.
@@ -48,38 +46,38 @@ func NewFSOps(g graph.Graph, m *ManifestRepo) *FSOps {
 // processHashes decodes hex strings and executes the Hybrid Manifest strategy.
 // If <= 4 chunks, they are returned for inline Graph caching.
 // If > 4 chunks, they are paged out to the KVStore.
-func (f *FSOps) processHashes(ctx context.Context, fileId string, version int, hexHashes []string) (string, []string, error) {
+func (f *FSOps) processHashes(ctx context.Context, fileId string, version string, hexHashes []string) ([]string, error) {
 	var binaryHashes [][]byte
 	for _, hexHash := range hexHashes {
 		bin, err := hex.DecodeString(hexHash)
 		if err != nil {
-			return "", nil, fmt.Errorf("invalid hex hash %s: %v", hexHash, err)
+			return nil, fmt.Errorf("invalid hex hash %s: %v", hexHash, err)
 		}
 		binaryHashes = append(binaryHashes, bin)
 	}
 
-	manifestPath := ""
 	var inlineChunks []string
 
-	if len(hexHashes) <= 4 {
+	if len(hexHashes) == 0 {
+		inlineChunks = []string{} // Explicitly non-nil empty array for empty files
+	} else if len(hexHashes) <= 4 {
 		inlineChunks = hexHashes
 	} else {
-		manifestPath = fmt.Sprintf("%s:%s:v%d", kvstore.NSManifest, fileId, version)
 		if err := f.manifestRepo.SaveManifest(ctx, fileId, version, binaryHashes); err != nil {
-			return "", nil, fmt.Errorf("failed to save manifest: %v", err)
+			return nil, fmt.Errorf("failed to save manifest: %v", err)
 		}
 	}
 
-	return manifestPath, inlineChunks, nil
+	return inlineChunks, nil
 }
 
 // CreateFile assigns a file into the resource graph, strictly verifying the parent
 // container exists and isn't a file, all within a single Neo4j transaction.
 func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string, error) {
 	fileId := uuid.New().String()
-	version := 1 // Initial creation is always v1
+	version := "1" // TODO: Change to NanoID or smth else, Initial creation is always v1
 
-	manifestPath, inlineChunks, err := f.processHashes(ctx, fileId, version, params.HexHashes)
+	inlineChunks, err := f.processHashes(ctx, fileId, version, params.HexHashes)
 	if err != nil {
 		return "", err
 	}
@@ -96,7 +94,6 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 			file.mime_type = $mime_type,
 			file.created_at = datetime(),
 			file.updated_at = datetime(),
-			file.manifest_path = $manifest_path,
 			file.inline_chunks = $inline_chunks
 		
 		MERGE (file)-[:CHILD_OF]->(parent)
@@ -110,7 +107,6 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 		"name":          params.Name,
 		"size":          params.Size,
 		"mime_type":     params.MimeType,
-		"manifest_path": manifestPath,
 		"inline_chunks": inlineChunks,
 	}
 
@@ -151,7 +147,6 @@ func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, er
 			file.mime_type AS mime_type,
 			file.created_at AS created_at,
 			file.updated_at AS updated_at,
-			file.manifest_path AS manifest_path, 
 			file.inline_chunks AS inline_chunks
 	`
 	params := map[string]interface{}{

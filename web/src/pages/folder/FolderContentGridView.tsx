@@ -1,4 +1,3 @@
-import * as React from "react"
 import {
   Folder,
   FileText,
@@ -7,11 +6,6 @@ import {
   FileArchive,
   File,
   MoreVertical,
-  Download,
-  Share2,
-  Pencil,
-  Trash2,
-  Info,
 } from "lucide-react"
 import type { FolderViewProps } from "./FolderViewTypes"
 import { ItemContextMenu } from "./ItemContextMenu"

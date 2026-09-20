@@ -5,19 +5,30 @@ info:
 tags:
   - name: Files
 paths:
-  /files/uploadsession:
+  /files/downloadsession/chunks:
     post:
-      operationId: UploadSession_initialize
-      summary: Initialize a new upload session
-      description: Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
-      parameters: []
+      operationId: DownloadSession_chunks
+      summary: Presign a batch of chunks for download
+      description: Generates time-bound client-direct download URLs for specific file chunk indices using a download session token.
+      parameters:
+        - name: x-platrium-downloadsession
+          in: header
+          required: true
+          schema:
+            type: string
       responses:
-        '201':
-          description: The request has succeeded and a new resource has been created as a result.
+        '200':
+          description: The request has succeeded.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Files.UploadSessionInitResponse'
+                $ref: '#/components/schemas/Files.DownloadSessionChunksResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
         '500':
           description: Server error
           content:
@@ -31,7 +42,40 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Files.UploadSessionInitRequest'
+              $ref: '#/components/schemas/Files.DownloadSessionChunksRequest'
+  /files/downloadsession/init:
+    post:
+      operationId: DownloadSession_initialize
+      summary: Initialize a new download session
+      description: Initialize a file download session. Verifies file ACLs and returns a sealed download session token and metadata.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.DownloadSessionInitResponse'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.NotFound'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.DownloadSessionInitRequest'
   /files/uploadsession/chunks:
     post:
       operationId: UploadSession_chunks
@@ -96,6 +140,33 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Files.UploadSessionCommitRequest'
+  /files/uploadsession/init:
+    post:
+      operationId: UploadSession_initialize
+      summary: Initialize a new upload session
+      description: Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.UploadSessionInitResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.UploadSessionInitRequest'
 components:
   schemas:
     Errors.EngineInternal:
@@ -114,10 +185,83 @@ components:
           type: array
           items:
             type: string
+    Errors.NotFound:
+      type: object
+      properties:
+        message:
+          type: string
+    Errors.Unauthorized:
+      type: object
+      properties:
+        message:
+          type: string
     Files.ChunkHash:
       type: string
       pattern: ^[a-f0-9]{64}$
       description: Strict SHA-256 Hex Hash validation pattern (64 characters, lowercase hex)
+    Files.DownloadSessionChunksRequest:
+      type: object
+      required:
+        - indices
+      properties:
+        indices:
+          type: array
+          items:
+            type: integer
+            format: int32
+          minItems: 1
+          maxItems: 512
+          description: Batch of chunk indices to request presigned download URLs for. Capped at 512 items.
+    Files.DownloadSessionChunksResponse:
+      type: object
+      required:
+        - chunks
+      properties:
+        chunks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Files.DownloadSessionPresignedChunk'
+          description: A key-value map mapping each requested index (as string) to its presigned chunk download details.
+    Files.DownloadSessionInitRequest:
+      type: object
+      required:
+        - file_id
+      properties:
+        file_id:
+          type: string
+          description: ID of the file to download
+        version:
+          type: string
+          description: Optional file version to target. If not provided, the latest version is used.
+    Files.DownloadSessionInitResponse:
+      type: object
+      required:
+        - session_id
+        - file_name
+        - file_size
+        - mime_type
+      properties:
+        session_id:
+          type: string
+          description: Cryptographically sealed JWT token acting as the download passport
+        file_name:
+          type: string
+          description: Name of the file
+        file_size:
+          type: integer
+          format: int64
+          description: Total size of the file in bytes
+        mime_type:
+          type: string
+          description: MIME Content-Type of the file
+    Files.DownloadSessionPresignedChunk:
+      type: object
+      required:
+        - download_url
+      properties:
+        download_url:
+          type: string
+          description: The client-direct Presigned download URL for the chunk.
     Files.UploadSessionChunksRequest:
       type: object
       required:

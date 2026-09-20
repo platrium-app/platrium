@@ -22,8 +22,8 @@ func NewManifestRepo(store kvstore.KVStore) *ManifestRepo {
 }
 
 // SaveManifest chunks the binary hashes into pages of 32KB and writes them.
-func (r *ManifestRepo) SaveManifest(ctx context.Context, fileId string, version int, hashes [][]byte) error {
-	prefix := fmt.Sprintf("%s:v%d", fileId, version)
+func (r *ManifestRepo) SaveManifest(ctx context.Context, fileId string, version string, hashes [][]byte) error {
+	prefix := fmt.Sprintf("%s:v%s", fileId, version)
 
 	return r.store.WriteTx(ctx, func(tx kvstore.Tx) error {
 		total := len(hashes)

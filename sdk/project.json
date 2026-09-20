@@ -101,13 +101,17 @@
         "build:wasm": {
             "cache": true,
             "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_restapi_bindings"
+            ],
             "options": {
                 "command": "wasm-pack build --target web --out-dir _ffi/wasm --out-name platrium_sdk",
                 "cwd": "sdk"
             },
             "inputs": [
                 "{projectRoot}/src/**/*.rs",
-                "{projectRoot}/Cargo.toml"
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/_generated/**/*.rs"
             ],
             "outputs": [
                 "{projectRoot}/_ffi/wasm"
