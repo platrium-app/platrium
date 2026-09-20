@@ -1,6 +1,6 @@
 {
     "root": true,
-    "title": "SDK and Developer Docs",
+    "title": "SDK Docs",
     "icon": "PackageOpen",
     "description": "Interact with Platrium Storage using our SDK"
 }

@@ -1,7 +1,8 @@
 {
     "pages": [
-        "(developers)",
+        "(contributors)",
+        "api/graphql",
         "sdk",
-        "api"
+        "api/rest"
     ]
 }

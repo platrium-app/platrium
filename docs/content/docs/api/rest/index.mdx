@@ -1,3 +1,18 @@
 ---
 title: "REST API"
+description: Internal high-performance endpoints for binary transfers and session management.
 ---
+
+:::warning
+**Internal API:**
+These endpoints are internal by design and expect precise cryptographic inputs (like chunk hashes and signatures). Rather than managing this complexity manually, the **Platrium SDK** sits between your custom application and these REST endpoints to handle the heavy lifting for you automatically. 
+For all custom applications, developers must use the [Platrium SDK](/docs/sdk) or the [GraphQL API](/docs/api/graphql).
+:::
+
+### Why REST APIs?
+Platrium's REST APIs are the raw, low-level engine powering the platform's core transfer capabilities. 
+
+While the GraphQL layer handles user data and structure, the REST APIs are built specifically for raw performance and complex protocol handshakes. They handle operations such as:
+- **Authentication:** Processing login tokens and session cookies.
+- **Upload Sessions:** Initializing passports, deduplicating chunks, generating HMAC receipts, and verifying zero-read commits.
+- **Download Sessions:** Mapping geometry hashes, interacting with the `StorageManager`, and generating presigned URLs.

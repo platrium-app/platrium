@@ -3,6 +3,7 @@
 @import 'fumadocs-ui/css/preset.css';
 @import 'fumadocs-twoslash/twoslash.css';
 @import 'fumadocs-openapi/css/preset.css';
+@import '@fumadocs/graphql/css/preset.css';
 
 @theme {
     --color-fd-primary: #ed1a38;
