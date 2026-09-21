@@ -89,29 +89,19 @@ impl XPlatFile {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn write_exact_at(&self, offset: u64, bytes: &[u8]) -> Result<(), String> {
         match self {
-            #[cfg(not(target_arch = "wasm32"))]
             XPlatFile::Native(file) => {
                 use std::os::unix::fs::FileExt;
                 file.write_all_at(bytes, offset).map_err(|e| e.to_string())
             }
-            #[cfg(target_arch = "wasm32")]
-            XPlatFile::Wasm(_) => Err(
-                "WASM streams are strictly sequential. Use write_sequentially() instead."
-                    .to_string(),
-            ),
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
     pub async fn write_sequentially(&self, bytes: &[u8]) -> Result<(), String> {
         match self {
-            #[cfg(not(target_arch = "wasm32"))]
-            XPlatFile::Native(_) => Err(
-                "Native prefers write_exact_at() for parallel random-access writes.".to_string(),
-            ),
-
-            #[cfg(target_arch = "wasm32")]
             XPlatFile::Wasm(browser_file) => match browser_file {
                 BrowserFile::WebFile(_) => {
                     Err("Cannot write to a read-only WebFile. Use a Stream.".to_string())
