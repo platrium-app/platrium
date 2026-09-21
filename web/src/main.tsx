@@ -9,6 +9,12 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import initWasm from "platrium-sdk"
 import { PlatriumSdkProvider } from "@/contexts/PlatriumSdkContext"
 
+import { registerSW } from 'virtual:pwa-register'
+
+if ('serviceWorker' in navigator) {
+  registerSW({ immediate: true })
+}
+
 initWasm().then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

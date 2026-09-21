@@ -5,7 +5,7 @@ export interface PlaceholderViewProps {
   icon?: ComponentType<SVGProps<SVGSVGElement>>
   title: string
   description?: ReactNode
-  variant?: "default" | "error"
+  variant?: "default" | "error" | "ghost" | "warning"
   action?: ReactNode
   className?: string
 }
@@ -26,6 +26,20 @@ export function PlaceholderView({
     return description
   }
 
+  const getIconVariantClass = (v: string) => {
+    switch (v) {
+      case "error":
+        return "bg-destructive/10 text-destructive"
+      case "warning":
+        return "bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 dark:text-amber-400"
+      case "ghost":
+        return "text-muted-foreground"
+      case "default":
+      default:
+        return "bg-muted/50 text-muted-foreground"
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -37,9 +51,7 @@ export function PlaceholderView({
         <div
           className={cn(
             "mb-4 flex size-20 items-center justify-center rounded-full",
-            variant === "error"
-              ? "bg-destructive/10 text-destructive"
-              : "bg-muted/50 text-muted-foreground"
+            getIconVariantClass(variant)
           )}
         >
           <Icon className="size-10" strokeWidth={1.5} />
