@@ -14,3 +14,10 @@ impl std::fmt::Display for PlatriumError {
 }
 
 impl std::error::Error for PlatriumError {}
+
+#[cfg(target_arch = "wasm32")]
+impl From<PlatriumError> for wasm_bindgen::JsValue {
+    fn from(err: PlatriumError) -> Self {
+        wasm_bindgen::JsValue::from_str(&err.to_string())
+    }
+}

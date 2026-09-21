@@ -1,17 +1,11 @@
-use crate::net::manager::NetworkTransferManager;
-use crate::xplat::file::XPlatFile;
-use futures::stream::{FuturesUnordered, StreamExt};
-use platrium_restapi::apis::configuration::Configuration;
-use platrium_restapi::apis::files_api;
-use platrium_restapi::models;
 use std::sync::Arc;
 
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    not(target_os = "android"),
-    not(target_os = "ios")
-))]
-use std::fs::File;
+use crate::xplat::file::XPlatFile;
+use futures::stream::{FuturesUnordered, StreamExt};
+use platrium_restapi::apis::files_api;
+use platrium_restapi::models;
+
+use super::Api;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 #[derive(uniffi::Object)]
@@ -20,15 +14,12 @@ pub struct UploadSource {
     pub(crate) xplat: XPlatFile,
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[uniffi::export]
+#[cfg(not(target_arch = "wasm32"))]
 impl UploadSource {
-    #[uniffi::constructor]
-    pub fn new(file_name: String, fd: i32) -> Self {
-        use std::os::unix::io::FromRawFd;
+    pub fn new(file_name: String, file: std::fs::File) -> Self {
         Self {
             file_name,
-            xplat: XPlatFile::new(unsafe { std::fs::File::from_raw_fd(fd) }),
+            xplat: XPlatFile::new(file),
         }
     }
 }
@@ -45,43 +36,8 @@ impl UploadSource {
     }
 }
 
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    not(target_os = "android"),
-    not(target_os = "ios")
-))]
-#[uniffi::export]
-impl UploadSource {
-    #[uniffi::constructor]
-    pub fn new(file_name: String, path: String) -> Self {
-        let file = File::open(path).unwrap();
-        Self {
-            file_name,
-            xplat: XPlatFile::new(file),
-        }
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
-#[derive(Clone, uniffi::Object)]
-pub struct Api {
-    api_config: Arc<Configuration>,
-    transfer_manager: Arc<NetworkTransferManager>,
-}
-
 impl Api {
-    // Not exposed to UniFFI because it's crate-internal
-    pub(crate) fn new(
-        api_config: Arc<Configuration>,
-        transfer_manager: Arc<NetworkTransferManager>,
-    ) -> Self {
-        Self {
-            api_config,
-            transfer_manager,
-        }
-    }
-
-    async fn start_uploadsession(
+    pub(crate) async fn start_uploadsession(
         &self,
         parent_id: &str,
         file_name: &str,
@@ -110,7 +66,7 @@ impl Api {
             parent_id.to_string(),
             file_name.to_string(),
             total_size as i64,
-            "application/octet-stream".to_string(),
+            xplat.get_mime_type().await,
         );
 
         let init_res = match files_api::upload_session_initialize(&self.api_config, init_req).await
@@ -291,12 +247,6 @@ impl Api {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[uniffi::export(callback_interface)]
-pub trait TransferEventListener: Send + Sync {
-    fn on_event(&self, event: crate::net::transfers::NetTransferEvent);
-}
-
-#[cfg(not(target_arch = "wasm32"))]
 #[uniffi::export(async_runtime = "tokio")]
 impl Api {
     /// Uploads a file by chunking, hashing, and registering it with the backend.
@@ -312,31 +262,6 @@ impl Api {
     /// Cancels a running upload
     pub async fn cancel_upload(&self, client_file_id: String) {
         self.transfer_manager.cancel_transfer(&client_file_id).await;
-    }
-
-    /// Subscribes to transfer events natively for Swift / Kotlin / C++.
-    pub fn on_transfer_event(&self, listener: Box<dyn TransferEventListener>) {
-        let mut rx = self.transfer_manager.subscribe_events();
-        tokio::spawn(async move {
-            while let Ok(event) = rx.recv().await {
-                listener.on_event(event);
-            }
-        });
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-pub struct TransferSubscription {
-    cancel_token: tokio_util::sync::CancellationToken,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-impl TransferSubscription {
-    #[wasm_bindgen(js_name = unsubscribe)]
-    pub fn unsubscribe(&self) {
-        self.cancel_token.cancel();
     }
 }
 
@@ -359,36 +284,5 @@ impl Api {
     #[wasm_bindgen(js_name = cancelUpload)]
     pub async fn cancel_upload(&self, transfer_id: String) {
         self.transfer_manager.cancel_transfer(&transfer_id).await;
-    }
-
-    /// Listens to transfer events specifically for files with cleanup handle.
-    #[wasm_bindgen(js_name = onTransferEvent)]
-    pub fn on_transfer_event(&self, callback: js_sys::Function) -> TransferSubscription {
-        let mut rx = self.transfer_manager.subscribe_events();
-        let cancel_token = tokio_util::sync::CancellationToken::new();
-        let token_clone = cancel_token.clone();
-
-        wasm_bindgen_futures::spawn_local(async move {
-            loop {
-                tokio::select! {
-                    _ = token_clone.cancelled() => {
-                        break;
-                    }
-                    res = rx.recv() => {
-                        match res {
-                            Ok(event) => {
-                                if let Ok(js_val) = serde_wasm_bindgen::to_value(&event) {
-                                    let _ = callback.call1(&js_sys::global(), &js_val);
-                                }
-                            }
-                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                        }
-                    }
-                }
-            }
-        });
-
-        TransferSubscription { cancel_token }
     }
 }
