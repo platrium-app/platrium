@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"platrium/internal/fsops"
@@ -14,14 +15,16 @@ type Manager struct {
 	activeBackends        *syncx.Map[string, Backend] // Stores the Initialized Backends
 	cancels               *syncx.Map[string, context.CancelFunc]
 	chunkValidationCh     chan fsops.ValidatedChunk
+	chunkStore            *fsops.ChunkStore
 }
 
-func NewManager() *Manager {
+func NewManager(chunkStore *fsops.ChunkStore) *Manager {
 	return &Manager{
 		supportedBackendTypes: make(map[string]BackendFactory),
 		activeBackends:        syncx.NewMap[string, Backend](),
 		cancels:               syncx.NewMap[string, context.CancelFunc](),
 		chunkValidationCh:     make(chan fsops.ValidatedChunk, 10000),
+		chunkStore:            chunkStore,
 	}
 }
 
@@ -85,9 +88,49 @@ func (m *Manager) GenerateChunkUploadURLs(ctx context.Context, chunkHashes []str
 	return chosenBackend.GenerateChunkUploadURLs(ctx, chunks)
 }
 
+// GenerateChunkDownloadURLs routes a set of requested chunk hashes to their respective backends
+// and returns presigned read targets, simultaneously updating their GC referenced timestamps.
+func (m *Manager) GenerateChunkDownloadURLs(ctx context.Context, chunkHashes []string) (map[string]string, error) {
+	if len(chunkHashes) == 0 {
+		return make(map[string]string), nil
+	}
+
+	// 1. Fetch metadata in a purely read-only optimized point lookup
+	current, err := m.chunkStore.GetChunks(ctx, chunkHashes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch chunk metadata: %w", err)
+	}
+
+	// 2. Group hashes by BackendID
+	backendGroups := make(map[string][]string)
+	for hash, meta := range current {
+		if meta.State == fsops.ChunkStateValidated {
+			backendGroups[meta.StorageBackend] = append(backendGroups[meta.StorageBackend], hash)
+		}
+	}
+
+	// 3. Request presigned URLs from each specific backend
+	results := make(map[string]string, len(chunkHashes))
+	for backendId, hashes := range backendGroups {
+		backend, ok := m.activeBackends.Load(backendId)
+		if !ok {
+			return nil, fmt.Errorf("storage backend %q is not active", backendId)
+		}
+
+		urls, err := backend.GenerateChunkDownloadURLs(ctx, hashes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate download URLs for backend %q: %w", backendId, err)
+		}
+
+		maps.Copy(results, urls)
+	}
+
+	return results, nil
+}
+
 // StartChunkValidationWorker spins up a background worker that drains chunkValidationCh
 // in batches of 100 chunks or every 250ms and marks them as PRESENT in the chunk metadata store.
-func (m *Manager) StartChunkValidationWorker(ctx context.Context, chunkStore *fsops.ChunkStore) {
+func (m *Manager) StartChunkValidationWorker(ctx context.Context) {
 	go func() {
 		const batchSize = 100
 		batch := make([]fsops.ValidatedChunk, 0, batchSize)
@@ -100,7 +143,7 @@ func (m *Manager) StartChunkValidationWorker(ctx context.Context, chunkStore *fs
 				return
 			}
 
-			_ = chunkStore.AddValidatedChunks(flushCtx, batch)
+			_ = m.chunkStore.AddValidatedChunks(flushCtx, batch)
 			batch = batch[:0]
 		}
 

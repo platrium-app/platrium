@@ -1,10 +1,43 @@
 use crate::xplat::file::XPlatFile;
 use sha2::{Digest, Sha256};
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::sync::Semaphore;
 
 pub const CHUNK_SIZE_BYTES: u64 = 4 * 1024 * 1024; // 4MB
 
+/// Maps a specific byte offset to its corresponding chunk index.
+pub fn byte_to_chunk_index(byte_offset: u64) -> usize {
+    (byte_offset / CHUNK_SIZE_BYTES) as usize
+}
+
+/// Returns a range of chunk indices that cover the specified byte range (start_byte to end_byte inclusive).
+pub fn byte_range_to_chunk_indices(start_byte: u64, end_byte: u64) -> std::ops::RangeInclusive<usize> {
+    let start_chunk = byte_to_chunk_index(start_byte);
+    let end_chunk = byte_to_chunk_index(end_byte);
+    start_chunk..=end_chunk
+}
+
+/// Returns the `(chunk_start_offset, chunk_end_offset)` offsets relative to the chunk's 4MB payload.
+pub fn get_chunk_local_range(
+    file_start_byte: u64,
+    file_end_byte: u64,
+    chunk_index: usize,
+) -> (u64, u64) {
+    let chunk_file_start_byte = (chunk_index as u64) * CHUNK_SIZE_BYTES;
+    let chunk_file_end_byte = chunk_file_start_byte + CHUNK_SIZE_BYTES - 1;
+
+    let req_file_start_byte = std::cmp::max(file_start_byte, chunk_file_start_byte);
+    let req_file_end_byte = std::cmp::min(file_end_byte, chunk_file_end_byte);
+
+    let chunk_start_offset = req_file_start_byte - chunk_file_start_byte;
+    let chunk_end_offset = req_file_end_byte - chunk_file_start_byte;
+
+    (chunk_start_offset, chunk_end_offset)
+}
+
 // Allow at most 5 concurrent chunking tasks to limit memory footprint (5 * 4MB = 20MB max overhead)
+// WASM is single threaded so, we don't need the semaphore.
+#[cfg(not(target_arch = "wasm32"))]
 static CHUNK_SEMAPHORE: Semaphore = Semaphore::const_new(5);
 
 #[derive(Debug, Clone)]
@@ -63,7 +96,7 @@ impl<'a> ChunkProcessor<'a> {
                 };
 
                 let xplat_file = self.xplat_file.clone();
-                
+
                 handles.push(tokio::spawn(async move {
                     let _permit = CHUNK_SEMAPHORE.acquire().await.map_err(|e| e.to_string())?;
                     let buffer = xplat_file.read_exact_at(offset, size as usize).await?;
@@ -71,7 +104,9 @@ impl<'a> ChunkProcessor<'a> {
                     let hash = tokio::task::spawn_blocking(move || {
                         let mut hasher = Sha256::new();
                         hasher.update(&buffer);
-                        format!("{:x}", hasher.finalize())
+
+                        let hash = format!("{:x}", hasher.finalize());
+                        hash
                     })
                     .await
                     .map_err(|e| format!("Blocking task panicked: {}", e))?;

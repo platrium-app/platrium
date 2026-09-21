@@ -1,0 +1,86 @@
+---
+title: Processing Downloads
+description: How we download files and stream specific byte ranges with zero-copy efficiency.
+---
+
+Downloading a file isn't just about dumping bytes to a disk. What if the user only wants to stream a 5MB video segment starting precisely at byte `85,342`? What if they are on a mobile network that occasionally drops packets?
+
+With Platrium's SDK, the download pipeline is built around **mathematically precise byte-range chunking**, massive concurrency, and zero-copy memory slices. It effortlessly handles seeking, resuming, and parallel network exhaustion limits.
+
+## The Download Pipeline
+
+After initializing a Download Session with the server, here is exactly how the SDK streams a specific byte range to a file descriptor or browser stream:
+
+:::note
+For a high-level overview of the backend download session APIs and lifecycle, see [End-to-End Download Sessions](/e2e-flows/download-sessions).
+:::
+
+```mermaid
+flowchart TD
+    classDef api fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef highlight fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+
+    Init[Init Download Session API]:::api --> Batch((Next Batch))
+    
+    Batch --> Map[Map Range & Fetch 512 URLs API]:::api
+    Map --> Q{Architecture?}
+    
+    Q -->|Native| UQ[FuturesUnordered Queue]
+    Q -->|WASM| OQ[FuturesOrdered Queue]
+    
+    UQ --> Get[Acquire Slot & GET Chunk]:::highlight
+    OQ --> Get
+    
+    Get --> R{Chunk Storage\n Respected HTTP Range?}
+    R -->|No| S[Zero-Copy Bytes.slice()]:::highlight
+    R -->|Yes| W{Write Strategy?}
+    S --> W
+    
+    W -->|Native| WE[write_exact_at]
+    W -->|WASM| WS[write_sequentially]
+    
+    WE --> Prog[Emit Progress]
+    WS --> Prog
+    
+    Prog --> L{More Batches?}
+    L -->|Yes| Batch
+    L -->|No| Done((Done))
+```
+
+## Step 1: Mapping the Byte Range
+
+When you request a download, you don't just say "give me the file." You request a `range_start_byte` and `range_end_byte`. 
+
+The SDK mathematically maps this exact byte range to the underlying **4MB chunk indices** required to satisfy the request. 
+
+For example, if you request bytes `5,000,000` to `6,000,000`, the SDK knows it only needs to download **Chunk 1**. It completely ignores Chunk 0 and Chunk 2.
+
+## Step 2: Batched Presign Fetching
+
+We process downloads in batches of up to **512 chunks** (roughly 2GB at a time). 
+We take the required chunk indices for the batch and send them to the `download_session_chunks` API. The backend verifies the session and returns precisely 512 **presigned download URLs** pointing directly to the object storage.
+
+## Step 3: The Mid-Chunk Range Problem
+
+If you need bytes `5,000,000` to `6,000,000`, downloading all of Chunk 1 would give you bytes `4,194,304` through `8,388,607`. That wastes bandwidth!
+
+To solve this, the SDK calculates the **chunk local offset** (`chunk_start_offset` and `chunk_end_offset`). For the very first chunk and the very last chunk in your requested range, we selectively append an HTTP `Range` header (e.g., `Range: bytes=805696-1805695`) to the GET request!
+
+### Zero-Copy Fallback
+Some object storage backends (or restrictive network proxies) might strip or ignore the HTTP `Range` header and return a `200 OK` with the full 4MB chunk instead of a `206 Partial Content`. 
+
+If the SDK detects a `200 OK`, it seamlessly falls back to manually slicing the payload. We utilize **zero-copy slicing** (`bytes.slice(start..end)`) which simply increments a reference count rather than allocating a new heap array, ensuring zero memory overhead even during fallback scenarios!
+
+## Step 4: Concurrency & Writing Strategies
+
+Once the HTTP GET requests are fired in parallel, we hit a massive architectural divergence in how we write the data to disk:
+
+### Native (Random Access)
+Desktop and mobile OSes support random-access disk writes. The SDK pumps all network futures into a `FuturesUnordered` queue. As soon as *any* chunk finishes downloading (even if it's completely out of order), it instantly yields and is written directly to its absolute byte offset on disk (`write_exact_at`). This instantly frees the RAM and avoids all OS file-lock contention.
+
+### WebAssembly (Sequential Streams)
+The browser uses a `WritableStream` combined with a Service Worker, which strictly enforces sequential writes. You cannot write chunk 3 before chunk 1 and 2. The SDK pumps all network futures into a `FuturesOrdered` queue. The queue automatically buffers out-of-order network chunks in RAM and yields them in perfect sequential order, so the `write_sequentially` function never faults.
+
+:::info
+To read more about the abstractions that hide this concurrency complexity, check out [Cross-Platform Files](/sdk-internals/fs/xplatfile).
+:::

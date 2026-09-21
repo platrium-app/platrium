@@ -3,6 +3,8 @@ package api
 import (
 	"log"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -27,6 +29,7 @@ func NewAttachedFSHandler(storageManager *storage.Manager) *AttachedFSHandler {
 func (h *AttachedFSHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Put("/{backendId}/{writeId}", h.AttachedFSUploadHandler)
+	r.Get("/{backendId}/{hash}", h.AttachedFSDownloadHandler)
 	return r
 }
 
@@ -73,4 +76,57 @@ func (h *AttachedFSHandler) AttachedFSUploadHandler(w http.ResponseWriter, r *ht
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// AttachedFSDownloadHandler handles GET /api/attachedfs/{backendId}/{hash}, streaming chunk data from local storage.
+//
+// @Summary      Stream Object Chunk
+// @Description  Directly streams a chunk payload from local storage using a signed download URL. Supports HTTP Range requests natively.
+// @Tags         attachedfs
+// @Produce      application/octet-stream
+// @Param        backendId path string true "The storage backend ID"
+// @Param        hash path string true "The chunk hash"
+// @Success      200  {file}  file "Chunk data"
+// @Failure      400  {string}  string "Bad Request"
+// @Failure      401  {string}  string "Unauthorized - Expired or Invalid signature"
+// @Router       /api/attachedfs/{backendId}/{hash} [get]
+func (h *AttachedFSHandler) AttachedFSDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	backendId := chi.URLParam(r, "backendId")
+	hash := chi.URLParam(r, "hash")
+	sig := r.URL.Query().Get("sig")
+	expiresStr := r.URL.Query().Get("expires")
+
+	expires, err := strconv.ParseInt(expiresStr, 10, 64)
+	if err != nil || time.Now().Unix() > expires {
+		http.Error(w, "URL expired or invalid expiration format", http.StatusUnauthorized)
+		return
+	}
+
+	backend, exists := h.storageManager.GetActiveBackend(backendId)
+	if !exists {
+		http.Error(w, "Invalid Storage Manager Backend ID", http.StatusBadRequest)
+		return
+	}
+
+	afsBackend, ok := backend.(*storage.AttachedFSBackend)
+	if !ok {
+		http.Error(w, "Backend is not an AttachedFS instance", http.StatusBadRequest)
+		return
+	}
+
+	if !afsBackend.VerifyReadURL(hash, expiresStr, sig) {
+		http.Error(w, "Invalid read signature", http.StatusUnauthorized)
+		return
+	}
+
+	stream, err := afsBackend.GetChunkReader(hash)
+	if err != nil {
+		http.Error(w, "Chunk not found", http.StatusNotFound)
+		return
+	}
+	defer stream.Close()
+
+	// Prevent ServeContent from sniffing the MIME type, since chunks are raw binary blobs.
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeContent(w, r, hash, time.Time{}, stream)
 }

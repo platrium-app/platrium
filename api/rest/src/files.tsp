@@ -24,6 +24,9 @@ model UploadSessionInitRequest {
     @maxValue(2199023255552)
     @minValue(1)
     file_size: int64;
+
+    @doc("MIME Content-Type of the file (e.g. application/pdf, image/png)")
+    mime_type: string;
 }
 
 model UploadSessionInitResponse {
@@ -85,6 +88,7 @@ model UploadSessionCommitResponse {
 @route("/files/uploadsession")
 @tag("Files")
 interface UploadSession {
+    @route("/init")
     @post
     @summary("Initialize a new upload session")
     @doc("Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.")
@@ -109,4 +113,78 @@ interface UploadSession {
         @header("x-platrium-uploadsession") sessionId: string,
         @body body: UploadSessionCommitRequest,
     ): UploadSessionCommitResponse | Platrium.Errors.EngineInternal;
+}
+
+/* Download Session Core Models */
+
+model DownloadSessionInitRequest {
+    @doc("ID of the file to download")
+    file_id: string;
+
+    @doc("Optional file version to target. If not provided, the latest version is used.")
+    version?: string;
+}
+
+model DownloadSessionInitResponse {
+    @statusCode _: 200;
+
+    @doc("Cryptographically sealed JWT token acting as the download passport")
+    session_id: string;
+
+    @doc("Name of the file")
+    file_name: string;
+
+    @doc("Total size of the file in bytes")
+    file_size: int64;
+
+    @doc("MIME Content-Type of the file")
+    mime_type: string;
+}
+
+model DownloadSessionChunksRequest {
+    @doc("Batch of chunk indices to request presigned download URLs for. Capped at 512 items.")
+    @minItems(1)
+    @maxItems(512)
+    indices: int32[];
+}
+
+model DownloadSessionPresignedChunk {
+    @doc("The client-direct Presigned download URL for the chunk.")
+    download_url: string;
+}
+
+model DownloadSessionChunksResponse {
+    @statusCode _: 200;
+
+    @doc("A key-value map mapping each requested index (as string) to its presigned chunk download details.")
+    chunks: Record<DownloadSessionPresignedChunk>;
+}
+
+/* Download Session Routes */
+
+@route("/files/downloadsession")
+@tag("Files")
+interface DownloadSession {
+    @route("/init")
+    @post
+    @summary("Initialize a new download session")
+    @doc("Initialize a file download session. Verifies file ACLs and returns a sealed download session token and metadata.")
+    initialize(
+        @body body: DownloadSessionInitRequest
+    ):
+        | DownloadSessionInitResponse
+        | Platrium.Errors.EngineInternal
+        | Platrium.Errors.NotFound;
+
+    @route("/chunks")
+    @post
+    @summary("Presign a batch of chunks for download")
+    @doc("Generates time-bound client-direct download URLs for specific file chunk indices using a download session token.")
+    chunks(
+        @header("x-platrium-downloadsession") download_session: string,
+        @body body: DownloadSessionChunksRequest
+    ):
+        | DownloadSessionChunksResponse
+        | Platrium.Errors.EngineInternal
+        | Platrium.Errors.Unauthorized;
 }

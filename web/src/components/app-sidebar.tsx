@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { useQuery } from "@apollo/client/react"
+import { graphql } from "@/graphql"
 import {
   Sidebar,
   SidebarContent,
@@ -24,9 +26,11 @@ import {
   Star,
   FolderRoot,
   BookUser,
+  CircleAlertIcon,
 } from "lucide-react"
 import { FilesystemTree } from "@/components/custom/FilesystemTreeView.tsx"
 import PlatriumLogo from "../assets/PlatriumLogo.tsx"
+import { Spinner } from "./ui/spinner.tsx"
 
 // --- TYPES ---
 export type StaticNavItem = {
@@ -62,75 +66,18 @@ const BOTTOM_NAV_ITEMS: StaticNavItem[] = [
   { id: "starred", label: "Starred", icon: Star, path: "/starred" },
 ]
 
-// Normalized flat cache for folders ONLY
-const STUB_FOLDER_NODES: Record<string, FolderNode> = {
-  // My Drive Hierarchy
-  "my-drive": {
-    id: "my-drive",
-    parentId: null,
-    name: "My Drive",
-    hasChildren: true,
-    icon: FolderRoot,
-  },
-  projects: {
-    id: "projects",
-    parentId: "my-drive",
-    name: "Projects",
-    hasChildren: true,
-  },
-  marketing: {
-    id: "marketing",
-    parentId: "my-drive",
-    name: "Marketing Assets",
-    hasChildren: true,
-  },
-  design: {
-    id: "design",
-    parentId: "projects",
-    name: "Design",
-    hasChildren: false,
-  },
-  engineering: {
-    id: "engineering",
-    parentId: "projects",
-    name: "Engineering",
-    hasChildren: false,
-  },
-  campaign: {
-    id: "campaign",
-    parentId: "marketing",
-    name: "Summer Campaign",
-    hasChildren: false,
-  },
-  personal: {
-    id: "personal",
-    parentId: "my-drive",
-    name: "Personal",
-    hasChildren: false,
-  },
-
-  // Shared Drives content (the drives themselves)
-  "acme-corp": {
-    id: "acme-corp",
-    parentId: null,
-    name: "Acme Corp Assets",
-    hasChildren: true,
-    icon: FolderRoot,
-  },
-  "design-system": {
-    id: "design-system",
-    parentId: null,
-    name: "Global Design System",
-    hasChildren: false,
-    icon: FolderRoot,
-  },
-  "acme-logos": {
-    id: "acme-logos",
-    parentId: "acme-corp",
-    name: "Logos",
-    hasChildren: false,
-  },
-}
+/* Graph QL Queries */
+const GET_DRIVES = graphql(`
+  query GetDrives {
+    drives {
+      id
+      name
+      driveMetadata {
+        driveType
+      }
+    }
+  }
+`)
 
 // --- COMPONENTS ---
 
@@ -166,14 +113,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const [expandedSharedDrives, setExpandedSharedDrives] = React.useState(true)
 
-  // Helper function for the generic tree
-  const getChildren = React.useCallback((parentId: string) => {
-    return Object.values(STUB_FOLDER_NODES).filter(
-      (n) => n.parentId === parentId
-    )
-  }, [])
+  const { data, loading, error } = useQuery(GET_DRIVES)
 
-  const sharedDrivesRootIds = ["acme-corp", "design-system"]
+  const privateDrives: FolderNode[] = []
+  const sharedDrives: FolderNode[] = []
+
+  if (data && data.drives) {
+    data.drives.forEach((drive) => {
+      const node: FolderNode = {
+        id: drive.id,
+        parentId: null,
+        name: drive.name,
+        hasChildren: true,
+        icon: FolderRoot,
+      }
+      const driveType = drive.driveMetadata?.driveType
+      if (driveType === "PRIVATE") {
+        privateDrives.push(node)
+      } else if (driveType === "SHARED") {
+        sharedDrives.push(node)
+      }
+    })
+  }
+
+  // Helper function for the generic tree (deferring sub-folder fetches for now)
+  const getChildren = React.useCallback((_parentId: string) => {
+    return []
+  }, [])
 
   return (
     <Sidebar {...props}>
@@ -211,48 +177,52 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent>
             <SidebarMenu className="group/tree">
               {/* 1. My Drive */}
-              <FilesystemTree
-                nodes={
-                  STUB_FOLDER_NODES["my-drive"]
-                    ? [STUB_FOLDER_NODES["my-drive"]]
-                    : []
-                }
-                getChildren={getChildren}
-                activeId={location.pathname.split("/").pop()}
-                onSelect={(id) => navigate(`/folder/${id}`)}
-              />
+              {loading ? (
+                <div className="flex items-center gap-2 px-3 text-sm text-muted-foreground"><Spinner />Loading drives</div>
+              ) : error ? (
+                <div className="flex items-center gap-2 px-3 text-sm text-destructive"><CircleAlertIcon className="size-4" />Failed to Load Drives</div>
+              ) : (
+                <FilesystemTree
+                  nodes={privateDrives}
+                  getChildren={getChildren}
+                  activeId={location.pathname.split("/").pop()}
+                  onSelect={(id) => navigate(`/folder/${id}`)}
+                />
+              )}
 
-              {/* 2. Shared Drives (Static Organizing Helper) */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => setExpandedSharedDrives((prev) => !prev)}
-                  style={{ paddingLeft: "8px" }}
-                >
-                  {expandedSharedDrives ? (
-                    <ChevronDown className="size-4 flex-shrink-0 cursor-pointer" />
-                  ) : (
-                    <ChevronRight className="size-4 flex-shrink-0 cursor-pointer" />
+              {/* 2. Shared Drives (Conditional) */}
+              {sharedDrives.length > 0 && (
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => setExpandedSharedDrives((prev) => !prev)}
+                      style={{ paddingLeft: "8px" }}
+                    >
+                      {expandedSharedDrives ? (
+                        <ChevronDown className="size-4 flex-shrink-0 cursor-pointer" />
+                      ) : (
+                        <ChevronRight className="size-4 flex-shrink-0 cursor-pointer" />
+                      )}
+                      <BookUser className="size-4 flex-shrink-0" />
+                      <span className="truncate">Shared Drives</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {expandedSharedDrives && (
+                    <ul className="relative flex w-full min-w-0 flex-col gap-0.5">
+                      <div
+                        className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-sidebar-border opacity-0 transition-opacity duration-200 group-hover/tree:opacity-100"
+                        style={{ left: "16px" }}
+                      />
+                      <FilesystemTree
+                        nodes={sharedDrives}
+                        getChildren={getChildren}
+                        activeId={location.pathname.split("/").pop()}
+                        onSelect={(id) => navigate(`/folder/${id}`)}
+                        level={1}
+                      />
+                    </ul>
                   )}
-                  <BookUser className="size-4 flex-shrink-0" />
-                  <span className="truncate">Shared Drives</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {expandedSharedDrives && (
-                <ul className="relative flex w-full min-w-0 flex-col gap-0.5">
-                  <div
-                    className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-sidebar-border opacity-0 transition-opacity duration-200 group-hover/tree:opacity-100"
-                    style={{ left: "16px" }}
-                  />
-                  <FilesystemTree
-                    nodes={sharedDrivesRootIds.map(
-                      (id) => STUB_FOLDER_NODES[id]
-                    )}
-                    getChildren={getChildren}
-                    activeId={location.pathname.split("/").pop()}
-                    onSelect={(id) => navigate(`/folder/${id}`)}
-                    level={1}
-                  />
-                </ul>
+                </>
               )}
             </SidebarMenu>
           </SidebarGroupContent>

@@ -1,0 +1,88 @@
+scalar DateTime
+scalar Int64
+
+enum DriveType {
+  PRIVATE
+  SHARED
+}
+
+enum DriveItemType {
+  FILE
+  FOLDER
+}
+
+interface DriveItem {
+  id: ID!
+  parentId: ID
+  name: String!
+  type: DriveItemType!
+  path: [Folder!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type FileVersion {
+  version: Int!
+  size: Int64!
+  createdAt: DateTime!
+}
+
+type File implements DriveItem {
+  id: ID!
+  parentId: ID!
+  name: String!
+  type: DriveItemType!
+  size: Int64!
+  mimeType: String!
+  version: Int!
+  versions: [FileVersion!]
+  path: [Folder!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type DriveMetadata {
+  driveType: DriveType!
+  storageUsed: Int64!
+  storageQuota: Int64
+}
+
+type Folder implements DriveItem {
+  id: ID!
+  parentId: ID
+  name: String!
+  type: DriveItemType!
+  driveMetadata: DriveMetadata
+  path: [Folder!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type DriveItemEdge {
+  cursor: String!
+  node: DriveItem!
+}
+
+type DriveItemConnection {
+  edges: [DriveItemEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type Query {
+  item(id: ID!): DriveItem
+  folderContents(folderId: ID!, first: Int, after: String): DriveItemConnection!
+  drives: [Folder!]!
+}
+
+type Mutation {
+  createFolder(parentId: ID!, name: String!): Folder!
+  renameItem(id: ID!, newName: String!): DriveItem!
+  moveItem(id: ID!, newParentId: ID!): DriveItem!
+  deleteItem(id: ID!): Boolean!
+}

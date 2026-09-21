@@ -1,0 +1,23 @@
+---
+title: "GraphQL API"
+description: The primary interface for querying and mutating Platrium data.
+---
+
+Platrium utilizes a robust GraphQL architecture for all standard data operations. If you are building a custom client, UI, or integration, it is **highly recommended** to use the GraphQL APIs to interface with the platform.
+
+### What GraphQL Covers
+
+Our GraphQL API is designed to handle the vast majority of the application's surface area, including:
+- **File System Navigation:** Fetching lists of files, traversing folders, and querying drive structures.
+- **Metadata Management:** Updating file properties, renaming items, and organizing the graph.
+- **Sharing & Permissions:** Managing Access Control Lists (ACLs), user permissions, and shared links.
+- **User Profiles & Settings:** Managing account data and preferences.
+
+### What GraphQL Does NOT Cover
+
+To maintain high performance and avoid straining the graph layer, GraphQL is intentionally decoupled from raw binary transfers. It does not handle:
+- Authentication workflows
+- File Uploads & Chunking
+- File Downloads & Streaming
+
+For those heavy-lifting operations, Platrium relies on its underlying REST infrastructure, which is seamlessly abstracted away for you by our [official SDKs](/docs/sdk).

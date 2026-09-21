@@ -1,0 +1,135 @@
+/// <reference lib="webworker" />
+
+import { PlatriumClient, DownloadDestination } from 'platrium-sdk';
+import { createLogger } from '../lib/logging';
+
+const logger = createLogger("Platrium SW");
+
+declare const self: ServiceWorkerGlobalScope;
+
+export async function handleDownloadRequest(event: FetchEvent, fileId: string, url: URL): Promise<Response> {
+    const request = event.request;
+    logger.info(`Intercepted download request for fileId: ${fileId}`);
+    try {
+        const baseUrl = "http://localhost:3000/api";
+        logger.debug(`Initializing PlatriumClient with baseUrl: ${baseUrl}`);
+        const client = new PlatriumClient(baseUrl);
+
+        logger.debug(`Requesting download session...`);
+        const session = await client.files().createDownloadSession(fileId);
+
+        logger.info(`Download session created successfully:`, {
+            fileName: session.fileName,
+            mimeType: session.mimeType,
+            fileSize: Number(session.fileSize)
+        });
+
+        const isForceDownload = url.searchParams.get('dl') === '1';
+
+        const fileName = session.fileName;
+        const mimeType = session.mimeType;
+        const fileSize = session.fileSize; // bigint
+
+        const headers = new Headers();
+        headers.set('Content-Type', mimeType);
+        headers.set('Accept-Ranges', 'bytes');
+
+        // Sanitize fallback filename to strictly ASCII-printable characters (remove non-ASCII, quotes, slashes)
+        const safeFileName = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["/\\]/g, '_');
+
+        // RFC 5987 standard for UTF-8 filenames in HTTP headers
+        const encodedFileName = encodeURIComponent(fileName);
+
+        if (isForceDownload) {
+            headers.set('Content-Disposition', `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`);
+        } else {
+            headers.set('Content-Disposition', `inline; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`);
+        }
+
+        const rangeHeader = request.headers.get('Range');
+        if (rangeHeader) {
+            logger.debug(`Range header present: ${rangeHeader}`);
+        }
+
+        // Setup TransformStream using Web Streams API
+        logger.debug(`Creating TransformStream...`);
+        const { readable, writable } = new TransformStream();
+        const destination = new DownloadDestination(writable);
+        logger.debug(`Destination created successfully.`);
+
+        if (rangeHeader) {
+            // Handle HTTP Range request (e.g. from Video Player seeking)
+            const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+            if (match) {
+                const start = BigInt(match[1]);
+                const endStr = match[2];
+                let end = endStr ? BigInt(endStr) : fileSize - 1n;
+
+                if (end >= fileSize) {
+                    end = fileSize - 1n;
+                }
+
+                if (start > end || start >= fileSize) {
+                    logger.warn(`Range Not Satisfiable: bytes ${start}-${end}/${fileSize}`);
+                    return new Response(null, {
+                        status: 416, // Range Not Satisfiable
+                        headers: {
+                            'Content-Range': `bytes */${fileSize}`
+                        }
+                    });
+                }
+
+                const contentLength = end - start + 1n;
+                headers.set('Content-Length', contentLength.toString());
+                headers.set('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+
+                // Trigger background download via SDK and keep SW alive
+                logger.info(`Triggering Range Download: bytes ${start}-${end}...`);
+                const downloadPromise = session.streamRangeTo(destination, start, end)
+                    .then(() => {
+                        logger.info(`SDK streamRangeTo finished successfully. Closing writable stream.`);
+                        writable.close();
+                    })
+                    .catch((err) => {
+                        logger.error("SDK streamRangeTo failed:", err);
+                        writable.abort(err).catch(e => logger.error(e));
+                    });
+
+                event.waitUntil(downloadPromise);
+
+                logger.debug(`Returning 206 Partial Content Response`);
+                return new Response(readable, {
+                    status: 206, // Partial Content
+                    headers
+                });
+            }
+        }
+
+        // Full file download
+        headers.set('Content-Length', fileSize.toString());
+
+        // Trigger background download via SDK and keep SW alive
+        logger.info(`Triggering Full Download...`);
+        const downloadPromise = session.streamTo(destination)
+            .then(() => {
+                logger.info(`SDK streamTo finished successfully. Closing writable stream.`);
+                writable.close();
+            })
+            .catch((err) => {
+                logger.error("SDK streamTo failed:", err);
+                writable.abort(err).catch(e => logger.error(e));
+            });
+
+        event.waitUntil(downloadPromise);
+
+        logger.debug(`Returning 200 OK Response`);
+        return new Response(readable, {
+            status: 200,
+            headers
+        });
+
+    } catch (err) {
+        logger.error("Fatal Error handling download request:", err);
+        return new Response("Not Found", { status: 404 });
+    }
+}

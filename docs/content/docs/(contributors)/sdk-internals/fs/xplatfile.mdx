@@ -13,38 +13,19 @@ If we let this complexity leak into the chunking or networking logic, our codeba
 
 To solve this, we built **`UploadSource`** and **`XPlatFile`**.
 
-## Shielding the Consumer: `UploadSource`
+## Uploading via `UploadSource`
 
 We don't want SDK consumers (or even our internal chunkers) worrying about platform-specific file APIs. We created an `UploadSource` object that exposes completely different constructors depending on the target platform!
 
-<Tabs items={['Android & iOS', 'Desktop & CLI', 'WebAssembly']}>
-  <Tab value="Android & iOS">
-  **Requires a raw POSIX File Descriptor (FD).**
+<Tabs items={['Native (Desktop & Mobile)', 'WebAssembly']}>
+  <Tab value="Native (Desktop & Mobile)">
+  **Requires a standard Rust `std::fs::File` descriptor.**
+  
+  Whether you are on a desktop CLI using a local file path, or on iOS using a sandboxed file descriptor from `NSFileProvider`, the Rust `std::fs::File` struct handles the OS-level file handle transparently.
   ```rust
-  #[cfg(any(target_os = "android", target_os = "ios"))]
-  #[uniffi::export]
+  #[cfg(not(target_arch = "wasm32"))]
   impl UploadSource {
-      #[uniffi::constructor]
-      pub fn new(file_name: String, fd: i32) -> Self {
-          use std::os::unix::io::FromRawFd;
-          Self {
-              file_name,
-              xplat: XPlatFile::new(unsafe { std::fs::File::from_raw_fd(fd) }),
-          }
-      }
-  }
-  ```
-  </Tab>
-
-  <Tab value="Desktop & CLI">
-  **Requires a standard string file path.**
-  ```rust
-  #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "ios")))]
-  #[uniffi::export]
-  impl UploadSource {
-      #[uniffi::constructor]
-      pub fn new(file_name: String, path: String) -> Self {
-          let file = std::fs::File::open(path).unwrap();
+      pub fn new(file_name: String, file: std::fs::File) -> Self {
           Self {
               file_name,
               xplat: XPlatFile::new(file),
@@ -93,17 +74,18 @@ The most important method is `read_exact_at`, which grabs a specific byte slice 
 
 <Tabs items={['Native', 'WebAssembly']}>
   <Tab value="Native">
-  **Uses standard Rust Seek & Read**
+  **Uses `std::os::unix::fs::FileExt` for concurrent read access**
   ```rust
   impl XPlatFile {
       pub async fn read_exact_at(&self, offset: u64, size: usize) -> Result<Vec<u8>, String> {
           match self {
               #[cfg(not(target_arch = "wasm32"))]
               XPlatFile::Native(file) => {
-                  let mut f = file.try_clone().map_err(|e| e.to_string())?;
-                  f.seek(std::io::SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
-                  let mut buffer = vec![0; size];
-                  f.read_exact(&mut buffer).map_err(|e| e.to_string())?;
+                  use std::os::unix::fs::FileExt;
+                  let mut buffer: Vec<u8> = vec![0; size];
+                  file.read_exact_at(&mut buffer, offset)
+                      .map_err(|e| e.to_string())?;
+
                   Ok(buffer)
               }
               
@@ -156,3 +138,59 @@ The most important method is `read_exact_at`, which grabs a specific byte slice 
 Notice how the WASM implementation works. We don't try to load the entire JavaScript file into Wasm memory (which would instantly crash the browser). Instead, we utilize the native browser `Blob.slice()` API to carve out just the 4MB chunk we need, request an `ArrayBuffer`, await the JS Promise natively in Rust via `wasm_bindgen_futures`, and copy only those specific bytes into our Rust vector! 
 
 This abstraction allows our core chunking loop to run identical logic on both an iPhone and a Chrome browser, completely unaware of how vastly different the underlying file I/O operations are!
+
+## Downloading via `DownloadDestination`
+
+While uploading uses `UploadSource`, downloading writes to a `DownloadDestination`. However, writing files exposed a massive concurrency divergence between Native and WebAssembly:
+
+- **Native (Random Access)**: Desktop and mobile OSes support random-access disk writes (`std::os::unix::fs::FileExt::write_all_at`). This means we can download chunks concurrently and write them to disk the exact millisecond they finish downloading, in any random order! This keeps RAM usage incredibly low and avoids serialization bottlenecks.
+- **WebAssembly (Sequential Streams)**: The browser uses the Web Streams API combined with a Service Worker to stream the download directly to the user's disk. The resulting `WritableStream` strictly enforces sequential writes. You cannot write chunk 3 before chunk 1 and 2. 
+
+To solve this without leaking `cfg` boilerplate into the download loop, we exposed two entirely separate write strategies on `XPlatFile`, gated by compile-time architecture checks:
+
+<Tabs items={['Native (Random Access)', 'WebAssembly (Sequential)']}>
+  <Tab value="Native (Random Access)">
+  **Random Access via `write_exact_at`**
+  ```rust
+  impl XPlatFile {
+      #[cfg(not(target_arch = "wasm32"))]
+      pub async fn write_exact_at(&self, offset: u64, bytes: &[u8]) -> Result<(), String> {
+          match self {
+              XPlatFile::Native(file) => {
+                  use std::os::unix::fs::FileExt;
+                  file.write_all_at(bytes, offset).map_err(|e| e.to_string())
+              }
+          }
+      }
+  }
+  ```
+  In the download loop, Native uses `FuturesUnordered` to yield network chunks instantly and blindly calls `write_exact_at`, fully utilizing parallel I/O.
+  </Tab>
+
+  <Tab value="WebAssembly (Sequential)">
+  **Buffered Streams via `write_sequentially`**
+  ```rust
+  impl XPlatFile {
+      #[cfg(target_arch = "wasm32")]
+      pub async fn write_sequentially(&self, bytes: &[u8]) -> Result<(), String> {
+          match self {
+              XPlatFile::Wasm(BrowserFile::WriteStream(stream)) => {
+                  let writer = stream.get_writer().unwrap();
+                  let uint8_array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
+                  uint8_array.copy_from(bytes);
+                  
+                  let promise = writer.write_with_chunk(&uint8_array);
+                  wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+                  writer.release_lock();
+                  Ok(())
+              }
+              // ...
+          }
+      }
+  }
+  ```
+  In the download loop, WASM uses `FuturesOrdered` to automatically buffer out-of-order network chunks in RAM, yielding them sequentially so `write_sequentially` never faults.
+  </Tab>
+</Tabs>
+
+By strictly gating these methods via `#[cfg]` macros directly on the function signatures, the compiler physically prevents Native code from accidentally calling sequential streams, and prevents WASM from attempting random access!

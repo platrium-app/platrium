@@ -8,7 +8,9 @@ import (
 	"os"
 
 	"platrium/internal/api"
+	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
+	"platrium/internal/graphql"
 	"platrium/internal/identity"
 	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
@@ -17,8 +19,11 @@ import (
 	"platrium/internal/restapi"
 	"platrium/internal/setup"
 
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 // @title           Platrium Core API
@@ -48,8 +53,8 @@ func main() {
 	attachedfsStore := storage.NewAttachedFSStore(kvStore)
 
 	// Setup Storage Manager
-	storageManager := storage.NewManager()
-	storageManager.StartChunkValidationWorker(context.Background(), chunkStore)
+	storageManager := storage.NewManager(chunkStore)
+	storageManager.StartChunkValidationWorker(context.Background())
 
 	storageManager.RegisterBackendType("attachedfs", storage.AttachedFSBackendFactory(attachedfsStore))
 	storageManager.StartBackend(context.Background(), "default", storage.BackendConfig{
@@ -73,6 +78,14 @@ func main() {
 		log.Fatalf("failed to bootstrap native tenant: %v", err)
 	}
 
+	// Setup Session Manager & Dev Fallback
+	sessionManager := session.NewManager()
+	devFallback := &session.PlatriumSession{
+		UserID:   "99dff953-bdf8-40b9-859d-897c363455da",
+		TenantID: "c6038c5b-6a37-4c52-ad3c-1fa3c631fe1a",
+		Email:    "admin@example.com",
+	}
+
 	// Setup HTTP Routers
 	objectsRouter := objects.NewRouter(storageManager)
 	attachedFsHandler := api.NewAttachedFSHandler(storageManager) // we should give it storageManager isntead.
@@ -87,8 +100,33 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
-	// Routes
+	// CORS Settings for Browser Fetch APIs
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173", "http://*:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "User-Agent", "x-platrium-uploadsession", "x-platrium-downloadsession"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+	}))
+
+	// Setup GraphQL
+	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
+		FSOps: fsOps,
+	}}))
+
+	// GraphQL Routes
+	router.Route("/graphql", func(r chi.Router) {
+		r.Use(sessionManager.LoadAndSave)
+		r.Use(session.Middleware(sessionManager, devFallback))
+		r.Handle("/", graphqlSrv)
+		r.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
+	})
+	router.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
+
 	router.Route("/api", func(r chi.Router) {
+		r.Use(sessionManager.LoadAndSave)
+		r.Use(session.Middleware(sessionManager, devFallback))
+
 		r.Get("/health", HealthHandler)
 		r.Mount("/objects", objectsRouter)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())

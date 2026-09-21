@@ -1,0 +1,6 @@
+{
+    "root": true,
+    "title": "GraphQL API",
+    "description": "Explore GraphQL APIs for building custom clients",
+    "icon": "graphql"
+}

@@ -52,8 +52,13 @@ func (h *TenantHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hardcode a private drive creation for the user (to be moved to separate flow later)
-	drive, err := h.fsOps.CreatePrivateDrive(r.Context(), tenant.ID, user.ID)
+	// TODO: Hardcode a private drive creation for the user (to be moved to separate flow later)
+	drive, err := h.fsOps.CreateDrive(r.Context(), fsops.CreateDriveParams{
+		TenantID: tenant.ID,
+		OwnerID:  user.ID,
+		Type:     "PRIVATE",
+	})
+
 	if err != nil {
 		http.Error(w, "failed to create private drive for admin", http.StatusInternalServerError)
 		return

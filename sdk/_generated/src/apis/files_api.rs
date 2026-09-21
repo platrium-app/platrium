@@ -15,6 +15,24 @@ use crate::{apis::ResponseContent, models};
 use super::{Error, configuration, ContentType};
 
 
+/// struct for typed errors of method [`download_session_chunks`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DownloadSessionChunksError {
+    Status401(models::ErrorsUnauthorized),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`download_session_initialize`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DownloadSessionInitializeError {
+    Status404(models::ErrorsNotFound),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`upload_session_chunks`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -39,6 +57,84 @@ pub enum UploadSessionInitializeError {
     UnknownValue(serde_json::Value),
 }
 
+
+/// Generates time-bound client-direct download URLs for specific file chunk indices using a download session token.
+pub async fn download_session_chunks(configuration: &configuration::Configuration, x_platrium_downloadsession: &str, files_download_session_chunks_request: models::FilesDownloadSessionChunksRequest) -> Result<models::FilesDownloadSessionChunksResponse, Error<DownloadSessionChunksError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_header_x_platrium_downloadsession = x_platrium_downloadsession;
+    let p_body_files_download_session_chunks_request = files_download_session_chunks_request;
+
+    let uri_str = format!("{}/files/downloadsession/chunks", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.header("x-platrium-downloadsession", p_header_x_platrium_downloadsession.to_string());
+    req_builder = req_builder.json(&p_body_files_download_session_chunks_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::FilesDownloadSessionChunksResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::FilesDownloadSessionChunksResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<DownloadSessionChunksError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Initialize a file download session. Verifies file ACLs and returns a sealed download session token and metadata.
+pub async fn download_session_initialize(configuration: &configuration::Configuration, files_download_session_init_request: models::FilesDownloadSessionInitRequest) -> Result<models::FilesDownloadSessionInitResponse, Error<DownloadSessionInitializeError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_files_download_session_init_request = files_download_session_init_request;
+
+    let uri_str = format!("{}/files/downloadsession/init", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_files_download_session_init_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::FilesDownloadSessionInitResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::FilesDownloadSessionInitResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<DownloadSessionInitializeError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
 
 /// Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.
 pub async fn upload_session_chunks(configuration: &configuration::Configuration, x_platrium_uploadsession: &str, files_upload_session_chunks_request: models::FilesUploadSessionChunksRequest) -> Result<models::FilesUploadSessionChunksResponse, Error<UploadSessionChunksError>> {
@@ -125,7 +221,7 @@ pub async fn upload_session_initialize(configuration: &configuration::Configurat
     // add a prefix to parameters to efficiently prevent name collisions
     let p_body_files_upload_session_init_request = files_upload_session_init_request;
 
-    let uri_str = format!("{}/files/uploadsession", configuration.base_path);
+    let uri_str = format!("{}/files/uploadsession/init", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {

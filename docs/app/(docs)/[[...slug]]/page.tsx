@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { getMDXComponents } from '@/components/mdx';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
-import { OpenAPIPage } from '@/components/api-page';
+import { GraphQLPage, OpenAPIPage } from '@/components/api-page';
 
 export default async function Page(props: { params: Promise<{ slug?: string[] }> }) {
     const params = await props.params;
@@ -18,6 +18,19 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
                 <h1 className="text-[1.75em] font-semibold">{page.data.title}</h1>
                 <DocsBody>
                     <OpenAPIPage {...page.data.getOpenAPIPageProps()} />
+                </DocsBody>
+            </DocsPage>
+        );
+    }
+
+    // for GraphQL pages
+    else if (page.type === 'graphql') {
+        return (
+            <DocsPage toc={page.data.toc} full>
+                <DocsTitle>{page.data.title}</DocsTitle>
+                <DocsDescription>{page.data.description}</DocsDescription>
+                <DocsBody>
+                    <GraphQLPage {...page.data.getGraphQLPageProps()} />
                 </DocsBody>
             </DocsPage>
         );

@@ -1,5 +1,20 @@
 ---
 title: Platrium SDK
-description: Our Software Development Kit helps you integrate most cross-platform apps, web services and CLI tools to use Platrium in minutes.
+description: The official bridge between your applications and the Platrium engine.
 ---
 
+The Platrium SDK is the official bridge between your client application and the Platrium engine. It handles all of the heavy lifting of interacting with our internal REST infrastructure so you never have to deal with raw cryptography or chunking logic directly.
+
+Because the SDK is written in pure Rust, it compiles down natively across **Android**, **iOS**, **WebAssembly (Browsers)**, and desktop environments. This means the highly complex business logic for file transfers runs with identical, native performance across every single platform.
+
+### What the SDK Handles under the hood
+
+When you invoke a simple upload or download method, the SDK is actively managing complex protocol abstractions:
+- **File Chunking:** Automatically slicing large files into perfectly sized binary chunks.
+- **Hash Generation:** Calculating SHA-256 hashes for deduplication and HMAC verification in real-time.
+- **Network Transfer Management:** Orchestrating batch presigning, managing concurrency, and handling upload/download session passports automatically.
+- **Streaming & Deduplication:** Managing the underlying network requests to skip uploading duplicate chunks and stitch together downloaded streams.
+
+### Future GraphQL Integration
+
+Currently, the SDK acts as the ultimate tool for heavy binary transfers. However, we are actively evaluating the roadmap to include a minimal subset of GraphQL functionality directly as top-level functions in the SDK. This will allow developers to wire up quick, dirty, and powerful scripts (like fetching a list of files and immediately downloading them) using a single library!
