@@ -11,6 +11,7 @@ import { FolderHeaderToolbar } from "./FolderHeaderToolbar"
 import { FolderContentListView } from "./FolderContentListView"
 import { FolderContentGridView } from "./FolderContentGridView"
 import { SelectionArea } from "@/components/custom/SelectionArea"
+import { FilePreviewCore } from "../filepreview/FilePreviewCore"
 import type { DriveItemNode, SortField, SortDirection, ViewMode } from "./FolderViewTypes"
 
 const GET_FOLDER_INFO = graphql(`
@@ -62,6 +63,7 @@ export default function FolderRootView() {
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("asc")
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [lastSelectedIndex, setLastSelectedIndex] = React.useState<number | null>(null)
+  const [previewFileId, setPreviewFileId] = React.useState<string | null>(null)
 
   // Clear selection on folder navigation
   React.useEffect(() => {
@@ -205,6 +207,8 @@ export default function FolderRootView() {
   const handleItemDoubleClick = (clickedItem: DriveItemNode) => {
     if (clickedItem.type === "FOLDER") {
       navigate(`/folder/${clickedItem.id}`)
+    } else if (clickedItem.type === "FILE") {
+      setPreviewFileId(clickedItem.id)
     }
   }
 
@@ -317,6 +321,18 @@ export default function FolderRootView() {
           )}
         </SelectionArea>
       </div>
+
+      {previewFileId && (
+        <div
+          className="fixed bg-background/0 supports-[backdrop-filter]:bg-background/0 inset-0 z-50 h-screen w-screen flex items-center justify-center animate-in fade-in duration-150"
+        >
+          <FilePreviewCore
+            fileId={previewFileId}
+            isModal
+            onClose={() => setPreviewFileId(null)}
+          />
+        </div>
+      )}
     </FolderContextMenu>
   )
 }

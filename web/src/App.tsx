@@ -8,6 +8,7 @@ import { PlaceholderView } from "./components/custom/PlaceholderView"
 import DownloadFallbackView from "./pages/DownloadFallbackView"
 
 import HomeView from "./pages/HomeView"
+import { FilePreviewView } from "./pages/filepreview/FilePreviewCore"
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
       <BreadcrumbProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="/file/:id" element={<FilePreviewView />} />
             <Route path="/" element={<RootLayout />}>
               <Route index element={<Navigate to="/home" replace />} />
               <Route path="home" element={<HomeView />} />

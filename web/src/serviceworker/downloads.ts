@@ -7,13 +7,48 @@ const logger = createLogger("Platrium SW");
 
 declare const self: ServiceWorkerGlobalScope;
 
+export function buildDownloadHeaders(
+    session: { fileName: string; mimeType: string; fileSize: bigint },
+    isForceDownload: boolean
+): Headers {
+    const headers = new Headers();
+    headers.set('Server', 'platrium-serviceworker');
+    headers.set('Content-Type', session.mimeType);
+    headers.set('Accept-Ranges', 'bytes');
+    headers.set('Content-Length', session.fileSize.toString());
+
+    // Sanitize fallback filename to strictly ASCII-printable characters (remove non-ASCII, quotes, slashes)
+    const safeFileName = session.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["/\\]/g, '_');
+
+    // RFC 5987 standard for UTF-8 filenames in HTTP headers
+    const encodedFileName = encodeURIComponent(session.fileName);
+
+    if (isForceDownload) {
+        headers.set('Content-Disposition', `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`);
+    } else {
+        headers.set('Content-Disposition', `inline; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`);
+    }
+
+    return headers;
+}
+
+let clientInstance: PlatriumClient | null = null;
+
+function getClient(): PlatriumClient {
+    if (!clientInstance) {
+        const baseUrl = "http://localhost:3000/api";
+        logger.debug(`Initializing singleton PlatriumClient with baseUrl: ${baseUrl}`);
+        clientInstance = new PlatriumClient(baseUrl);
+    }
+    return clientInstance;
+}
+
 export async function handleDownloadRequest(event: FetchEvent, fileId: string, url: URL): Promise<Response> {
     const request = event.request;
-    logger.info(`Intercepted download request for fileId: ${fileId}`);
+    const method = request.method.toUpperCase();
+    logger.info(`Intercepted ${method} download request for fileId: ${fileId}`);
     try {
-        const baseUrl = "http://localhost:3000/api";
-        logger.debug(`Initializing PlatriumClient with baseUrl: ${baseUrl}`);
-        const client = new PlatriumClient(baseUrl);
+        const client = getClient();
 
         logger.debug(`Requesting download session...`);
         const session = await client.files().createDownloadSession(fileId);
@@ -25,27 +60,18 @@ export async function handleDownloadRequest(event: FetchEvent, fileId: string, u
         });
 
         const isForceDownload = url.searchParams.get('dl') === '1';
+        const headers = buildDownloadHeaders(session, isForceDownload);
 
-        const fileName = session.fileName;
-        const mimeType = session.mimeType;
-        const fileSize = session.fileSize; // bigint
-
-        const headers = new Headers();
-        headers.set('Content-Type', mimeType);
-        headers.set('Accept-Ranges', 'bytes');
-
-        // Sanitize fallback filename to strictly ASCII-printable characters (remove non-ASCII, quotes, slashes)
-        const safeFileName = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["/\\]/g, '_');
-
-        // RFC 5987 standard for UTF-8 filenames in HTTP headers
-        const encodedFileName = encodeURIComponent(fileName);
-
-        if (isForceDownload) {
-            headers.set('Content-Disposition', `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`);
-        } else {
-            headers.set('Content-Disposition', `inline; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`);
+        // Handle HTTP HEAD request: Return headers & metadata with empty body
+        if (method === 'HEAD') {
+            logger.info(`Responding to HEAD request with metadata headers`);
+            return new Response(null, {
+                status: 200,
+                headers,
+            });
         }
 
+        const fileSize = session.fileSize; // bigint
         const rangeHeader = request.headers.get('Range');
         if (rangeHeader) {
             logger.debug(`Range header present: ${rangeHeader}`);
@@ -74,6 +100,7 @@ export async function handleDownloadRequest(event: FetchEvent, fileId: string, u
                     return new Response(null, {
                         status: 416, // Range Not Satisfiable
                         headers: {
+                            'Server': 'platrium-serviceworker',
                             'Content-Range': `bytes */${fileSize}`
                         }
                     });

@@ -1,0 +1,208 @@
+---
+title: File Preview Architecture
+description: Modular, plugin-driven file preview engine with reactive menubar registration!
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+Viewing files directly in the browser shouldn't mean loading a monolith that tries to handle every file format under the sun. Whether it's a PDF, a high-res image, an MP4 video, or a raw text file, Platrium uses a **modular plugin architecture** to render rich file previews with dedicated toolbar controls and context menus!
+
+## Plugin & Menu Architecture
+
+Platrium separates file previewing into two distinct systems: **Plugin Registration** (which plugin renders which MIME type) and **Menu Registration** (how plugins contribute commands to the top Menubar and Context Menu).
+
+```mermaid
+flowchart TD
+    classDef browser fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef sw fill:#10b981,stroke:#059669,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef wasm fill:#ed1a38,stroke:#b91c1c,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef backend fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef stream fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+
+    UI["FilePreviewCore Page"]:::browser
+    MenuBar["FilePreviewMenuBar"]:::stream
+    
+    subgraph Registry_Layer["Plugin Registry System"]
+        Registry["previewRegistry (PluginRegistry)"]:::backend
+        Match["getPluginForMimeType()"]:::wasm
+    end
+
+    subgraph Menu_Layer["Menu Registration Layer"]
+        Provider["FilePreviewMenuProvider"]:::sw
+        ContextStore["FilePreviewMenuContext"]:::wasm
+    end
+
+    subgraph Plugin_Layer["Active Preview Plugin"]
+        Plugin["ImagePlugin / PdfPlugin / FallbackPlugin"]:::backend
+        Hook["useRegisterMenu('Tools', [...])"]:::sw
+    end
+
+    UI -->|"1. Matches MIME Type"| Registry
+    Registry --> Match
+    Match -->|"2. Mounts"| Plugin
+    UI --> Provider
+    Plugin --> Hook
+    Hook -->|"3. Registers Menu Items"| ContextStore
+    ContextStore -->|"4. Groups by Category"| MenuBar
+    MenuBar -->|"5. Renders Menus"| UI
+```
+
+### Plugin Registration (`PluginRegistry`)
+
+Every preview plugin implements the `PluginDefinition` interface, declaring its supported MIME types (exact strings like `application/pdf` or wildcard patterns like `image/*`):
+
+```ts
+export interface PluginDefinition {
+  id: string;
+  name: string;
+  supportedMimeTypes: string[]; // e.g. ["image/*", "application/png"]
+  maxSizeBytes?: number; // max size in bytes (undefined = 32MB default limit, 0 = unlimited)
+  component: ComponentType<FilePreviewPluginProps>;
+}
+```
+
+Plugins register with the global `previewRegistry` instance (`previewRegistry.register(ImagePlugin)`). When a file is loaded, `previewRegistry.getPluginForMimeType(mimeType)` finds the matching handler and caches the lookup for O(1) evaluation. If no plugin matches, it returns `FallbackPlugin`.
+
+#### Preview File Size Limits (`maxSizeBytes`)
+
+To prevent non-range plugins from crashing browser memory with huge files (like a 500MB PNG image), Platrium enforces file size limits during the initial `HEAD /rawcontent/{id}` call:
+- **Default Limit (`32 MB`)**: If a plugin omits `maxSizeBytes` (leaves it `undefined`), `FilePreviewCore` applies `DEFAULT_MAX_PREVIEW_SIZE_BYTES` (32 MB).
+- **Custom Plugin Limit**: Plugins can specify custom limits (e.g. `ImagePreviewPlugin` specifies `25 * 1024 * 1024` = 25 MB).
+- **Unlimited (`0`)**: Setting `maxSizeBytes: 0` specifies that the plugin supports progressive/range-based streaming (e.g. `VideoPlugin`) and has no size cap.
+- **Fallback Trigger**: If `sizeBytes > maxSizeBytes`, `FilePreviewCore` renders `FallbackPlugin` displaying a **"File Too Large to Preview"** warning with a manual download button.
+
+### Menu Registration (`FilePreviewMenuContext`)
+
+Instead of hardcoding toolbar buttons, menu contributions are fully reactive:
+1. `FilePreviewCore` wraps the previewer with `<FilePreviewMenuProvider>`.
+2. `FilePreviewMenuBar` registers core defaults (`Download`, `File Info`) under the `File` category using `useRegisterMenu("File", [...])`.
+3. The active plugin calls `useRegisterMenu("Tools", [...])` or `useRegisterMenu("View", [...])` directly inside its component body.
+4. `FilePreviewMenuBar` groups registered items by category and renders the top Menubar and right-click `ContextMenu`.
+5. On plugin unmount, `useRegisterMenu` automatically cleans up the plugin's items.
+
+:::info
+**Loop Safety**: `FilePreviewMenuProvider` uses deep-equality checks on item properties and memoizes the context value. Inline array definitions in plugin renders will not cause re-render loops!
+:::
+
+## Metadata Resolution & Direct Streaming
+
+Platrium fetches file metadata first via HTTP HEAD before initializing plugins or streaming content.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Core as FilePreviewCore
+    participant Registry as PluginRegistry
+    participant Plugin as Plugin Component
+    participant SW as Service Worker (/rawcontent/)
+
+    User->>Core: Open /file/{id}
+    Core->>SW: HEAD /rawcontent/{id}
+    SW-->>Core: Metadata (Content-Type, Filename)
+    Core->>Registry: getPluginForMimeType(mimeType)
+    
+    alt Plugin Matched
+        Registry-->>Core: Matched Plugin (e.g. ImagePlugin)
+        Core->>Plugin: Mount Plugin Component
+        Plugin->>SW: Stream via <img src="/rawcontent/{id}">
+    else No Plugin Matched
+        Registry-->>Core: FallbackPlugin
+        Core->>Plugin: Mount FallbackPlugin
+        Note over Plugin: Display "No Preview Available"
+    end
+```
+
+### Metadata Resolution via HTTP HEAD
+
+When navigating to `/file/:id`, `FilePreviewCore` executes a lightweight **HTTP HEAD** request to `/rawcontent/{fileId}`. 
+
+The Service Worker responds instantly with response headers containing:
+- `Content-Type` (e.g. `image/png`, `application/pdf`)
+- `Content-Length` (file size in bytes)
+- `Content-Disposition` (original filename)
+
+This allows `FilePreviewCore` to pick the right plugin without downloading any file body payload upfront!
+
+### Direct Streaming via `/rawcontent/`
+
+Plugins render media elements by pointing directly to `/rawcontent/{fileId}`:
+- **Images & Video**: Rendered using standard `<img src="/rawcontent/{fileId}" />` or `<video src="/rawcontent/{fileId}" />` elements. The Downloads Service Worker intercepts these requests and streams the bytes seamlessly.
+- **Documents & Range Requests**: PDF or audio plugins issue HTTP `Range` requests directly to `/rawcontent/{fileId}` to stream byte chunks on-demand.
+- **Fallback View**: If no plugin supports the MIME type, `FallbackPlugin` displays a warning screen with a manual download action.
+
+## Building a Custom Preview Plugin
+
+Here is a complete example showing how to build an `ImagePreviewPlugin` that streams an image directly via `/rawcontent/` and registers custom menu items:
+
+```tsx
+import React, { useState } from "react";
+import type { FilePreviewPluginProps, PluginDefinition } from "../PluginDefinition";
+import { useRegisterMenu } from "../FilePreviewMenuContext";
+import { previewRegistry } from "../PluginRegistry";
+import { RotateCw, ZoomIn, ZoomOut } from "lucide-react";
+
+export const ImagePluginComponent: React.FC<FilePreviewPluginProps> = ({ info }) => {
+    const [rotation, setRotation] = useState(0);
+
+    // 1. Register custom menu items for Tools and View categories
+    useRegisterMenu("Tools", [
+        {
+            id: "img-rotate",
+            label: "Rotate Clockwise",
+            category: "Tools",
+            icon: RotateCw,
+            shortcut: "⌘R",
+            onClick: () => setRotation((r) => (r + 90) % 360),
+        },
+    ]);
+
+    useRegisterMenu("View", [
+        {
+            id: "img-zoom-in",
+            label: "Zoom In",
+            category: "View",
+            icon: ZoomIn,
+            shortcut: "⌘+",
+            onClick: () => {
+                /* Custom zoom logic */
+            },
+        },
+    ]);
+
+    // 2. Stream image directly via /rawcontent/{fileId}
+    const rawContentUrl = `/rawcontent/${info.fileId}`;
+
+    return (
+        <div className="flex items-center justify-center h-full w-full p-4 overflow-hidden">
+            <img
+                src={rawContentUrl}
+                alt={info.fileName}
+                style={{ transform: `rotate(${rotation}deg)` }}
+                className="max-h-full max-w-full object-contain transition-transform duration-200"
+            />
+        </div>
+    );
+};
+
+// 3. Define Plugin supporting image wildcard MIME types
+export const ImagePlugin: PluginDefinition = {
+    id: "image-previewer",
+    name: "Image Previewer",
+    supportedMimeTypes: ["image/*"],
+    maxSizeBytes: 25 * 1024 * 1024, // 25 MB max limit (undefined = 32MB default, 0 = unlimited)
+    component: ImagePluginComponent,
+};
+
+// 4. Register with global PluginRegistry
+previewRegistry.register(ImagePlugin);
+```
+
+<Accordions>
+<Accordion title="How does MIME type wildcard matching work?">
+When `previewRegistry.getPluginForMimeType("image/png")` is called, it checks exact matches first, then tests wildcard patterns like `image/*`. The first matching plugin in the registry is selected.
+</Accordion>
+<Accordion title="Can plugins render overlay controls?">
+Yes! Plugins own their full container below the top menubar. You can render floating toolbars, pagination pills, or zoom sliders anywhere using absolute positioning.
+</Accordion>
+</Accordions>
