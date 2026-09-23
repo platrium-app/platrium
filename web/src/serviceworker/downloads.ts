@@ -38,9 +38,66 @@ function getClient(): PlatriumClient {
     if (!clientInstance) {
         const baseUrl = "http://localhost:3000/api";
         logger.debug(`Initializing singleton PlatriumClient with baseUrl: ${baseUrl}`);
-        clientInstance = new PlatriumClient(baseUrl);
+        try {
+            clientInstance = new PlatriumClient(baseUrl);
+        } catch (e) {
+            clientInstance = null;
+            throw e;
+        }
     }
     return clientInstance;
+}
+
+// TODO: This needs to be written better instead of parsing
+export function createErrorResponse(err: unknown): Response {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const isNotFound =
+        errorMessage.toLowerCase().includes("404") ||
+        errorMessage.toLowerCase().includes("not found");
+
+    if (isNotFound) {
+        return new Response(
+            JSON.stringify({
+                error: "FILE_NOT_FOUND",
+                message: "The requested file was not found or is inaccessible.",
+                details: errorMessage
+            }),
+            {
+                status: 404,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Server': 'platrium-serviceworker'
+                }
+            }
+        );
+    }
+
+    const isBadGateway =
+        errorMessage.includes("ApiError") ||
+        errorMessage.includes("reqwest") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("Failed to fetch");
+
+    const status = isBadGateway ? 502 : 500;
+    const errorType = isBadGateway ? "BAD_GATEWAY" : "INTERNAL_SERVER_ERROR";
+
+    return new Response(
+        JSON.stringify({
+            error: errorType,
+            message: isBadGateway
+                ? "Failed to communicate with storage backend or download stream."
+                : "Internal SDK or Service Worker error occurred.",
+            details: errorMessage,
+            stack: err instanceof Error ? err.stack : undefined
+        }),
+        {
+            status,
+            headers: {
+                'Content-Type': 'application/json',
+                'Server': 'platrium-serviceworker'
+            }
+        }
+    );
 }
 
 export async function handleDownloadRequest(event: FetchEvent, fileId: string, url: URL): Promise<Response> {
@@ -157,6 +214,6 @@ export async function handleDownloadRequest(event: FetchEvent, fileId: string, u
 
     } catch (err) {
         logger.error("Fatal Error handling download request:", err);
-        return new Response("Not Found", { status: 404 });
+        return createErrorResponse(err);
     }
 }

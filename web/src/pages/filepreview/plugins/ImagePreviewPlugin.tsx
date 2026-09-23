@@ -11,7 +11,6 @@ import {
     AlertTriangle,
 } from "lucide-react";
 import { PlaceholderView } from "@/components/custom/PlaceholderView";
-import { Spinner } from "@/components/ui/spinner";
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 5.0;
@@ -58,7 +57,7 @@ const isPointerOverImage = (
     );
 };
 
-const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info }) => {
+const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info, onLoaded }) => {
     const [rotation, setRotation] = useState(0);
     const [transformState, setTransformState] = useState({
         scale: 1.0,
@@ -70,10 +69,15 @@ const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info })
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [isHoveringImage, setIsHoveringImage] = useState(false);
     const [hasError, setHasError] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
+
+    useEffect(() => {
+        if (imageRef.current?.complete) {
+            onLoaded();
+        }
+    }, [onLoaded]);
 
     const handleZoomIn = useCallback(() => {
         setTransformState((prev) => {
@@ -241,6 +245,8 @@ const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info })
         setIsDragging(false);
     };
 
+    const imageUrl = constructRawContentUrl(info.fileId);
+
     if (hasError) {
         return (
             <PlaceholderView
@@ -252,7 +258,6 @@ const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info })
         );
     }
 
-    const imageUrl = constructRawContentUrl(info.fileId);
     const isZoomedIn = scale > 1.0;
 
     return (
@@ -274,28 +279,24 @@ const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info })
                     : "cursor-default"
                 }`}
         >
-            {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
-                    <Spinner className="h-8 w-8 text-muted-foreground" />
-                </div>
-            )}
             <img
                 ref={imageRef}
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
                 src={imageUrl}
                 alt={info.fileName}
-                onLoad={() => setIsLoading(false)}
+                onLoad={() => {
+                    onLoaded();
+                }}
                 onError={() => {
-                    setIsLoading(false);
                     setHasError(true);
+                    onLoaded();
                 }}
                 style={{
                     transform: `translate3d(${position.x}px, ${position.y}px, 0px) scale(${scale}) rotate(${rotation}deg)`,
                     transition: isDragging || isWheeling ? "none" : "transform 150ms cubic-bezier(0.2, 0, 0, 1)",
                 }}
-                className={`max-h-full max-w-full object-contain ${isLoading ? "opacity-0" : "opacity-100"
-                    }`}
+                className="max-h-full max-w-full object-contain opacity-100"
             />
         </div>
     );

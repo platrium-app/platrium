@@ -10,12 +10,6 @@ export default defineConfig({
     headers: {
       "Service-Worker-Allowed": "/",
     },
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      }
-    },
     fs: {
       allow: ["../sdk", "./"],
     },
@@ -28,7 +22,7 @@ export default defineConfig({
       srcDir: 'src/serviceworker',
       filename: 'index.ts',
       injectManifest: {
-        injectionPoint: null, // We don't precache anything yet
+        injectionPoint: undefined, // We don't precache anything yet
       },
       devOptions: {
         enabled: true,
