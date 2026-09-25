@@ -41,48 +41,22 @@ impl DownloadDestination {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
-#[derive(Clone, uniffi::Object)]
-pub struct DownloadSession {
-    pub(crate) session_id: String,
-    pub(crate) file_name: String,
-    pub(crate) file_size: u64,
-    pub(crate) mime_type: String,
-    pub(crate) api_config: Arc<Configuration>,
-    pub(crate) transfer_manager: Arc<NetworkTransferManager>,
-    pub(crate) http_client: reqwest::Client,
+struct DownloadSessionInner {
+    session_id: String,
+    file_name: String,
+    file_size: u64,
+    mime_type: String,
+    api_config: Arc<Configuration>,
+    transfer_manager: Arc<NetworkTransferManager>,
+    http_client: reqwest::Client,
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
-impl DownloadSession {
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = fileName))]
-    pub fn file_name(&self) -> String {
-        self.file_name.clone()
-    }
+#[derive(Clone, uniffi::Object)]
+pub struct DownloadSession(Arc<DownloadSessionInner>);
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = fileSize))]
-    pub fn file_size(&self) -> u64 {
-        self.file_size
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = mimeType))]
-    pub fn mime_type(&self) -> String {
-        self.mime_type.clone()
-    }
-
-    /// Streams the entire file to the destination.
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = streamTo))]
-    pub async fn stream_to(
-        &self,
-        destination: &DownloadDestination,
-    ) -> Result<(), crate::errors::PlatriumError> {
-        let range_end_byte = self.file_size.saturating_sub(1);
-        self.stream_range_to(destination, 0, range_end_byte).await
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = streamRangeTo))]
-    pub async fn stream_range_to(
+impl DownloadSessionInner {
+    pub(crate) async fn stream_range_to_impl(
         &self,
         destination: &DownloadDestination,
         range_start_byte: u64,
@@ -256,39 +230,70 @@ impl DownloadSession {
     }
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
+impl DownloadSession {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = fileName))]
+    pub fn file_name(&self) -> String {
+        self.0.file_name.clone()
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = fileSize))]
+    pub fn file_size(&self) -> u64 {
+        self.0.file_size
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = mimeType))]
+    pub fn mime_type(&self) -> String {
+        self.0.mime_type.clone()
+    }
+
+    /// Streams the entire file to the destination.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = streamTo))]
+    pub async fn stream_to(
+        &self,
+        destination: &DownloadDestination,
+    ) -> Result<(), crate::errors::PlatriumError> {
+        let inner = self.0.clone();
+        let range_end_byte = inner.file_size.saturating_sub(1);
+        inner.stream_range_to_impl(destination, 0, range_end_byte).await
+    }
+
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = streamRangeTo))]
+    pub async fn stream_range_to(
+        &self,
+        destination: &DownloadDestination,
+        range_start_byte: u64,
+        range_end_byte: u64,
+    ) -> Result<(), crate::errors::PlatriumError> {
+        let inner = self.0.clone();
+        inner.stream_range_to_impl(destination, range_start_byte, range_end_byte).await
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 impl Api {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = createDownloadSession))]
     pub async fn create_download_session(
         &self,
         file_id: String,
     ) -> Result<DownloadSession, crate::errors::PlatriumError> {
+        let inner = self.0.clone();
         let req = models::FilesDownloadSessionInitRequest::new(file_id);
-        let resp = files_api::download_session_initialize(&self.api_config, req)
+        let resp = files_api::download_session_initialize(&inner.api_config, req)
             .await
             .map_err(|e| crate::errors::PlatriumError::ApiError(e.to_string()))?;
 
-        Ok(DownloadSession {
+        Ok(DownloadSession(Arc::new(DownloadSessionInner {
             session_id: resp.session_id,
             file_name: resp.file_name,
             file_size: resp.file_size as u64,
             mime_type: resp.mime_type,
-            api_config: self.api_config.clone(),
-            transfer_manager: self.transfer_manager.clone(),
+            api_config: inner.api_config.clone(),
+            transfer_manager: inner.transfer_manager.clone(),
             http_client: reqwest::Client::new(),
-        })
+        })))
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-impl Api {
-    /// Creates a download session for a given file ID.
-    #[wasm_bindgen(js_name = createDownloadSession)]
-    pub async fn create_download_session_wasm(
-        &self,
-        file_id: String,
-    ) -> Result<DownloadSession, wasm_bindgen::JsValue> {
-        self.create_download_session(file_id)
-            .await
-            .map_err(|e| wasm_bindgen::JsValue::from_str(&format!("{:?}", e)))
-    }
-}
