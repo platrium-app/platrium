@@ -15,12 +15,12 @@ declare const self: ServiceWorkerGlobalScope & {
 const manifest = self.__WB_MANIFEST;
 
 // Keep track of whether WASM is initialized globally for the Service Worker
-let wasmInitialized = false;
+let wasmInitPromise: Promise<unknown> | null = null;
 async function ensureWasmInit() {
-    if (!wasmInitialized) {
-        await initWasm();
-        wasmInitialized = true;
+    if (!wasmInitPromise) {
+        wasmInitPromise = initWasm();
     }
+    await wasmInitPromise;
 }
 
 self.addEventListener('install', () => {

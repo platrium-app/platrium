@@ -44,6 +44,7 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             label: "Download",
             category: "File",
             icon: Download,
+            isDefault: true,
             onClick: (f) => f && triggerFileDownload(f.fileId, f.fileName),
         },
         {
@@ -51,6 +52,7 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             label: "File Info",
             category: "File",
             icon: Info,
+            isDefault: true,
             onClick: () => {
                 /* info action */
             },
@@ -63,6 +65,7 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             label: "Copy File ID",
             category: "Tools",
             icon: ScanBarcode,
+            isDefault: true,
             onClick: (f) => f && navigator.clipboard?.writeText(f.fileId),
         },
         {
@@ -70,6 +73,7 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             label: "Show QR Code",
             category: "Tools",
             icon: QrCode,
+            isDefault: true,
             onClick: () => {
                 /* QR code action */
             },
@@ -88,6 +92,18 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             list.push(item);
             groups.set(item.category, list);
         });
+
+        for (const [category, list] of groups.entries()) {
+            const customItems = list.filter((item) => !item.isDefault);
+            const defaultItems = list.filter((item) => item.isDefault);
+            
+            if (customItems.length > 0 && defaultItems.length > 0) {
+                // Ensure the first default item has a separator to split custom from default
+                defaultItems[0] = { ...defaultItems[0], separatorBefore: true };
+            }
+            
+            groups.set(category, [...customItems, ...defaultItems]);
+        }
 
         return Array.from(groups.entries()).sort(
             ([catA], [catB]) => getCategoryIndex(catA) - getCategoryIndex(catB)

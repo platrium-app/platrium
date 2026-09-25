@@ -32,20 +32,8 @@ export function buildDownloadHeaders(
     return headers;
 }
 
-let clientInstance: PlatriumClient | null = null;
-
 function getClient(): PlatriumClient {
-    if (!clientInstance) {
-        const baseUrl = "http://localhost:3000/api";
-        logger.debug(`Initializing singleton PlatriumClient with baseUrl: ${baseUrl}`);
-        try {
-            clientInstance = new PlatriumClient(baseUrl);
-        } catch (e) {
-            clientInstance = null;
-            throw e;
-        }
-    }
-    return clientInstance;
+    return new PlatriumClient("http://localhost:3000/api");
 }
 
 // TODO: This needs to be written better instead of parsing

@@ -9,6 +9,7 @@ import {
     RotateCw,
     RotateCcw,
     AlertTriangle,
+    Printer,
 } from "lucide-react";
 import { PlaceholderView } from "@/components/custom/PlaceholderView";
 
@@ -159,6 +160,54 @@ const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info, o
         },
     ]);
 
+    const imageUrl = constructRawContentUrl(info.fileId);
+
+    const handlePrint = useCallback(() => {
+        const img = imageRef.current;
+        if (!img) return;
+
+        let srcToPrint = imageUrl;
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(img, 0, 0);
+                srcToPrint = canvas.toDataURL('image/png');
+            }
+        } catch (e) {
+            console.error("Canvas taint error, falling back to url", e);
+        }
+
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+        
+        const printDoc = iframe.contentWindow?.document;
+        if (printDoc) {
+            printDoc.write(`
+                <html>
+                    <head><title>Print Image</title></head>
+                    <body style="margin:0; display:flex; justify-content:center; align-items:center; height:100vh;">
+                        <img src="${srcToPrint}" style="max-width:100%; max-height:100vh;" onload="window.print();" />
+                    </body>
+                </html>
+            `);
+            printDoc.close();
+        }
+    }, [imageUrl]);
+
+    useRegisterMenu("File", [
+        {
+            id: "img-print",
+            label: "Print",
+            category: "File",
+            icon: Printer,
+            onClick: handlePrint,
+        },
+    ]);
+
     const [isWheeling, setIsWheeling] = useState(false);
     const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -245,7 +294,6 @@ const ImagePreviewPluginComponent: React.FC<FilePreviewPluginProps> = ({ info, o
         setIsDragging(false);
     };
 
-    const imageUrl = constructRawContentUrl(info.fileId);
 
     if (hasError) {
         return (

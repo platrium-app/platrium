@@ -18,6 +18,7 @@ export interface PluginMenuItem {
   checked?: boolean;
   separatorBefore?: boolean;
   shortcut?: string;
+  isDefault?: boolean;
   onClick: (info: FilePreviewInfo) => void;
 }
 

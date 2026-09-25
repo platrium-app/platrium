@@ -97,7 +97,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
 
     <UploadContext.Provider value={{ triggerUpload, cancelTransfer, clearCompleted, transfers }}>
       {children}
-      
+
       {/* Hidden file input for native OS picker */}
       <input
         type="file"
