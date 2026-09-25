@@ -78,6 +78,18 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({
     rowVirtualizer.measure();
   }, [zoomLevel, rowVirtualizer]);
 
+  // Handle internal PDF links
+  useEffect(() => {
+    const handleJump = (e: Event) => {
+      const customEvent = e as CustomEvent<{ pageIndex: number }>;
+      const { pageIndex } = customEvent.detail;
+      // pdfjs gives 0-indexed page indexes for `getPageIndex`
+      rowVirtualizer.scrollToIndex(pageIndex, { align: 'start' });
+    };
+    window.addEventListener('pdfrenderer_jumptopage', handleJump);
+    return () => window.removeEventListener('pdfrenderer_jumptopage', handleJump);
+  }, [rowVirtualizer]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 space-y-4">
@@ -195,7 +207,7 @@ export const PdfRenderer: React.FC<PdfRendererProps> = ({
       >
         <div
           style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
+            height: `${rowVirtualizer.getTotalSize() + 80}px`,
             width: '100%',
             position: 'relative',
           }}
