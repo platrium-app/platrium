@@ -12,6 +12,7 @@ import { FolderContentListView } from "./FolderContentListView"
 import { FolderContentGridView } from "./FolderContentGridView"
 import { SelectionArea } from "@/components/custom/SelectionArea"
 import { FilePreviewCore } from "../filepreview/FilePreviewCore"
+import { Dialog } from "@base-ui/react/dialog"
 import type { DriveItemNode, SortField, SortDirection, ViewMode } from "./FolderViewTypes"
 
 const GET_FOLDER_INFO = graphql(`
@@ -322,17 +323,34 @@ export default function FolderRootView() {
         </SelectionArea>
       </div>
 
-      {previewFileId && (
-        <div
-          className="fixed bg-background/0 supports-[backdrop-filter]:bg-background/0 inset-0 z-50 h-screen w-screen flex items-center justify-center animate-in fade-in duration-150"
-        >
-          <FilePreviewCore
-            fileId={previewFileId}
-            isModal
-            onClose={() => setPreviewFileId(null)}
+      <Dialog.Root
+        open={Boolean(previewFileId)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewFileId(null)
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Backdrop 
+            className="fixed inset-0 z-50 bg-black/15 dark:bg-black/60 backdrop-blur-xl dark:backdrop-blur-sm backdrop-saturate-200 dark:backdrop-saturate-100 transition-opacity duration-150 ease-out data-starting-style:opacity-0 data-ending-style:opacity-0"
+            onContextMenu={(e) => e.stopPropagation()}
           />
-        </div>
-      )}
+          <Dialog.Popup
+            initialFocus={false}
+            className="fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0 outline-none"
+            onContextMenu={(e) => e.stopPropagation()}
+          >
+            {previewFileId && (
+              <FilePreviewCore
+                fileId={previewFileId}
+                isModal
+                onClose={() => setPreviewFileId(null)}
+              />
+            )}
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </FolderContextMenu>
   )
 }
+
+

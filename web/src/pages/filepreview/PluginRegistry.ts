@@ -1,6 +1,9 @@
 import { type PluginDefinition } from './PluginDefinition';
 import { FallbackPlugin } from './plugins/FallbackPlugin';
 import { ImagePreviewPlugin } from './plugins/ImagePreviewPlugin';
+import { PdfPreviewPlugin } from './plugins/PdfPreviewPlugin';
+import { VideoPreviewPlugin } from './plugins/VideoPreviewPlugin';
+import { AudioPreviewPlugin } from './plugins/AudioPreviewPlugin';
 
 class PluginRegistry {
   private plugins: PluginDefinition[] = [];
@@ -31,3 +34,6 @@ class PluginRegistry {
 
 export const previewRegistry = new PluginRegistry();
 previewRegistry.register(ImagePreviewPlugin);
+previewRegistry.register(PdfPreviewPlugin);
+previewRegistry.register(VideoPreviewPlugin);
+previewRegistry.register(AudioPreviewPlugin);

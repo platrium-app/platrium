@@ -1,11 +1,11 @@
-use std::sync::Arc;
+
 
 use crate::xplat::file::XPlatFile;
 use futures::stream::{FuturesUnordered, StreamExt};
 use platrium_restapi::apis::files_api;
 use platrium_restapi::models;
 
-use super::Api;
+use super::{Api, ApiInner};
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 #[derive(uniffi::Object)]
@@ -36,7 +36,7 @@ impl UploadSource {
     }
 }
 
-impl Api {
+impl ApiInner {
     pub(crate) async fn start_uploadsession(
         &self,
         parent_id: &str,
@@ -246,43 +246,25 @@ impl Api {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[uniffi::export(async_runtime = "tokio")]
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 impl Api {
     /// Uploads a file by chunking, hashing, and registering it with the backend.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = upload))]
     pub async fn upload(
         &self,
-        parent_id: &str,
-        source: Arc<UploadSource>,
+        parent_id: String,
+        source: &UploadSource,
     ) -> Result<String, crate::errors::PlatriumError> {
-        self.start_uploadsession(parent_id, &source.file_name, &source.xplat)
+        let inner = self.0.clone();
+        inner.start_uploadsession(&parent_id, &source.file_name, &source.xplat)
             .await
     }
 
     /// Cancels a running upload
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = cancelUpload))]
     pub async fn cancel_upload(&self, client_file_id: String) {
-        self.transfer_manager.cancel_transfer(&client_file_id).await;
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen]
-impl Api {
-    /// Uploads a file by chunking, hashing, and registering it with the backend.
-    #[wasm_bindgen(js_name = upload)]
-    pub async fn upload(
-        &self,
-        parent_id: &str,
-        source: UploadSource,
-    ) -> Result<String, wasm_bindgen::JsValue> {
-        self.start_uploadsession(parent_id, &source.file_name, &source.xplat)
-            .await
-            .map_err(|e| wasm_bindgen::JsValue::from_str(&format!("{:?}", e)))
-    }
-
-    /// Cancels a running upload
-    #[wasm_bindgen(js_name = cancelUpload)]
-    pub async fn cancel_upload(&self, transfer_id: String) {
-        self.transfer_manager.cancel_transfer(&transfer_id).await;
+        let inner = self.0.clone();
+        inner.transfer_manager.cancel_transfer(&client_file_id).await;
     }
 }

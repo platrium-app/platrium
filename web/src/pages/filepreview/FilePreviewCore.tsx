@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { previewRegistry } from "./PluginRegistry";
 import { DEFAULT_MAX_PREVIEW_SIZE_BYTES, type FilePreviewInfo, type PreviewFeatures } from "./PluginDefinition";
@@ -6,9 +6,10 @@ import { FallbackPlugin } from "./plugins/FallbackPlugin";
 import { FilePreviewMenuBar } from "./FilePreviewMenuBar";
 import { Spinner } from "@/components/ui/spinner";
 import { PlaceholderView } from "@/components/custom/PlaceholderView";
-import { CloudAlertIcon, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CloudAlertIcon } from "lucide-react";
 import { constructRawContentUrl, parseFilenameFromContentDisposition } from "@/lib/utils";
+
+import { useServiceWorkerReady } from "@/hooks/useServiceWorkerReady";
 
 import { FilePreviewMenuProvider } from "./FilePreviewMenuContext";
 
@@ -25,11 +26,22 @@ interface FileMetadata {
 }
 
 const FilePreviewInner: React.FC<FilePreviewCoreProps> = ({ fileId, isModal, onClose }) => {
+    const { isControlling } = useServiceWorkerReady(true);
     const [metadata, setMetadata] = useState<FileMetadata | null>(null);
     const [error, setError] = useState<Error | null>(null);
     const [features, setFeatures] = useState<PreviewFeatures>({});
+    const [isContentLoaded, setIsContentLoaded] = useState(false);
+    const handleLoaded = useCallback(() => setIsContentLoaded(true), []);
 
     useEffect(() => {
+        setIsContentLoaded(false);
+        setMetadata(null);
+        setError(null);
+    }, [fileId]);
+
+    useEffect(() => {
+        if (!isControlling) return;
+
         const resolveMetadata = async () => {
             try {
                 const url = constructRawContentUrl(fileId);
@@ -56,78 +68,36 @@ const FilePreviewInner: React.FC<FilePreviewCoreProps> = ({ fileId, isModal, onC
         };
 
         resolveMetadata();
-    }, [fileId]);
+    }, [fileId, isControlling]);
 
-    const renderPlaceholder = (
-        icon: React.ComponentType<{ className?: string }>,
-        title: string,
-        description: React.ReactNode,
-        variant: "ghost" | "warning" | "error"
-    ) => (
-        <div className={isModal ? "flex h-full w-full items-center justify-center bg-background/40 backdrop-blur-md relative" : "flex h-screen w-screen items-center justify-center bg-background/40 backdrop-blur-md relative"}>
-            {isModal && onClose && (
-                <div className="absolute top-3 right-3 z-50">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} title="Close Preview">
-                        <X className="h-4 w-4" />
-                    </Button>
-                </div>
-            )}
-            <PlaceholderView
-                icon={icon}
-                title={title}
-                description={description}
-                variant={variant}
-            />
-        </div>
-    );
+    const containerClasses = isModal
+        ? "flex flex-col h-screen w-screen bg-transparent text-foreground overflow-hidden relative"
+        : "flex flex-col h-screen w-screen bg-background text-foreground overflow-hidden relative";
 
-    if (error) {
-        return renderPlaceholder(
-            CloudAlertIcon,
-            "Failed to Fetch File",
-            `The following Error Occured: ${error.message}`,
-            "error"
-        );
-    }
-
-    if (!metadata) {
-        return renderPlaceholder(
-            Spinner,
-            "Hang tight!",
-            "We're fetching the information about the file.",
-            "ghost"
-        );
-    }
-
-    const pluginDefinition = previewRegistry.getPluginForMimeType(metadata.mimeType);
-
-    // Calculate effective max size: undefined defaults to 32MB, 0 means unlimited
-    const effectiveMaxSize = pluginDefinition.maxSizeBytes !== undefined
+    const pluginDefinition = metadata ? previewRegistry.getPluginForMimeType(metadata.mimeType) : null;
+    const effectiveMaxSize = pluginDefinition?.maxSizeBytes !== undefined
         ? pluginDefinition.maxSizeBytes
         : DEFAULT_MAX_PREVIEW_SIZE_BYTES;
+    const isTooLarge = metadata && effectiveMaxSize > 0 && metadata.sizeBytes !== undefined && metadata.sizeBytes > effectiveMaxSize;
 
-    const isTooLarge = effectiveMaxSize > 0 && metadata.sizeBytes !== undefined && metadata.sizeBytes > effectiveMaxSize;
-
-    const fileInfo: FilePreviewInfo = {
+    const fileInfo: FilePreviewInfo | null = metadata ? {
         fileId,
         fileName: metadata.name,
         mimeType: metadata.mimeType,
         sizeBytes: metadata.sizeBytes,
-    };
+    } : null;
 
-    const containerClasses = isModal
-        ? "flex flex-col h-full w-full bg-background/40 backdrop-blur-md text-foreground overflow-hidden relative"
-        : "flex flex-col h-screen w-screen bg-background/40 backdrop-blur-md text-foreground overflow-hidden relative";
-
-    const PluginComponent = pluginDefinition.component;
+    const PluginComponent = pluginDefinition?.component;
     const FallbackComponent = FallbackPlugin.component;
 
     const maxMb = (effectiveMaxSize / (1024 * 1024)).toFixed(0);
-    const fileMb = metadata.sizeBytes ? (metadata.sizeBytes / (1024 * 1024)).toFixed(1) : undefined;
+    const fileMb = metadata?.sizeBytes ? (metadata.sizeBytes / (1024 * 1024)).toFixed(1) : undefined;
+
+    const showPluginContent = isControlling && metadata && (isTooLarge || isContentLoaded);
 
     return (
         <div className={containerClasses}>
-            {/* Top Toolbar using FilePreviewMenuBar */}
+            {/* Top Toolbar using FilePreviewMenuBar - rendered from frame 1 */}
             <FilePreviewMenuBar
                 info={fileInfo}
                 features={features}
@@ -135,20 +105,51 @@ const FilePreviewInner: React.FC<FilePreviewCoreProps> = ({ fileId, isModal, onC
                 onClose={onClose}
             />
 
-            {/* Content Area */}
-            <div className="flex-1 flex flex-col min-h-0 w-full overflow-hidden bg-muted/10 backdrop-blur-sm relative items-center justify-center">
-                {isTooLarge ? (
+            {/* Content Area - fixed height (flex-1) from frame 1 */}
+            <div className="flex-1 flex flex-col min-h-0 w-full overflow-hidden bg-background/35 dark:bg-transparent relative items-center justify-center">
+                {error ? (
+                    <PlaceholderView
+                        icon={CloudAlertIcon}
+                        title="Failed to Fetch File"
+                        description={`The following Error Occured: ${error.message}`}
+                        variant="error"
+                    />
+                ) : !showPluginContent ? (
+                    <>
+                        <PlaceholderView
+                            icon={Spinner}
+                            title="Hang tight!"
+                            description="We're fetching the information about the file."
+                            variant="ghost"
+                        />
+                        {fileInfo && PluginComponent && !isTooLarge && (
+                            <div className="hidden">
+                                <PluginComponent
+                                    info={fileInfo}
+                                    registerFeatures={setFeatures}
+                                    onLoaded={handleLoaded}
+                                    onError={setError}
+                                />
+                            </div>
+                        )}
+                    </>
+                ) : isTooLarge ? (
                     <FallbackComponent
-                        info={fileInfo}
+                        info={fileInfo!}
                         registerFeatures={setFeatures}
                         title="File Too Large to Preview"
                         description={`This file${fileMb ? ` (${fileMb} MB)` : ""} exceeds the ${maxMb} MB preview limit. Please download it to view.`}
+                        onLoaded={handleLoaded}
                     />
                 ) : (
-                    <PluginComponent
-                        info={fileInfo}
-                        registerFeatures={setFeatures}
-                    />
+                    PluginComponent && (
+                        <PluginComponent
+                            info={fileInfo!}
+                            registerFeatures={setFeatures}
+                            onLoaded={handleLoaded}
+                            onError={setError}
+                        />
+                    )
                 )}
             </div>
         </div>

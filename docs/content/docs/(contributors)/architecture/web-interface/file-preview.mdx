@@ -4,6 +4,7 @@ description: Modular, plugin-driven file preview engine with reactive menubar re
 ---
 
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
 
 Viewing files directly in the browser shouldn't mean loading a monolith that tries to handle every file format under the sun. Whether it's a PDF, a high-res image, an MP4 video, or a raw text file, Platrium uses a **modular plugin architecture** to render rich file previews with dedicated toolbar controls and context menus!
 
@@ -126,10 +127,42 @@ This allows `FilePreviewCore` to pick the right plugin without downloading any f
 
 ### Direct Streaming via `/rawcontent/`
 
-Plugins render media elements by pointing directly to `/rawcontent/{fileId}`:
-- **Images & Video**: Rendered using standard `<img src="/rawcontent/{fileId}" />` or `<video src="/rawcontent/{fileId}" />` elements. The Downloads Service Worker intercepts these requests and streams the bytes seamlessly.
-- **Documents & Range Requests**: PDF or audio plugins issue HTTP `Range` requests directly to `/rawcontent/{fileId}` to stream byte chunks on-demand.
-- **Fallback View**: If no plugin supports the MIME type, `FallbackPlugin` displays a warning screen with a manual download action.
+Plugins render media elements by pointing directly to `/rawcontent/{fileId}`. The Service Worker intercepts these requests and fulfills them seamlessly.
+
+## Default Core Plugins
+
+Platrium ships with a set of default core plugins that handle the most common file formats natively in the browser without any backend transcoding.
+
+<Tabs items={['PDF', 'Image', 'Video', 'Audio']}>
+<Tab value="PDF">
+The PDF plugin uses Mozilla's `pdf.js` under the hood. It leverages the Service Worker's ability to intercept HTTP range requests, allowing `pdf.js` to intelligently download only the necessary byte chunks of the document as the user scrolls, rather than loading the entire file into memory at once! It supports fully interactive text layers, hyperlinked annotations, and virtualized page rendering.
+</Tab>
+<Tab value="Image">
+The Image plugin streams raw image formats (`image/*`) directly into a standard HTML `<img>` tag via the Service Worker intercept. It features a custom zoom and rotation control panel, and it gracefully enforces a maximum payload limit (e.g. 25MB) to prevent browser memory crashes on massive uncompressed images.
+</Tab>
+<Tab value="Video">
+The Video plugin supports all browser-native video codecs (`video/*`). By streaming the raw content URL into a `<video>` tag, the browser's native media engine seamlessly fires byte-range HTTP requests to the Service Worker. This allows for instant scrubbing, jumping, and progressive playback without downloading the entire video payload.
+</Tab>
+<Tab value="Audio">
+Similar to the Video player, the Audio plugin handles `audio/*` MIME types using an `<audio>` tag. It provides a customized control interface (with an animated pulsing visualizer) while fully relying on the browser's native HTTP range requests for seamless timeline scrubbing and buffering.
+</Tab>
+</Tabs>
+
+### Service Worker Range Requests
+
+Because Platrium's Service Worker acts as a virtual network layer, it automatically translates browser-native HTTP `Range` requests into SDK-level chunk streams. This allows the PDF, Video, and Audio plugins to seek instantly:
+
+```log title="Console Logs"
+[Platrium SW] Intercepted GET download request for fileId: a3d71ac7-1c4a-43d1-9667-3f9a449db81b
+logging.ts:17 [Platrium SW] Requesting download session...
+logging.ts:17 [Platrium SW] Download session created successfully: {fileName: 'Sky.mp3', mimeType: 'audio/mpeg', fileSize: 14548465}
+logging.ts:17 [Platrium SW] Range header present: bytes=13139968-
+logging.ts:17 [Platrium SW] Creating TransformStream...
+logging.ts:17 [Platrium SW] Destination created successfully.
+logging.ts:17 [Platrium SW] Triggering Range Download: bytes 13139968-14548464...
+logging.ts:17 [Platrium SW] Returning 206 Partial Content Response
+logging.ts:17 [Platrium SW] SDK streamRangeTo finished successfully. Closing writable stream.
+```
 
 ## Building a Custom Preview Plugin
 

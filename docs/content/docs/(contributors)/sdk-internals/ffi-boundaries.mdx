@@ -1,0 +1,83 @@
+---
+title: FFI Memory & Async
+description: Challenges and mitigation strategies for garbage collection across the FFI boundary.
+---
+
+When building the Platrium SDK for both Native architectures (iOS, Android, Desktop) and WebAssembly (WASM), we faced significant challenges regarding memory management, garbage collection, and pointer lifetimes across the Foreign Function Interface (FFI) boundary, especially when dealing with asynchronous Rust code.
+
+## The FFI Async Challenge
+
+In a typical synchronous FFI call, passing a pointer from the host environment (JavaScript, Swift, Kotlin) into Rust is relatively straightforward. The pointer is valid for the duration of the synchronous function call.
+
+However, async environments introduce serious complexities:
+
+1. **Dangling Pointers in Async Tasks**: When an async Rust function yields and waits for I/O, the host environment might garbage-collect the objects that own the pointers originally passed into the FFI boundary. Once the Rust future resumes and attempts to access that pointer, it results in a fatal memory violation.
+2. **WebAssembly Constraints**: WASM operates in a sandboxed linear memory space. When JS garbage collects a wrapper object, it often explicitly calls a `.free()` method on the Rust side to drop the underlying Rust struct. If a background async task is still holding a reference to that struct, the task will panic or read corrupted memory.
+3. **Cross-Language Lifetimes**: Rust's strict borrow checker cannot automatically track lifetimes across the FFI boundary into environments managed by external garbage collectors (V8, JavaScriptCore).
+
+## Our Approach: `Arc::clone` and Shared Ownership
+
+To mitigate these issues, we adopted an architecture heavily reliant on `Arc` (Atomic Reference Counting) to safely manage memory across the FFI boundary during async execution.
+
+Instead of passing raw pointers or borrowing structs across the FFI boundary, the SDK strictly requires that any state accessed by an async operation is wrapped in an `Arc`. 
+
+We implement this via the **"Inner" pattern** combined with a **Tuple Struct wrapper**. The outer struct is the one exposed to the FFI, and it simply wraps an `Arc<Inner>`, allowing inexpensive cloning before transferring ownership to the async runtime.
+
+```rust title="sdk/src/client/files/download.rs"
+// 1. The actual core state of the session
+struct DownloadSessionInner {
+    session_id: String,
+    file_name: String,
+    file_size: u64,
+    // ... fields omitted for brevity ...
+    http_client: reqwest::Client,
+}
+
+// 2. The FFI-exposed struct wrapped in an Arc. We use `uniffi::Object` 
+// for Native compilation, and `wasm_bindgen` for WebAssembly.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
+#[derive(Clone, uniffi::Object)]
+pub struct DownloadSession(Arc<DownloadSessionInner>);
+
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
+impl DownloadSession {
+    // Both Native and WASM environments share the identical async signature!
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = streamRangeTo))]
+    pub async fn stream_range_to(
+        &self,
+        destination: &DownloadDestination,
+        range_start_byte: u64,
+        range_end_byte: u64,
+    ) -> Result<(), crate::errors::PlatriumError> {
+        // 3. Immediately clone the Arc (cheap reference count increment)
+        let inner = self.0.clone();
+        
+        // 4. Safely move the cloned Arc into the underlying async implementation. 
+        // Even if the host Garbage Collector (JS/Swift) drops the outer `DownloadSession`,
+        // the async network request safely retains ownership and continues flawlessly!
+        inner.stream_range_to_impl(destination, range_start_byte, range_end_byte).await
+    }
+}
+```
+
+When an async FFI function is invoked:
+1. The host environment invokes the FFI bridge.
+2. The Rust boundary immediately creates an `Arc::clone(&state)`.
+3. The cloned `Arc` is moved into the async block (the `Future`).
+4. Even if the host environment triggers garbage collection and calls `.free()` on the original pointer wrapper, the background async task safely retains ownership of its cloned `Arc` until the future completes.
+
+### WASM Specifics
+
+In WASM bindings (via `wasm-bindgen`), JavaScript's Garbage Collector does not automatically know when to drop Rust memory. When a JS object is garbage collected, a `FinalizationRegistry` (or manual `free` calls) destroys the Rust struct. By wrapping our core SDK state in `Arc`, we decouple the lifecycle of the JS proxy object from the execution lifetime of in-flight async futures.
+
+:::info
+**Industry Alignment:** Prominent Rust-based SDKs that target WebAssembly, such as [**Bitwarden's WASM SDK**](https://github.com/bitwarden/sdk-internal/blob/167d44eca79020334618607f53f1db366f70ffe4/crates/bitwarden-wasm-internal/src/client.rs#L28), utilize a very similar `Arc`-based approach to solve these exact garbage collection and cross-boundary async pointer challenges!
+:::
+
+## Summary
+
+By aggressively utilizing `Arc::clone` at the FFI boundary before moving state into async blocks, we guarantee that:
+- Pointer drops in the host environment do not corrupt running Rust futures.
+- Rust's memory safety guarantees are preserved, even when dealing with unpredictable host Garbage Collectors.
+- The Platrium SDK maintains extreme stability across both Native and WASM execution contexts.

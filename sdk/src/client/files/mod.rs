@@ -8,22 +8,24 @@ use crate::net::manager::NetworkTransferManager;
 use platrium_restapi::apis::configuration::Configuration;
 use std::sync::Arc;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
-#[derive(Clone, uniffi::Object)]
-pub struct Api {
+pub(crate) struct ApiInner {
     pub(crate) api_config: Arc<Configuration>,
     pub(crate) transfer_manager: Arc<NetworkTransferManager>,
 }
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
+#[derive(Clone, uniffi::Object)]
+pub struct Api(Arc<ApiInner>);
 
 impl Api {
     pub(crate) fn new(
         api_config: Arc<Configuration>,
         transfer_manager: Arc<NetworkTransferManager>,
     ) -> Self {
-        Self {
+        Self(Arc::new(ApiInner {
             api_config,
             transfer_manager,
-        }
+        }))
     }
 }
 
@@ -38,7 +40,7 @@ pub trait TransferEventListener: Send + Sync {
 impl Api {
     /// Subscribes to transfer events natively for Swift / Kotlin / C++.
     pub fn on_transfer_event(&self, listener: Box<dyn TransferEventListener>) {
-        let mut rx = self.transfer_manager.subscribe_events();
+        let mut rx = self.0.transfer_manager.subscribe_events();
         tokio::spawn(async move {
             while let Ok(event) = rx.recv().await {
                 listener.on_event(event);
@@ -68,7 +70,7 @@ impl Api {
     /// Listens to transfer events specifically for files with cleanup handle.
     #[wasm_bindgen(js_name = onTransferEvent)]
     pub fn on_transfer_event(&self, callback: js_sys::Function) -> TransferSubscription {
-        let mut rx = self.transfer_manager.subscribe_events();
+        let mut rx = self.0.transfer_manager.subscribe_events();
         let cancel_token = tokio_util::sync::CancellationToken::new();
         let token_clone = cancel_token.clone();
 

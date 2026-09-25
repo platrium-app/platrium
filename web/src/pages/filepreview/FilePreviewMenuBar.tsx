@@ -17,7 +17,7 @@ import type { FilePreviewInfo, PluginMenuItem, PreviewFeatures } from "./PluginD
 import { useFilePreviewMenuContext, useRegisterMenu } from "./FilePreviewMenuContext";
 
 interface FilePreviewMenuBarProps {
-    info: FilePreviewInfo;
+    info?: FilePreviewInfo | null;
     features?: PreviewFeatures;
     isModal?: boolean;
     onClose?: () => void;
@@ -44,13 +44,15 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             label: "Download",
             category: "File",
             icon: Download,
-            onClick: (f) => triggerFileDownload(f.fileId, f.fileName),
+            isDefault: true,
+            onClick: (f) => f && triggerFileDownload(f.fileId, f.fileName),
         },
         {
             id: "file-info",
             label: "File Info",
             category: "File",
             icon: Info,
+            isDefault: true,
             onClick: () => {
                 /* info action */
             },
@@ -63,13 +65,15 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             label: "Copy File ID",
             category: "Tools",
             icon: ScanBarcode,
-            onClick: (f) => navigator.clipboard?.writeText(f.fileId),
+            isDefault: true,
+            onClick: (f) => f && navigator.clipboard?.writeText(f.fileId),
         },
         {
             id: "show-qr-code",
             label: "Show QR Code",
             category: "Tools",
             icon: QrCode,
+            isDefault: true,
             onClick: () => {
                 /* QR code action */
             },
@@ -89,53 +93,74 @@ export const FilePreviewMenuBar: React.FC<FilePreviewMenuBarProps> = ({
             groups.set(item.category, list);
         });
 
+        for (const [category, list] of groups.entries()) {
+            const customItems = list.filter((item) => !item.isDefault);
+            const defaultItems = list.filter((item) => item.isDefault);
+            
+            if (customItems.length > 0 && defaultItems.length > 0) {
+                // Ensure the first default item has a separator to split custom from default
+                defaultItems[0] = { ...defaultItems[0], separatorBefore: true };
+            }
+            
+            groups.set(category, [...customItems, ...defaultItems]);
+        }
+
         return Array.from(groups.entries()).sort(
             ([catA], [catB]) => getCategoryIndex(catA) - getCategoryIndex(catB)
         );
     }, [menuContext]);
 
     return (
-        <div className="h-10 border-b flex items-center justify-between px-3 select-none">
+        <div className="h-10 border-b border-border bg-background/95 backdrop-blur-md shadow-xs z-10 relative flex items-center justify-between px-3 select-none shrink-0">
             {/* Left: File Icon + File Name + Vertical Separator + Menubar */}
             <div className="flex items-center space-x-2.5 min-w-0">
-                <div className="flex items-center space-x-2 min-w-0">
-                    {getFileIcon(info.fileName, info.mimeType, "h-4 w-4 shrink-0")}
-                    <span
-                        className="text-xs font-semibold text-foreground truncate max-w-[200px]"
-                        title={info.fileName}
-                    >
-                        {info.fileName}
-                    </span>
-                </div>
+                {info ? (
+                    <>
+                        <div className="flex items-center space-x-2 min-w-0">
+                            {getFileIcon(info.fileName, info.mimeType, "h-4 w-4 shrink-0")}
+                            <span
+                                className="text-xs font-semibold text-foreground truncate max-w-[200px]"
+                                title={info.fileName}
+                            >
+                                {info.fileName}
+                            </span>
+                        </div>
 
-                <div className="h-4 w-px bg-border/60 mx-0.5 shrink-0" />
+                        <div className="h-4 w-px bg-border/60 mx-0.5 shrink-0" />
 
-                {/* Unified Menubar Renderer */}
-                <Menubar className="border-none bg-transparent h-7 p-0 gap-0.5">
-                    {sortedMenuEntries.map(([category, items]) => (
-                        <MenubarMenu key={category}>
-                            <MenubarTrigger className="h-7 px-2.5 text-xs font-medium">{category}</MenubarTrigger>
-                            <MenubarContent>
-                                {items.map((item) => {
-                                    const IconComponent = item.icon;
-                                    return (
-                                        <React.Fragment key={item.id}>
-                                            {item.separatorBefore && <MenubarSeparator />}
-                                            <MenubarItem
-                                                disabled={item.disabled}
-                                                onClick={() => item.onClick(info)}
-                                            >
-                                                {IconComponent && <IconComponent className="mr-2 h-4 w-4" />}
-                                                <span>{item.label}</span>
-                                                {item.shortcut && <MenubarShortcut>{item.shortcut}</MenubarShortcut>}
-                                            </MenubarItem>
-                                        </React.Fragment>
-                                    );
-                                })}
-                            </MenubarContent>
-                        </MenubarMenu>
-                    ))}
-                </Menubar>
+                        {/* Unified Menubar Renderer */}
+                        <Menubar className="border-none bg-transparent h-7 p-0 gap-0.5">
+                            {sortedMenuEntries.map(([category, items]) => (
+                                <MenubarMenu key={category}>
+                                    <MenubarTrigger className="h-7 px-2.5 text-xs font-medium">{category}</MenubarTrigger>
+                                    <MenubarContent>
+                                        {items.map((item) => {
+                                            const IconComponent = item.icon;
+                                            return (
+                                                <React.Fragment key={item.id}>
+                                                    {item.separatorBefore && <MenubarSeparator />}
+                                                    <MenubarItem
+                                                        disabled={item.disabled}
+                                                        onClick={() => item.onClick(info)}
+                                                    >
+                                                        {IconComponent && <IconComponent className="mr-2 h-4 w-4" />}
+                                                        <span>{item.label}</span>
+                                                        {item.shortcut && <MenubarShortcut>{item.shortcut}</MenubarShortcut>}
+                                                    </MenubarItem>
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </MenubarContent>
+                                </MenubarMenu>
+                            ))}
+                        </Menubar>
+                    </>
+                ) : (
+                    <div className="flex items-center space-x-2">
+                        <div className="h-4 w-4 rounded bg-muted/60 animate-pulse shrink-0" />
+                        <div className="h-3 w-32 rounded bg-muted/60 animate-pulse" />
+                    </div>
+                )}
             </div>
 
             {/* Right side controls: Modal Close button only */}

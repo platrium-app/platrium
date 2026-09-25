@@ -18,6 +18,7 @@ export interface PluginMenuItem {
   checked?: boolean;
   separatorBefore?: boolean;
   shortcut?: string;
+  isDefault?: boolean;
   onClick: (info: FilePreviewInfo) => void;
 }
 
@@ -37,6 +38,7 @@ export interface FilePreviewPluginProps {
   description?: string;
 
   onError?: (error: Error) => void;
+  onLoaded: () => void;
 }
 
 export const DEFAULT_MAX_PREVIEW_SIZE_BYTES = 32 * 1024 * 1024; // 32 MB default limit

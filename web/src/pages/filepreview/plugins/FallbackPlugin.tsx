@@ -5,16 +5,20 @@ import { PlaceholderView } from "@/components/custom/PlaceholderView";
 import { triggerFileDownload } from "@/lib/utils";
 import { Download, AlertTriangle } from "lucide-react";
 
+const EMPTY_FEATURES = {};
+
 const FallbackPluginComponent: React.FC<FilePreviewPluginProps> = ({
   info,
   registerFeatures,
   title,
   description,
+  onLoaded,
 }) => {
   useEffect(() => {
     // Fallback plugin doesn't have special features like zoom or pages.
-    registerFeatures({});
-  }, [registerFeatures]);
+    registerFeatures(EMPTY_FEATURES);
+    onLoaded();
+  }, [registerFeatures, onLoaded]);
 
   const handleDownload = () => {
     triggerFileDownload(info.fileId, info.fileName);

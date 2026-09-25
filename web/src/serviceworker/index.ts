@@ -6,15 +6,21 @@ import { createLogger } from '../lib/logging';
 
 const logger = createLogger("Platrium SW");
 
-declare const self: ServiceWorkerGlobalScope;
+declare const self: ServiceWorkerGlobalScope & {
+    __WB_MANIFEST: Array<unknown>;
+};
+
+// Workbox injectManifest placeholder
+// @ts-ignore
+const manifest = self.__WB_MANIFEST;
 
 // Keep track of whether WASM is initialized globally for the Service Worker
-let wasmInitialized = false;
+let wasmInitPromise: Promise<unknown> | null = null;
 async function ensureWasmInit() {
-    if (!wasmInitialized) {
-        await initWasm();
-        wasmInitialized = true;
+    if (!wasmInitPromise) {
+        wasmInitPromise = initWasm();
     }
+    await wasmInitPromise;
 }
 
 self.addEventListener('install', () => {
