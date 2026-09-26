@@ -35,6 +35,9 @@ impl PlatriumClient {
         /* Initialize Cross Platform Logging */
         xplat::logging::init_xplat_logging();
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let _guard = xplat::runtime::get_runtime().enter();
+
         let mut api_config = Configuration::new();
         api_config.base_path = base_url.to_string();
         let api_config = Arc::new(api_config);

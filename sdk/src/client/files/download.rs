@@ -230,7 +230,7 @@ impl DownloadSessionInner {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 impl DownloadSession {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = fileName))]
@@ -271,7 +271,7 @@ impl DownloadSession {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
+#[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 impl Api {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = createDownloadSession))]
