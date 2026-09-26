@@ -9,4 +9,4 @@ build/
 Sources/
 
 # Ignore compiled XCFramework
-PlatriumSDK.xcframework/
+PlatriumSDKFFI.xcframework/

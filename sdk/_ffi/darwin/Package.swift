@@ -1,4 +1,4 @@
-// swift-tools-version:5.5
+// swift-tools-version:5.7
 import PackageDescription
 
 let package = Package(
@@ -16,12 +16,12 @@ let package = Package(
     targets: [
         .target(
             name: "PlatriumSDK",
-            dependencies: ["PlatriumSDKCore"],
+            dependencies: ["platrium_sdkFFI"],
             path: "Sources/PlatriumSDK"
         ),
         .binaryTarget(
-            name: "PlatriumSDKCore",
-            path: "PlatriumSDKCore.xcframework"
+            name: "platrium_sdkFFI",
+            path: "PlatriumSDKFFI.xcframework"
         )
     ]
 )

@@ -134,7 +134,7 @@
                 "{projectRoot}/uniffi/**/*"
             ],
             "outputs": [
-                "{projectRoot}/_ffi/darwin/PlatriumSDKCore.xcframework",
+                "{projectRoot}/_ffi/darwin/PlatriumSDKFFI.xcframework",
                 "{projectRoot}/_ffi/darwin/Sources"
             ]
         }

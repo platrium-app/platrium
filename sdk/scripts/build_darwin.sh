@@ -39,8 +39,10 @@ echo "Copying Swift files..."
 cp _ffi/darwin/build/bindings/*.swift _ffi/darwin/Sources/PlatriumSDK/
 
 # Move headers and modulemap to a central location for the xcframework
+# Note: modulemap must be named module.modulemap for Xcode/SPM to auto-discover it
 echo "Copying C Headers..."
-cp _ffi/darwin/build/bindings/*.h _ffi/darwin/build/bindings/*.modulemap _ffi/darwin/build/headers/
+cp _ffi/darwin/build/bindings/*.h _ffi/darwin/build/headers/
+cp _ffi/darwin/build/bindings/*.modulemap _ffi/darwin/build/headers/module.modulemap
 
 # Lipo macOS binaries
 echo "Creating Universal macOS library..."
@@ -60,7 +62,7 @@ cp target/aarch64-apple-ios/release/libplatrium_sdk.a _ffi/darwin/build/lipo/ios
 
 # Remove old xcframework if it exists
 echo "Cleaning old XCFramework..."
-rm -rf _ffi/darwin/PlatriumSDK.xcframework
+rm -rf _ffi/darwin/PlatriumSDKFFI.xcframework
 
 # Create XCFramework
 echo "Creating XCFramework..."
@@ -68,10 +70,11 @@ xcodebuild -create-xcframework \
     -library _ffi/darwin/build/lipo/macos/libplatrium_sdk.a -headers _ffi/darwin/build/headers \
     -library _ffi/darwin/build/lipo/ios_sim/libplatrium_sdk.a -headers _ffi/darwin/build/headers \
     -library _ffi/darwin/build/lipo/ios/libplatrium_sdk.a -headers _ffi/darwin/build/headers \
-    -output _ffi/darwin/PlatriumSDK.xcframework
+    -output _ffi/darwin/PlatriumSDKFFI.xcframework
 
 # Clean up intermediate build artifacts
 echo "Cleaning up intermediate build files..."
 rm -rf _ffi/darwin/build
 
-echo "Successfully built Darwin framework at _ffi/darwin/PlatriumSDK.xcframework"
+echo "Successfully built Darwin framework at _ffi/darwin/PlatriumSDKFFI.xcframework"
+swift package --package-path _ffi/darwin describe
