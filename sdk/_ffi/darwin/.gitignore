@@ -1,0 +1,12 @@
+# Ignore Xcode / Swift Package Manager build artifacts
+.build/
+.swiftpm/
+
+# Ignore custom intermediate build directories
+build/
+
+# Ignore generated Swift bindings
+Sources/
+
+# Ignore compiled XCFramework
+PlatriumSDK.xcframework/

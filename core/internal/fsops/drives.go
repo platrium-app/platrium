@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"platrium/internal/infra/graph"
 )
@@ -38,7 +38,7 @@ type CreateDriveParams struct {
 
 // CreateDrive creates a root Drive node in Graph DB and links it to the owner user via [:OWNS].
 func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Drive, error) {
-	driveId := uuid.New().String()
+	driveId := nanoid.Must()
 	name := params.Name
 	if name == "" {
 		name = "My Drive"

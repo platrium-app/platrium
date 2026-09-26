@@ -153,7 +153,7 @@ Similar to the Video player, the Audio plugin handles `audio/*` MIME types using
 Because Platrium's Service Worker acts as a virtual network layer, it automatically translates browser-native HTTP `Range` requests into SDK-level chunk streams. This allows the PDF, Video, and Audio plugins to seek instantly:
 
 ```log title="Console Logs"
-[Platrium SW] Intercepted GET download request for fileId: a3d71ac7-1c4a-43d1-9667-3f9a449db81b
+logging.ts:17 [Platrium SW] Intercepted GET download request for fileId: a3d71ac7-1c4a-43d1-9667-3f9a449db81b
 logging.ts:17 [Platrium SW] Requesting download session...
 logging.ts:17 [Platrium SW] Download session created successfully: {fileName: 'Sky.mp3', mimeType: 'audio/mpeg', fileSize: 14548465}
 logging.ts:17 [Platrium SW] Range header present: bytes=13139968-

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"platrium/internal/infra/graph"
 )
@@ -29,7 +29,7 @@ func NewUserStore(store graph.Graph) *UserStore {
 
 // CreateUser creates a new User node in Neo4j and links it to a Tenant.
 func (r *UserStore) CreateUser(ctx context.Context, tenantId, email string) (*User, error) {
-	userId := uuid.New().String()
+	userId := nanoid.Must()
 
 	query := `
 		MATCH (t:Tenant {id: $tenantId})

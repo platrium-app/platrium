@@ -116,6 +116,27 @@
             "outputs": [
                 "{projectRoot}/_ffi/wasm"
             ]
+        },
+        "build:darwin": {
+            "cache": true,
+            "executor": "nx:run-commands",
+            "dependsOn": [
+                "_generate_restapi_bindings"
+            ],
+            "options": {
+                "command": "./scripts/build_darwin.sh",
+                "cwd": "sdk"
+            },
+            "inputs": [
+                "{projectRoot}/src/**/*.rs",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/scripts/build_darwin.sh",
+                "{projectRoot}/uniffi/**/*"
+            ],
+            "outputs": [
+                "{projectRoot}/_ffi/darwin/PlatriumSDKCore.xcframework",
+                "{projectRoot}/_ffi/darwin/Sources"
+            ]
         }
     }
 }

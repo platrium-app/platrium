@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
@@ -121,7 +121,7 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 		return UploadSessionInitialize500JSONResponse{Debuginfo: "file_name, parent_id, and mime_type are required"}, nil
 	}
 
-	sessionID := uuid.New().String()
+	sessionID := nanoid.Must()
 	sess, ok := session.FromContext(ctx)
 	if !ok {
 		return UploadSessionInitialize500JSONResponse{Debuginfo: "unauthorized: missing session"}, nil

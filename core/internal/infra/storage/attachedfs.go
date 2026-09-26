@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/google/uuid"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"platrium/internal/fsops"
 	"platrium/internal/pipelines"
@@ -84,7 +84,7 @@ func (l *AttachedFSBackend) SubscribeUploadEvents(ctx context.Context, chunkVali
 func (l *AttachedFSBackend) GenerateChunkUploadURLs(ctx context.Context, chunks map[string]ChunkUploadInfo) (map[string]string, error) {
 	urls := make(map[string]string)
 	for hash, info := range chunks {
-		writeId := uuid.New().String()
+		writeId := nanoid.Must()
 
 		if err := l.store.SetUploadPath(ctx, writeId, info.Path); err != nil {
 			return nil, fmt.Errorf("failed to create upload session: %w", err)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"platrium/internal/infra/graph"
 )
@@ -27,7 +27,7 @@ func NewTenantStore(store graph.Graph) *TenantStore {
 
 // CreateTenant creates a new Tenant node in Neo4j.
 func (r *TenantStore) CreateTenant(ctx context.Context, name string) (*Tenant, error) {
-	tenantId := uuid.New().String()
+	tenantId := nanoid.Must()
 
 	query := `
 		CREATE (t:Tenant {

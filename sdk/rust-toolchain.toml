@@ -1,0 +1,22 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+targets = [
+    # macOS (Apple Silicon + Intel)
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+
+    # iOS & iPadOS (Physical devices)
+    "aarch64-apple-ios",
+
+    # iOS & iPadOS Simulators (Apple Silicon + Intel)
+    "aarch64-apple-ios-sim",
+    "x86_64-apple-ios",
+    
+    # Android
+    "aarch64-linux-android",
+    "x86_64-linux-android",
+
+    # WebAssembly
+    "wasm32-unknown-unknown",
+]

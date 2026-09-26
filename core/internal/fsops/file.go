@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"platrium/internal/infra/graph"
 )
@@ -74,7 +74,7 @@ func (f *FSOps) processHashes(ctx context.Context, fileId string, version string
 // CreateFile assigns a file into the resource graph, strictly verifying the parent
 // container exists and isn't a file, all within a single Neo4j transaction.
 func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string, error) {
-	fileId := uuid.New().String()
+	fileId := nanoid.Must()
 	version := "1" // TODO: Change to NanoID or smth else, Initial creation is always v1
 
 	inlineChunks, err := f.processHashes(ctx, fileId, version, params.HexHashes)
