@@ -1,0 +1,28 @@
+{
+  "schemaNamespace": "PlatriumGraphQL",
+  "input": {
+    "operationSearchPaths": [
+      "Platrium/Views/**/*.graphql",
+      "Platrium/GraphQL/**/*.graphql"
+    ],
+    "schemaSearchPaths": [
+      "../api/graphql/fsops.graphql"
+    ]
+  },
+  "output": {
+    "testMocks": {
+      "none": {}
+    },
+    "schemaTypes": {
+      "path": "Platrium/GraphQL",
+      "moduleType": {
+        "embeddedInTarget": {
+          "name": "Platrium"
+        }
+      }
+    },
+    "operations": {
+      "inSchemaModule": {}
+    }
+  }
+}

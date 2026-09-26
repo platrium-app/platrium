@@ -1,0 +1,9 @@
+query GetDrivesList {
+  drives {
+    id
+    name
+    driveMetadata {
+      driveType
+    }
+  }
+}
