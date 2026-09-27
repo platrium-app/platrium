@@ -4,5 +4,7 @@ xcuserdata/
 DerivedData/
 .build/
 *.xcuserstate
+
+# Graph QL Bindings
 apollo-ios-cli
-Platrium/GraphQL/
+PlatriumGraphQL/Sources/

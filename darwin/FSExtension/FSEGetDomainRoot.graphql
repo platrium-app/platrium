@@ -1,4 +1,4 @@
-query GetDrivesList {
+query FSEGetDomainRoot {
   driveNodes: drives {
     id
     name

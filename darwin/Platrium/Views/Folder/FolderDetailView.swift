@@ -1,3 +1,4 @@
+import PlatriumGraphQL
 import SwiftUI
 import Apollo
 
@@ -359,7 +360,7 @@ struct FolderDetailView: View {
         
         // ByteCountFormatter takes Int64, GraphQL Int64 maps to String in swift (Apollo default unless configured)
         if let bytesDouble = Double(bytes) {
-            return formatter.string(fromByteCount: Int64(bytesDouble))
+            return formatter.string(fromByteCount: Swift.Int64(bytesDouble))
         }
         return bytes
     }

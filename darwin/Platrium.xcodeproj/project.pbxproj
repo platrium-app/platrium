@@ -9,10 +9,42 @@
 /* Begin PBXBuildFile section */
 		D97A91713067A82C007C41DB /* PlatriumSDK in Frameworks */ = {isa = PBXBuildFile; productRef = D97A91703067A82C007C41DB /* PlatriumSDK */; };
 		D97A917E30681DCF007C41DB /* Apollo in Frameworks */ = {isa = PBXBuildFile; productRef = D97A917D30681DCF007C41DB /* Apollo */; };
+		D97A922B3068953A007C41DB /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D97A92133068914B007C41DB /* UniformTypeIdentifiers.framework */; };
+		D97A92373068953A007C41DB /* FSExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D97A922A3068953A007C41DB /* FSExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D97A923D30689E52007C41DB /* Apollo in Frameworks */ = {isa = PBXBuildFile; productRef = D97A923C30689E52007C41DB /* Apollo */; };
+		D97A923F30689E56007C41DB /* PlatriumSDK in Frameworks */ = {isa = PBXBuildFile; productRef = D97A923E30689E56007C41DB /* PlatriumSDK */; };
+		D97A92463068A8D7007C41DB /* PlatriumGraphQL in Frameworks */ = {isa = PBXBuildFile; productRef = D97A92453068A8D7007C41DB /* PlatriumGraphQL */; };
+		D97A92483068A8E5007C41DB /* PlatriumGraphQL in Frameworks */ = {isa = PBXBuildFile; productRef = D97A92473068A8E5007C41DB /* PlatriumGraphQL */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D97A92353068953A007C41DB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D90B27AE30679E4500DE31DB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D97A92293068953A007C41DB;
+			remoteInfo = FSExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D97A92253068914B007C41DB /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D97A92373068953A007C41DB /* FSExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D90B27B630679E4500DE31DB /* Platrium.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Platrium.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D97A92133068914B007C41DB /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
+		D97A922A3068953A007C41DB /* FSExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FSExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -22,6 +54,13 @@
 				Info.plist,
 			);
 			target = D90B27B530679E4500DE31DB /* Platrium */;
+		};
+		D97A923B3068953A007C41DB /* Exceptions for "FSExtension" folder in "FSExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D97A92293068953A007C41DB /* FSExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -34,6 +73,14 @@
 			path = Platrium;
 			sourceTree = "<group>";
 		};
+		D97A922C3068953A007C41DB /* FSExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D97A923B3068953A007C41DB /* Exceptions for "FSExtension" folder in "FSExtension" target */,
+			);
+			path = FSExtension;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -41,8 +88,20 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D97A92463068A8D7007C41DB /* PlatriumGraphQL in Frameworks */,
 				D97A91713067A82C007C41DB /* PlatriumSDK in Frameworks */,
 				D97A917E30681DCF007C41DB /* Apollo in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D97A92273068953A007C41DB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D97A92483068A8E5007C41DB /* PlatriumGraphQL in Frameworks */,
+				D97A923F30689E56007C41DB /* PlatriumSDK in Frameworks */,
+				D97A922B3068953A007C41DB /* UniformTypeIdentifiers.framework in Frameworks */,
+				D97A923D30689E52007C41DB /* Apollo in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,6 +112,8 @@
 			isa = PBXGroup;
 			children = (
 				D90B27B830679E4500DE31DB /* Platrium */,
+				D97A922C3068953A007C41DB /* FSExtension */,
+				D97A92123068914B007C41DB /* Frameworks */,
 				D90B27B730679E4500DE31DB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,8 +122,17 @@
 			isa = PBXGroup;
 			children = (
 				D90B27B630679E4500DE31DB /* Platrium.app */,
+				D97A922A3068953A007C41DB /* FSExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D97A92123068914B007C41DB /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D97A92133068914B007C41DB /* UniformTypeIdentifiers.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -77,10 +147,12 @@
 				D90B27B230679E4500DE31DB /* Sources */,
 				D90B27B330679E4500DE31DB /* Frameworks */,
 				D90B27B430679E4500DE31DB /* Resources */,
+				D97A92253068914B007C41DB /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D97A92363068953A007C41DB /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D90B27B830679E4500DE31DB /* Platrium */,
@@ -89,10 +161,36 @@
 			packageProductDependencies = (
 				D97A91703067A82C007C41DB /* PlatriumSDK */,
 				D97A917D30681DCF007C41DB /* Apollo */,
+				D97A92453068A8D7007C41DB /* PlatriumGraphQL */,
 			);
 			productName = Platrium;
 			productReference = D90B27B630679E4500DE31DB /* Platrium.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D97A92293068953A007C41DB /* FSExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D97A92383068953A007C41DB /* Build configuration list for PBXNativeTarget "FSExtension" */;
+			buildPhases = (
+				D97A92263068953A007C41DB /* Sources */,
+				D97A92273068953A007C41DB /* Frameworks */,
+				D97A92283068953A007C41DB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D97A922C3068953A007C41DB /* FSExtension */,
+			);
+			name = FSExtension;
+			packageProductDependencies = (
+				D97A923C30689E52007C41DB /* Apollo */,
+				D97A923E30689E56007C41DB /* PlatriumSDK */,
+				D97A92473068A8E5007C41DB /* PlatriumGraphQL */,
+			);
+			productName = FSExtension;
+			productReference = D97A922A3068953A007C41DB /* FSExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -105,6 +203,9 @@
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					D90B27B530679E4500DE31DB = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					D97A92293068953A007C41DB = {
 						CreatedOnToolsVersion = 26.4;
 					};
 				};
@@ -121,6 +222,7 @@
 			packageReferences = (
 				D97A916F3067A82C007C41DB /* XCLocalSwiftPackageReference "../sdk/_ffi/darwin" */,
 				D97A917C30681DCF007C41DB /* XCRemoteSwiftPackageReference "apollo-ios" */,
+				D97A92443068A8D7007C41DB /* XCLocalSwiftPackageReference "PlatriumGraphQL" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D90B27B730679E4500DE31DB /* Products */;
@@ -128,12 +230,20 @@
 			projectRoot = "";
 			targets = (
 				D90B27B530679E4500DE31DB /* Platrium */,
+				D97A92293068953A007C41DB /* FSExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		D90B27B430679E4500DE31DB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D97A92283068953A007C41DB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -188,7 +298,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D97A92263068953A007C41DB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D97A92363068953A007C41DB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D97A92293068953A007C41DB /* FSExtension */;
+			targetProxy = D97A92353068953A007C41DB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D90B27BF30679E4700DE31DB /* Debug */ = {
@@ -311,6 +436,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Platrium/Platrium.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XG5BCGRSAT;
@@ -351,13 +477,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.4;
 			};
 			name = Debug;
@@ -368,6 +495,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Platrium/Platrium.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XG5BCGRSAT;
@@ -408,14 +536,111 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.4;
+			};
+			name = Release;
+		};
+		D97A92393068953A007C41DB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FSExtension/FSExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XG5BCGRSAT;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FSExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FSExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.platrium.Platrium.FSExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D97A923A3068953A007C41DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FSExtension/FSExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XG5BCGRSAT;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FSExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FSExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.platrium.Platrium.FSExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -440,12 +665,25 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D97A92383068953A007C41DB /* Build configuration list for PBXNativeTarget "FSExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D97A92393068953A007C41DB /* Debug */,
+				D97A923A3068953A007C41DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
 		D97A916F3067A82C007C41DB /* XCLocalSwiftPackageReference "../sdk/_ffi/darwin" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../sdk/_ffi/darwin;
+		};
+		D97A92443068A8D7007C41DB /* XCLocalSwiftPackageReference "PlatriumGraphQL" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PlatriumGraphQL;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -469,6 +707,25 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D97A917C30681DCF007C41DB /* XCRemoteSwiftPackageReference "apollo-ios" */;
 			productName = Apollo;
+		};
+		D97A923C30689E52007C41DB /* Apollo */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D97A917C30681DCF007C41DB /* XCRemoteSwiftPackageReference "apollo-ios" */;
+			productName = Apollo;
+		};
+		D97A923E30689E56007C41DB /* PlatriumSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D97A916F3067A82C007C41DB /* XCLocalSwiftPackageReference "../sdk/_ffi/darwin" */;
+			productName = PlatriumSDK;
+		};
+		D97A92453068A8D7007C41DB /* PlatriumGraphQL */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PlatriumGraphQL;
+		};
+		D97A92473068A8E5007C41DB /* PlatriumGraphQL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D97A92443068A8D7007C41DB /* XCLocalSwiftPackageReference "PlatriumGraphQL" */;
+			productName = PlatriumGraphQL;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

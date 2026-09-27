@@ -1,0 +1,23 @@
+query FSEGetFolderContents($folderId: ID!, $first: Int, $after: String) {
+  folderContents(folderId: $folderId, first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        parentId
+        name
+        type
+        createdAt
+        updatedAt
+        ... on File {
+          size
+          mimeType
+        }
+      }
+    }
+  }
+}

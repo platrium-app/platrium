@@ -2,8 +2,8 @@
   "schemaNamespace": "PlatriumGraphQL",
   "input": {
     "operationSearchPaths": [
-      "Platrium/Views/**/*.graphql",
-      "Platrium/GraphQL/**/*.graphql"
+      "Platrium/**/*.graphql",
+      "FSExtension/**/*.graphql"
     ],
     "schemaSearchPaths": [
       "../api/graphql/fsops.graphql"
@@ -14,11 +14,9 @@
       "none": {}
     },
     "schemaTypes": {
-      "path": "Platrium/GraphQL",
+      "path": "PlatriumGraphQL",
       "moduleType": {
-        "embeddedInTarget": {
-          "name": "Platrium"
-        }
+        "swiftPackage": {}
       }
     },
     "operations": {

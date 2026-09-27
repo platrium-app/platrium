@@ -1,3 +1,4 @@
+import PlatriumGraphQL
 import SwiftUI
 import Apollo
 

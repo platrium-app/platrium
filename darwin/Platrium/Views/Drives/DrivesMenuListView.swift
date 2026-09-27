@@ -1,7 +1,8 @@
+import PlatriumGraphQL
 import SwiftUI
 import Apollo
 
-typealias DriveNode = PlatriumGraphQL.GetDrivesListQuery.Data.Drife
+typealias DriveNode = PlatriumGraphQL.GetDrivesListQuery.Data.DriveNode
 
 // MARK: - ViewModel
 
@@ -32,7 +33,7 @@ final class DrivesViewModel {
                     self.isLoading = false
                     switch result {
                     case .success(let graphQLResult):
-                        if let drives = graphQLResult.data?.drives {
+                        if let drives = graphQLResult.data?.driveNodes {
                             self.privateDrives = drives.filter {
                                 $0.driveMetadata?.driveType.value == .private
                             }
