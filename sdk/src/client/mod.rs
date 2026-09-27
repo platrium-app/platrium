@@ -25,6 +25,16 @@ impl PlatriumClient {
     }
 }
 
+fn initialize_client_core(base_url: &str) -> (Arc<Configuration>, Arc<NetworkTransferManager>) {
+    let mut api_config = Configuration::new();
+    api_config.base_path = base_url.to_string();
+    
+    static MANAGER: std::sync::OnceLock<Arc<NetworkTransferManager>> = std::sync::OnceLock::new();
+    let transfer_manager = MANAGER.get_or_init(|| Arc::new(NetworkTransferManager::new(5))).clone();
+    
+    (Arc::new(api_config), transfer_manager)
+}
+
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export)]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 impl PlatriumClient {
@@ -36,13 +46,12 @@ impl PlatriumClient {
         xplat::logging::init_xplat_logging();
 
         #[cfg(not(target_arch = "wasm32"))]
-        let _guard = xplat::runtime::get_runtime().enter();
+        let (api_config, transfer_manager) = xplat::runtime::get_runtime().block_on(async {
+            initialize_client_core(base_url)
+        });
 
-        let mut api_config = Configuration::new();
-        api_config.base_path = base_url.to_string();
-        let api_config = Arc::new(api_config);
-
-        let transfer_manager = Arc::new(NetworkTransferManager::new(5));
+        #[cfg(target_arch = "wasm32")]
+        let (api_config, transfer_manager) = initialize_client_core(base_url);
 
         Ok(Self(Arc::new(PlatriumClientInner {
             api_config,

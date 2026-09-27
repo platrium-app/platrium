@@ -21,9 +21,12 @@ pub struct DownloadDestination {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[uniffi::export]
 impl DownloadDestination {
     /// Creates a download destination targeting an open File descriptor.
-    pub fn new(file: std::fs::File) -> Self {
+    #[uniffi::constructor]
+    pub fn new(fd: i32) -> Self {
+        let file = unsafe { std::os::unix::io::FromRawFd::from_raw_fd(fd) };
         Self {
             xplat_file: XPlatFile::new(file),
         }
@@ -68,6 +71,22 @@ impl DownloadSessionInner {
             ));
         }
 
+        let total_bytes_to_transfer = range_end_byte.saturating_sub(range_start_byte) + 1;
+        let cancel_token = self
+            .transfer_manager
+            .init_transfer(
+                &self.session_id,
+                crate::net::transfers::TransferDirection::Download,
+                total_bytes_to_transfer,
+                crate::net::transfers::TransferMetadata::FileChunk {
+                    folder_id: "".to_string(), // TODO: Maybe add a folderId here?
+                    file_name: self.file_name.clone(),
+                },
+            )
+            .await;
+
+        self.transfer_manager.start_transfer(&self.session_id).await;
+
         // 1. Calculate the required chunk indices
         let chunk_indices =
             crate::fs::chunks::byte_range_to_chunk_indices(range_start_byte, range_end_byte);
@@ -106,6 +125,7 @@ impl DownloadSessionInner {
                     let download_url = presigned_chunk.download_url.clone();
                     let transfer_manager = self.transfer_manager.clone();
                     let chunk_idx = *chunk_index as usize;
+                    let cancel_token = cancel_token.clone();
 
                     let fut = async move {
                         // 3. Acquire a Global Transfer Slot to prevent network exhaustion
@@ -123,12 +143,21 @@ impl DownloadSessionInner {
                             format!("bytes={}-{}", chunk_start_offset, chunk_end_offset),
                         );
 
-                        let res = get_req.send().await.map_err(|e| {
-                            crate::errors::PlatriumError::ApiError(format!(
-                                "Chunk GET failed: {:?}",
-                                e
-                            ))
-                        })?;
+                        let res = tokio::select! {
+                            _ = cancel_token.cancelled() => {
+                                return Err(crate::errors::PlatriumError::InternalError(
+                                    "Transfer cancelled".to_string(),
+                                ));
+                            }
+                            result = get_req.send() => {
+                                result.map_err(|e| {
+                                    crate::errors::PlatriumError::ApiError(format!(
+                                        "Chunk GET failed: {:?}",
+                                        e
+                                    ))
+                                })?
+                            }
+                        };
 
                         let status = res.status();
                         let bytes = res.bytes().await.map_err(|e| {
@@ -226,6 +255,9 @@ impl DownloadSessionInner {
             }
         }
 
+        self.transfer_manager
+            .complete_transfer(&self.session_id)
+            .await;
         Ok(())
     }
 }
@@ -233,6 +265,11 @@ impl DownloadSessionInner {
 #[cfg_attr(not(target_arch = "wasm32"), uniffi::export(async_runtime = "tokio"))]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen)]
 impl DownloadSession {
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = sessionId))]
+    pub fn session_id(&self) -> String {
+        self.0.session_id.clone()
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(getter, js_name = fileName))]
     pub fn file_name(&self) -> String {
         self.0.file_name.clone()
@@ -256,7 +293,9 @@ impl DownloadSession {
     ) -> Result<(), crate::errors::PlatriumError> {
         let inner = self.0.clone();
         let range_end_byte = inner.file_size.saturating_sub(1);
-        inner.stream_range_to_impl(destination, 0, range_end_byte).await
+        inner
+            .stream_range_to_impl(destination, 0, range_end_byte)
+            .await
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = streamRangeTo))]
@@ -267,7 +306,9 @@ impl DownloadSession {
         range_end_byte: u64,
     ) -> Result<(), crate::errors::PlatriumError> {
         let inner = self.0.clone();
-        inner.stream_range_to_impl(destination, range_start_byte, range_end_byte).await
+        inner
+            .stream_range_to_impl(destination, range_start_byte, range_end_byte)
+            .await
     }
 }
 
@@ -296,4 +337,3 @@ impl Api {
         })))
     }
 }
-

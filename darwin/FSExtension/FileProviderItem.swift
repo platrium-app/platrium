@@ -77,10 +77,8 @@ class FileProviderItem: NSObject, NSFileProviderItem {
         
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let fallback = ISO8601DateFormatter()
-        
-        self.creationDate = formatter.date(from: node.createdAt) ?? fallback.date(from: node.createdAt)
-        self.contentModificationDate = formatter.date(from: node.updatedAt) ?? fallback.date(from: node.updatedAt)
+        self.creationDate = formatter.date(from: node.createdAt)
+        self.contentModificationDate = formatter.date(from: node.updatedAt)
         super.init()
     }
     
@@ -92,6 +90,35 @@ class FileProviderItem: NSObject, NSFileProviderItem {
         self.documentSize = nil
         self.creationDate = nil
         self.contentModificationDate = nil
+        super.init()
+    }
+    
+    // Init after a download — uses item metadata from GraphQL so filename, size, and parent are all correct
+    init(identifier: NSFileProviderItemIdentifier, info: FSEGetItemInfoQuery.Data.Item) {
+        self.itemIdentifier = identifier
+        self.parentItemIdentifier = info.parentId.map { NSFileProviderItemIdentifier($0) } ?? .rootContainer
+        self.filename = info.name
+        
+        let ext = (info.name as NSString).pathExtension
+        let mimeType = info.asFile?.mimeType
+        if let mime = mimeType, let type = UTType(mimeType: mime) {
+            self.contentType = type
+        } else if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
+            self.contentType = type
+        } else {
+            self.contentType = .data
+        }
+        
+        if let file = info.asFile, let size = Double(file.size) {
+            self.documentSize = NSNumber(value: size)
+        } else {
+            self.documentSize = nil
+        }
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        self.creationDate = formatter.date(from: info.createdAt)
+        self.contentModificationDate = formatter.date(from: info.updatedAt)
         super.init()
     }
 }

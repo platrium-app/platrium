@@ -41,7 +41,7 @@ impl Api {
     /// Subscribes to transfer events natively for Swift / Kotlin / C++.
     pub fn on_transfer_event(&self, listener: Box<dyn TransferEventListener>) {
         let mut rx = self.0.transfer_manager.subscribe_events();
-        tokio::spawn(async move {
+        crate::xplat::runtime::get_runtime().spawn(async move {
             while let Ok(event) = rx.recv().await {
                 listener.on_event(event);
             }

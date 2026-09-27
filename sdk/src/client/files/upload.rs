@@ -1,5 +1,3 @@
-
-
 use crate::xplat::file::XPlatFile;
 use futures::stream::{FuturesUnordered, StreamExt};
 use platrium_restapi::apis::files_api;
@@ -15,8 +13,11 @@ pub struct UploadSource {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[uniffi::export]
 impl UploadSource {
-    pub fn new(file_name: String, file: std::fs::File) -> Self {
+    #[uniffi::constructor]
+    pub fn new(file_name: String, fd: i32) -> Self {
+        let file = unsafe { std::os::unix::io::FromRawFd::from_raw_fd(fd) };
         Self {
             file_name,
             xplat: XPlatFile::new(file),
@@ -257,7 +258,8 @@ impl Api {
         source: &UploadSource,
     ) -> Result<String, crate::errors::PlatriumError> {
         let inner = self.0.clone();
-        inner.start_uploadsession(&parent_id, &source.file_name, &source.xplat)
+        inner
+            .start_uploadsession(&parent_id, &source.file_name, &source.xplat)
             .await
     }
 
@@ -265,6 +267,9 @@ impl Api {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = cancelUpload))]
     pub async fn cancel_upload(&self, client_file_id: String) {
         let inner = self.0.clone();
-        inner.transfer_manager.cancel_transfer(&client_file_id).await;
+        inner
+            .transfer_manager
+            .cancel_transfer(&client_file_id)
+            .await;
     }
 }
