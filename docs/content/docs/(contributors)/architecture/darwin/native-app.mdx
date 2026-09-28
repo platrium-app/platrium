@@ -1,0 +1,26 @@
+---
+title: Platrium App
+description: The host application that bridges the macOS system, our GraphQL API, and the Rust SDK.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+The Platrium App for macOS and iOS is a thin, native Swift shell. Rather than building a massive monolithic application, the native app acts primarily as a **Host Environment** that binds together several high-performance libraries and registers the system extensions (like the File Provider) with the Apple operating system.
+
+## The Dependency Chain
+
+To keep the native app lightweight, all heavy lifting is delegated to dedicated modules and packages. Here is how the dependencies are linked together within the Xcode project:
+
+1. **Platrium SDK (Rust/WASM):** The core business logic, cryptography, and high-speed network streaming are handled by our Rust SDK. The internals of how we compile this into an Apple `XCFramework` with UniFFI bindings are detailed in the [Apple Darwin SDK Internals](../../sdk-internals/supported-platforms/apple-darwin).
+2. **Platrium GraphQL Package:** All API requests and schema definitions are encapsulated in a generated Swift package.
+3. **Apollo iOS:** We use the Apollo iOS GraphQL client to execute queries, manage normalized caching, and handle network transport for the API.
+4. **SwiftUI Host:** The actual user interface (for login, settings, and status) is built using SwiftUI, which simply observes state from the underlying packages.
+
+## Hosting the File Provider
+
+The most critical job of the native app is to host and register the **FileProviderReplicatedExtension**. 
+
+Because Apple enforces strict security sandboxes, a File Provider Extension cannot run independently—it *must* be bundled inside a host `.app`. 
+
+When the user logs in, the host app uses the `NSFileProviderManager` API to register a new domain (essentially a virtual hard drive) with macOS. 
+It securely passes the authentication tokens (like the JWT session and tenant IDs) into the shared App Group keychain. Once registered, macOS completely takes over, launching the `FSExtension` process in the background and asking it to populate the files!

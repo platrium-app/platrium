@@ -1,0 +1,78 @@
+---
+title: The Notifications Broker
+description: A decoupled, high-performance event bus powering real-time synchronization across the web and macOS.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+Normally, real-time synchronization requires tight coupling between your database mutations and your WebSocket servers or push notification services. But with Platrium, we take a decoupled approach.
+
+We leverage a central **Notification Broker** that acts as the single source of truth for all system events. By intercepting internal domain events (like a file being created or deleted) and routing them through a pure Go broker, we can fan out thousands of events to different clients (Web, macOS) without the core file system engine ever knowing what a "WebSocket" or an "APN" is!
+
+Under the hood, the `NotificationBroker` accepts pure domain structs (like `events.DriveEvent`), resolves the target users, maps them to their active devices, and concurrently dispatches the events to registered **Transports**.
+
+## The Architecture
+
+Here is a high-level look at how the GraphQL Resolvers, the Notification Broker, the Device Store, and our Transports all tie together to synchronize state across platforms:
+
+```mermaid
+flowchart TD
+    classDef resolver fill:#3b82f6,stroke:#2563eb,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef broker fill:#10b981,stroke:#059669,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef device fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef transport fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+    classDef client fill:#ed1a38,stroke:#b91c1c,stroke-width:2px,color:#fff,rx:6px,ry:6px;
+
+    API["Event Source / Notification Request"]:::resolver
+    Broker["Notification Broker (Core)"]:::broker
+    Devices["Device Store"]:::device
+    
+    subgraph Transports["Transport Layer"]
+        GraphQL["GraphQL Transport (WebSockets)"]:::transport
+        APNs["APNs Transport (iOS/macOS)"]:::transport
+        FCM["FCM Transport (Android)"]:::transport
+    end
+
+    subgraph Clients["Example Clients"]
+        Web["Web Browser (React + Apollo)"]:::client
+        Mac["Darwin File Provider + App"]:::client
+        Android["Android Virtual Files + App"]:::client
+    end
+
+    API -->|"Broker.Publish(NotificationEvent)"| Broker
+    Broker -->|"Fetch active devices\n for User"| Devices
+    Devices -.->|"List of\n Devices"| Broker
+    
+    Broker -->|"DeliverEvent(event, devices)"| GraphQL
+    Broker -->|"DeliverEvent(event, devices)"| APNs
+    Broker -->|"DeliverEvent(event, devices)"| FCM
+
+    GraphQL -.->|"{ eventType: UPDATED, itemId }"| Web
+    APNs -.->|"Silent Push Notification"| Mac
+    FCM -.->|"Silent Push Notification"| Android
+```
+
+## Devices & User Mapping
+
+:::info
+**Architecture Philosophy:** A `Device` cannot exist in the universe without a `User` owning it.
+:::
+
+When an event is published, the Broker only receives a list of `UserIDs`. But how does it know whether to send a WebSocket ping to Chrome or an Apple Push Notification (APN) to a Macbook?
+
+This is where the **Device Store** comes in. Every time a user logs into Platrium via the web or installs the macOS app, we register a `Device` record bound to their `UserID`. 
+- For macOS, the device stores the unique APNs Device Token.
+- For the Web, the GraphQL connection itself registers an ephemeral listener.
+
+When `Broker.Publish(ctx, userIDs, event)` is called, the Broker queries the `DeviceStore` to resolve exactly which physical devices belong to those users, and fans the event out accordingly.
+
+## The Transport Layer
+
+Once the Broker knows *who* should receive the event and *what* devices they own, it passes the baton to the **Transports**. 
+
+Transports are isolated modules that implement the `NotificationTransport` interface. Their only job is to take a pure Go domain event (like `EventUpdated`) and translate it into the specific wire format required by the client.
+
+We currently maintain three primary transports:
+1. **[The GraphQL Transport](./graphql-transport)**: Handles translating events into GraphQL models and broadcasting them over WebSockets to the React frontend.
+2. **The APNs Transport**: Handles constructing Apple-compliant push payloads and dispatching them through the HTTP/2 APNs provider API to wake up the macOS File Provider Extension.
+3. **The FCM Transport**: Handles pushing data payloads through Firebase Cloud Messaging to synchronize the Android Virtual Files app.

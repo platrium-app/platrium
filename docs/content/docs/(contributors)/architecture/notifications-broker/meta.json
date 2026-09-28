@@ -1,0 +1,7 @@
+{
+    "title": "Notifications Broker",
+    "pages": [
+        "introduction",
+        "graphql-transport"
+    ]
+}

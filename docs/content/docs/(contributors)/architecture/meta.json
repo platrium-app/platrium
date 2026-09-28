@@ -1,0 +1,10 @@
+{
+    "title": "Architecture",
+    "pages": [
+        "build-system",
+        "storage-engine",
+        "notifications-broker",
+        "web-interface",
+        "darwin"
+    ]
+}

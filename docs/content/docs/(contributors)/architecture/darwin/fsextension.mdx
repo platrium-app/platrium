@@ -1,0 +1,33 @@
+---
+title: File Provider Extension (VFS)
+description: How Platrium mounts an impossibly fast Virtual File System natively into macOS Finder.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+The magic of Platrium on macOS is that you never have to download files before using them. Through Apple's `NSFileProviderReplicatedExtension` API, we project the entire Platrium cloud directly into the native macOS Finder as a **Virtual File System (VFS)**.
+
+## The Root Container
+
+When macOS mounts the virtual drive, it doesn't instantly know what files exist. Instead, it asks our extension for the contents of the `rootContainer` (the absolute top level of the drive).
+
+Unlike a traditional local folder, our `rootContainer` doesn't contain regular files. Instead, it acts as a mount point that populates the user's available **Drives** (e.g., Personal Drive, Shared Drives). 
+When the extension is asked to enumerate the `rootContainer`, we fire a GraphQL query to fetch the user's drives and return them as high-level "Folders" to macOS.
+
+## Handling Virtual Files
+
+When the user clicks into one of those drives, macOS asks the extension to enumerate that specific folder's ID.
+We use the Apollo GraphQL client to fetch the `folderContents` from the backend. For every item returned, we map it into an `NSFileProviderItem` struct that macOS understands.
+
+Here is how we translate cloud files into virtual files:
+- **Metadata First:** We return the `filename`, `creationDate`, `contentModificationDate`, and `documentSize`. macOS uses this to instantly show the file in Finder, even though 0 bytes of content have been downloaded!
+- **On-Demand Downloading:** The file is marked as "datalless". It appears to have a normal icon and size, but a small cloud icon next to it indicates it isn't local.
+- **The Rust SDK Bridge:** If the user double-clicks the file, macOS intercepts the open request and calls `fetchContents(for: itemIdentifier)`. Our extension passes the `itemIdentifier` down to the **Platrium SDK (Rust)**, which streams the raw CAS chunks from the backend directly onto the physical Mac hard drive at lightning speed!
+
+## Permissions & Capabilities
+
+Platrium maps advanced cloud permissions directly into native macOS Finder capabilities.
+
+When we create an `NSFileProviderItem`, we set its `capabilities`. For example:
+- **Read-Only:** If the user only has viewer permissions for a Shared Drive, we omit the `.allowsEditing` and `.allowsDeleting` capabilities.
+- **Finder Enforcement:** Because these permissions are set at the OS level, macOS natively dims out the "Move to Trash" or "Rename" buttons in the Finder context menu, providing a flawless, native user experience without writing any custom UI!

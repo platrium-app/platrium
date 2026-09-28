@@ -1,0 +1,56 @@
+---
+title: GraphQL Transport
+description: Magical real-time UI synchronization using WebSockets and Apollo Cache.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+The Web is inherently stateless, but modern users expect their file browsers to instantly update when a collaborator renames a file or moves a folder. To achieve this without aggressively polling the server, Platrium uses the **GraphQL Transport**.
+
+This transport sits behind the Notification Broker, listening for pure domain events, translating them into GraphQL models, and streaming them down to the browser via WebSockets.
+
+## The Serialization Boundary
+
+The Core engine doesn't know what a GraphQL schema is. It only understands pure Go structs like `events.DriveEvent`. 
+
+When the Notification Broker calls `DeliverEvent(event, devices)` on the GraphQL Transport, the transport must act as a **Serialization Boundary**. It type-switches the event and maps it into the code-generated `graphql.DriveItemEvent` model.
+
+```go
+func serializeDriveEvent(e events.DriveEvent) *graphql.DriveItemEvent {
+	var gqlEventType graphql.DriveItemEventType
+	switch e.EventType {
+	case events.EventUpdated:
+		gqlEventType = graphql.DriveItemEventTypeUpdated
+	case events.EventDeleted:
+		gqlEventType = graphql.DriveItemEventTypeDeleted
+	default:
+		gqlEventType = graphql.DriveItemEventTypeUpdated
+	}
+
+	return &graphql.DriveItemEvent{
+		EventType: gqlEventType,
+		ItemID:    e.ItemID,
+		DeletedID: e.DeletedID,
+	}
+}
+```
+
+Notice how we intentionally strip the full `DriveItem` payload! Over WebSockets, we only send the `eventType` and the `itemId`. This keeps our WebSocket frames incredibly small (often under 100 bytes) and prevents data leakage, forcing the client to explicitly request the updated metadata with proper authorization headers.
+
+## Apollo Cache Magic
+
+:::info
+**Performance Tip:** Refetching an entire folder list just because one file was renamed is computationally expensive and causes the browser's scroll position to jump violently.
+:::
+
+Because the backend only pushes `{ eventType: "UPDATED", itemId: "123" }`, the frontend needs an intelligent way to apply these changes without refetching the whole world. We achieve this using Apollo Client's **Normalized Caching**.
+
+When the `useDriveEventSubscription` hook receives a ping over the WebSocket:
+
+1. **If the event is `DELETED`:**
+   We don't even talk to the server! We execute a surgical cache eviction: `client.cache.evict({ id: "File:123" })`. The item instantly vanishes from the screen with zero HTTP overhead.
+
+2. **If the event is `UPDATED`:**
+   We trigger an invisible background `refetch()`. However, because we configured `isLoading` to gracefully ignore background fetches (`contentsQuery.loading && !contentsQuery.data`), the DOM remains fully intact. When the new metadata arrives, Apollo seamlessly hot-swaps the internal cache, instantly updating the UI without destroying the scroll position!
+
+This hybrid approach gives us the best of both worlds: the ultra-low latency of WebSockets, and the robust consistency of stateless HTTP GraphQL queries!
