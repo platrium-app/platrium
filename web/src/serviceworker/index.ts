@@ -43,7 +43,7 @@ self.addEventListener('fetch', (event) => {
         await ensureWasmInit();
 
         // Route download interception requests
-        const downloadMatch = url.pathname.match(/^\/rawcontent\/([a-zA-Z0-9-]+)$/);
+        const downloadMatch = url.pathname.match(/^\/rawcontent\/([a-zA-Z0-9_-]+)$/);
         if (downloadMatch) {
             const fileId = downloadMatch[1];
             return handleDownloadRequest(event, fileId, url);

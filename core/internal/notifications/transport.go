@@ -18,8 +18,8 @@ const (
 // Transports will type-switch on this to serialize it for their specific network.
 type NotificationEvent any
 
-// NotificationTransport defines the contract for any notification delivery mechanism.
-type NotificationTransport interface {
+// Transport defines the contract for any notification delivery mechanism.
+type Transport interface {
 	GetTransportType() TransportType
 	DeliverEvent(ctx context.Context, targets []*identity.Device, event NotificationEvent) error
 }

@@ -95,7 +95,11 @@ func main() {
 	identityHandler := identity.NewTenantHandler(tenantStore, userStore, fsOps)
 	identityRouter := identity.NewRouter(identityHandler)
 
-	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager)
+	// Setup Notifications & WebSockets
+	gqlTransport := transports.NewGraphQLTransport()
+	notifBroker := notifications.NewBroker(gqlTransport)
+
+	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager, notifBroker)
 	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
@@ -111,14 +115,10 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Setup Notifications & WebSockets
-	gqlTransport := transports.NewGraphQLTransport()
-	broker := notifications.NewBroker(gqlTransport)
-
 	// Setup GraphQL
 	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
 		FSOps:       fsOps,
-		Broker:      broker,
+		Broker:      notifBroker,
 		SubsManager: gqlTransport,
 	}}))
 

@@ -13,6 +13,7 @@ import (
 
 	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
+	"platrium/internal/notifications/events"
 )
 
 type UploadSessionPassportClaims struct {
@@ -249,10 +250,20 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 		MimeType:  claims.MimeType,
 		HexHashes: hexHashes,
 	})
+
 	if err != nil {
 		return UploadSessionCommit500JSONResponse{
 			Debuginfo: fmt.Sprintf("failed to commit file node: %v", err),
 		}, nil
+	}
+
+	if sess, ok := session.FromContext(ctx); ok {
+		api.NotificationsBroker.Publish(ctx, []string{sess.UserID}, events.DriveEvent{
+			EventType: events.EventUpdated,
+			ItemID:    fileId,
+			ParentID:  &claims.ParentFolderID,
+			Timestamp: time.Now(),
+		})
 	}
 
 	return UploadSessionCommit200JSONResponse{

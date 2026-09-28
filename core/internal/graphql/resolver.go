@@ -16,6 +16,6 @@ type SubscriptionManager interface {
 
 type Resolver struct {
 	FSOps       *fsops.FSOps
-	Broker      *notifications.NotificationBroker
+	Broker      *notifications.Broker
 	SubsManager SubscriptionManager
 }
