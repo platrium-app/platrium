@@ -60,7 +60,7 @@ func (o *Orchestrator) Bootstrap(ctx context.Context) error {
 		TenantID: tenant.ID,
 		OwnerID:  user.ID,
 		Name:     "My Drive",
-		Type:     "PRIVATE",
+		Type:     fsops.DriveTypePrivate,
 	})
 
 	if err != nil {

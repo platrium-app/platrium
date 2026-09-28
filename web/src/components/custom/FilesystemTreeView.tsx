@@ -11,7 +11,7 @@ export interface FileTreeNode {
 
 export interface FilesystemTreeProps {
   nodes: FileTreeNode[]
-  getChildren: (nodeId: string) => FileTreeNode[]
+  getChildren: (nodeId: string) => Promise<FileTreeNode[]>
   activeId?: string
   onSelect?: (nodeId: string) => void
   level?: number
@@ -48,7 +48,7 @@ function FilesystemTreeItem({
   level,
 }: {
   node: FileTreeNode
-  getChildren: (nodeId: string) => FileTreeNode[]
+  getChildren: (nodeId: string) => Promise<FileTreeNode[]>
   activeId?: string
   onSelect?: (nodeId: string) => void
   level: number
@@ -56,7 +56,28 @@ function FilesystemTreeItem({
   const [isExpanded, setIsExpanded] = useState(false)
   const isActive = activeId === node.id
   const NodeIcon = node.icon || Folder
-  const childrenNodes = isExpanded ? getChildren(node.id) : []
+  const [childrenNodes, setChildrenNodes] = useState<FileTreeNode[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleToggleExpand = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isExpanded) {
+      setIsExpanded(true)
+      if (childrenNodes.length === 0) {
+        setIsLoading(true)
+        try {
+          const fetched = await getChildren(node.id)
+          setChildrenNodes(fetched)
+        } catch (err) {
+          console.error("Failed to fetch children", err)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+    } else {
+      setIsExpanded(false)
+    }
+  }
 
   return (
     <SidebarMenuItem>
@@ -68,19 +89,13 @@ function FilesystemTreeItem({
         {node.hasChildren ? (
           isExpanded ? (
             <ChevronDown
-              className="size-4 flex-shrink-0 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation()
-                setIsExpanded(false)
-              }}
+              className={`size-4 flex-shrink-0 cursor-pointer ${isLoading ? "animate-pulse" : ""}`}
+              onClick={handleToggleExpand}
             />
           ) : (
             <ChevronRight
-              className="size-4 flex-shrink-0 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation()
-                setIsExpanded(true)
-              }}
+              className={`size-4 flex-shrink-0 cursor-pointer ${isLoading ? "animate-pulse" : ""}`}
+              onClick={handleToggleExpand}
             />
           )
         ) : (

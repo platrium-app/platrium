@@ -84,5 +84,26 @@ type Mutation {
   createFolder(parentId: ID!, name: String!): Folder!
   renameItem(id: ID!, newName: String!): DriveItem!
   moveItem(id: ID!, newParentId: ID!): DriveItem!
+  copyFile(fileId: ID!, newParentId: ID!, newName: String!): File!
   deleteItem(id: ID!): Boolean!
+}
+
+enum DriveItemEventType {
+  UPDATED
+  DELETED
+}
+
+type DriveItemEvent {
+  eventType: DriveItemEventType!
+  itemId: ID!
+  item: DriveItem
+  deletedId: ID
+}
+
+type Subscription {
+  driveItemChanged: DriveItemEvent!
+}
+
+extend type Query {
+  getChanges(folderId: ID!, since: DateTime!): [DriveItemEvent!]!
 }

@@ -46,6 +46,7 @@ impl DownloadDestination {
 
 struct DownloadSessionInner {
     session_id: String,
+    file_id: String,
     file_name: String,
     file_size: u64,
     mime_type: String,
@@ -78,9 +79,8 @@ impl DownloadSessionInner {
                 &self.session_id,
                 crate::net::transfers::TransferDirection::Download,
                 total_bytes_to_transfer,
-                crate::net::transfers::TransferMetadata::FileChunk {
-                    folder_id: "".to_string(), // TODO: Maybe add a folderId here?
-                    file_name: self.file_name.clone(),
+                crate::net::transfers::TransferMetadata::FileDownloadEvent {
+                    file_id: self.file_id.clone(),
                 },
             )
             .await;
@@ -321,13 +321,14 @@ impl Api {
         file_id: String,
     ) -> Result<DownloadSession, crate::errors::PlatriumError> {
         let inner = self.0.clone();
-        let req = models::FilesDownloadSessionInitRequest::new(file_id);
+        let req = models::FilesDownloadSessionInitRequest::new(file_id.clone());
         let resp = files_api::download_session_initialize(&inner.api_config, req)
             .await
             .map_err(|e| crate::errors::PlatriumError::ApiError(e.to_string()))?;
 
         Ok(DownloadSession(Arc::new(DownloadSessionInner {
             session_id: resp.session_id,
+            file_id: file_id,
             file_name: resp.file_name,
             file_size: resp.file_size as u64,
             mime_type: resp.mime_type,

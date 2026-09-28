@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { useQuery } from "@apollo/client/react"
+import { useQuery, useApolloClient } from "@apollo/client/react"
 import { graphql } from "@/graphql"
 import {
   Sidebar,
@@ -79,6 +79,20 @@ const GET_DRIVES = graphql(`
   }
 `)
 
+const GET_SUBFOLDERS = graphql(`
+  query GetSubfoldersSidebar($folderId: ID!) {
+    folderContents(folderId: $folderId, first: 100) {
+      edges {
+        node {
+          id
+          name
+          type
+        }
+      }
+    }
+  }
+`)
+
 // --- COMPONENTS ---
 
 function StaticNavSection({ items }: { items: StaticNavItem[] }) {
@@ -136,10 +150,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     })
   }
 
-  // Helper function for the generic tree (deferring sub-folder fetches for now)
-  const getChildren = React.useCallback((_parentId: string) => {
-    return []
-  }, [])
+  const apolloClient = useApolloClient()
+
+  // Helper function for the generic tree
+  const getChildren = React.useCallback(async (parentId: string) => {
+    try {
+      const result = await apolloClient.query({
+        query: GET_SUBFOLDERS,
+        variables: { folderId: parentId },
+      })
+
+      const children: FolderNode[] = []
+      ;(result.data as any).folderContents?.edges?.forEach((edge: any) => {
+        if (edge?.node && edge.node.type === "FOLDER") {
+          children.push({
+            id: edge.node.id,
+            parentId,
+            name: edge.node.name,
+            hasChildren: true, // We don't know, so assume true to show chevron
+          })
+        }
+      })
+      return children
+    } catch (err) {
+      console.error("Failed to fetch subfolders", err)
+      return []
+    }
+  }, [apolloClient])
 
   return (
     <Sidebar {...props}>
@@ -172,9 +209,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
 
         {/* Unified Drives Group */}
-        <SidebarGroup>
+        <SidebarGroup className="flex-1 overflow-hidden min-h-0">
           <SidebarGroupLabel>Drives</SidebarGroupLabel>
-          <SidebarGroupContent>
+          <SidebarGroupContent className="flex-1 overflow-y-auto no-scrollbar min-h-0">
             <SidebarMenu className="group/tree">
               {/* 1. My Drive */}
               {loading ? (

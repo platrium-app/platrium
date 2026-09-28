@@ -11,3 +11,11 @@ export function getGraphQLEndpoint(baseUrl: string = DEFAULT_BACKEND_URL): strin
   const cleanBase = baseUrl.replace(/\/+$/, "");
   return `${cleanBase}/graphql`;
 }
+
+/**
+ * Returns the GraphQL WebSocket endpoint URL for the specified base URL.
+ */
+export function getGraphQLWSEndpoint(baseUrl: string = DEFAULT_BACKEND_URL): string {
+  const cleanBase = baseUrl.replace(/\/+$/, "").replace(/^http/, "ws");
+  return `${cleanBase}/graphql`;
+}

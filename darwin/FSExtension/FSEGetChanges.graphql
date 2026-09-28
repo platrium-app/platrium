@@ -1,0 +1,9 @@
+query FSEGetChanges($folderId: ID!, $since: DateTime!) {
+  getChanges(folderId: $folderId, since: $since) {
+    eventType
+    item {
+      ...FseDriveItemFields
+    }
+    deletedId
+  }
+}

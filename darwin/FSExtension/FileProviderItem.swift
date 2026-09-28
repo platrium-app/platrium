@@ -20,7 +20,20 @@ class FileProviderItem: NSObject, NSFileProviderItem {
     let contentModificationDate: Date?
     
     var capabilities: NSFileProviderItemCapabilities {
-        return [.allowsReading] // Keep simple for now
+        if itemIdentifier == .rootContainer {
+            // This is the Root Container. We shouldn't be able to move files, add new ones,
+            // etc. in them, beside the Drives. This folder exists to mount the Drives.
+            return [.allowsReading]
+        }
+        
+        if parentItemIdentifier == .rootContainer {
+            // These are the Drives themselves. We can read, create and move into them
+            // but we cannot rename, move, or delete the Drive folder itself.
+            return [.allowsReading, .allowsAddingSubItems, .allowsContentEnumerating]
+        }
+
+        // TODO: Set based on file permissions from Platrium Sharing
+        return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsDeleting, .allowsAddingSubItems, .allowsReparenting, .allowsContentEnumerating]
     }
     
     var itemVersion: NSFileProviderItemVersion {
@@ -42,24 +55,18 @@ class FileProviderItem: NSObject, NSFileProviderItem {
         self.contentModificationDate = nil
         super.init()
     }
-    
-    // Init for Folder/File Content
-    init(node: FSEGetFolderContentsQuery.Data.FolderContents.Edge.Node) {
-        self.itemIdentifier = NSFileProviderItemIdentifier(node.id)
-        // If parentId is not available, we assume it's attached to the root container (a drive's root)
-        self.parentItemIdentifier = node.parentId.map { NSFileProviderItemIdentifier($0) } ?? .rootContainer
-        self.filename = node.name
+    init(fragment: FseDriveItemFields) {
+        self.itemIdentifier = NSFileProviderItemIdentifier(fragment.id)
+        self.parentItemIdentifier = fragment.parentId.map { NSFileProviderItemIdentifier($0) } ?? .rootContainer
+        self.filename = fragment.name
         
-        if node.type == .folder {
+        let ext = (fragment.name as NSString).pathExtension
+        let backendMimeType = fragment.asFile?.mimeType
+        
+        if fragment.type == .folder {
             self.contentType = .folder
             self.documentSize = nil
         } else {
-            // 1. Try to resolve UTType from the backend MIME type
-            // 2. Fallback to resolving from the filename extension
-            // 3. Fallback to generic data
-            let ext = (node.name as NSString).pathExtension
-            let backendMimeType = node.asFile?.mimeType
-            
             if let mime = backendMimeType, let type = UTType(mimeType: mime) {
                 self.contentType = type
             } else if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
@@ -68,7 +75,7 @@ class FileProviderItem: NSObject, NSFileProviderItem {
                 self.contentType = .data
             }
             
-            if let file = node.asFile, let size = Double(file.size) {
+            if let file = fragment.asFile, let size = Double(file.size) {
                 self.documentSize = NSNumber(value: size)
             } else {
                 self.documentSize = NSNumber(value: 0) // DO NOT REVERT THIS! macOS needs this to display the file!
@@ -77,8 +84,8 @@ class FileProviderItem: NSObject, NSFileProviderItem {
         
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        self.creationDate = formatter.date(from: node.createdAt)
-        self.contentModificationDate = formatter.date(from: node.updatedAt)
+        self.creationDate = formatter.date(from: fragment.createdAt)
+        self.contentModificationDate = formatter.date(from: fragment.updatedAt)
         super.init()
     }
     
@@ -90,35 +97,6 @@ class FileProviderItem: NSObject, NSFileProviderItem {
         self.documentSize = nil
         self.creationDate = nil
         self.contentModificationDate = nil
-        super.init()
-    }
-    
-    // Init after a download — uses item metadata from GraphQL so filename, size, and parent are all correct
-    init(identifier: NSFileProviderItemIdentifier, info: FSEGetItemInfoQuery.Data.Item) {
-        self.itemIdentifier = identifier
-        self.parentItemIdentifier = info.parentId.map { NSFileProviderItemIdentifier($0) } ?? .rootContainer
-        self.filename = info.name
-        
-        let ext = (info.name as NSString).pathExtension
-        let mimeType = info.asFile?.mimeType
-        if let mime = mimeType, let type = UTType(mimeType: mime) {
-            self.contentType = type
-        } else if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
-            self.contentType = type
-        } else {
-            self.contentType = .data
-        }
-        
-        if let file = info.asFile, let size = Double(file.size) {
-            self.documentSize = NSNumber(value: size)
-        } else {
-            self.documentSize = nil
-        }
-        
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        self.creationDate = formatter.date(from: info.createdAt)
-        self.contentModificationDate = formatter.date(from: info.updatedAt)
         super.init()
     }
 }

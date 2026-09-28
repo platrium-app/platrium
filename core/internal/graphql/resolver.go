@@ -1,6 +1,13 @@
 package graphql
 
-import "platrium/internal/fsops"
+import (
+	"platrium/internal/fsops"
+	"platrium/internal/notifications"
+)
+
+type SubscriptionManager interface {
+	Subscribe(userID string) (<-chan *DriveItemEvent, func())
+}
 
 // This file will not be regenerated automatically.
 //
@@ -8,5 +15,7 @@ import "platrium/internal/fsops"
 // here.
 
 type Resolver struct {
-	FSOps *fsops.FSOps
+	FSOps       *fsops.FSOps
+	Broker      *notifications.NotificationBroker
+	SubsManager SubscriptionManager
 }

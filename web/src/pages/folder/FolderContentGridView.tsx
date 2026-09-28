@@ -52,15 +52,18 @@ export function FolderContentGridView({
   onItemClick,
   onItemDoubleClick,
   onItemContextMenu,
+  onOperation,
 }: FolderViewProps) {
   return (
-    <div className="w-full min-h-full py-2">
+    <div className="w-full flex-1 overflow-auto py-2">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
         {items.map((item) => {
           const isSelected = selectedIds.has(item.id)
+          const selectedItems = items.filter(i => selectedIds.has(i.id))
+          const menuItems = isSelected ? selectedItems : [item]
 
           return (
-            <ItemContextMenu key={item.id} item={item}>
+            <ItemContextMenu key={item.id} item={item} selectedItems={menuItems} onOperation={onOperation}>
               <div
                 data-selection-id={item.id}
                 className={cn(

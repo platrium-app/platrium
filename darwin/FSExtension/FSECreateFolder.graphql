@@ -1,0 +1,10 @@
+mutation FSECreateFolder($parentId: ID!, $name: String!) {
+  createFolder(parentId: $parentId, name: $name) {
+    id
+    parentId
+    name
+    type
+    createdAt
+    updatedAt
+  }
+}

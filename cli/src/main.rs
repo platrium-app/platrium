@@ -1,3 +1,5 @@
+use std::os::fd::{AsRawFd, IntoRawFd};
+
 use platrium_sdk::client::{
     PlatriumClient,
     files::{DownloadDestination, UploadSource},
@@ -28,7 +30,7 @@ async fn main() {
 
     let file_path = format!("/tmp/{}", download_session.file_name());
     let file = std::fs::File::create(&file_path).unwrap();
-    let download_dest = DownloadDestination::new(file);
+    let download_dest = DownloadDestination::new(file.as_raw_fd());
 
     download_session.stream_to(&download_dest).await.unwrap();
     println!("Saved File to {}", file_path);

@@ -1,0 +1,18 @@
+fragment FseDriveItemFields on DriveItem {
+  id
+  parentId
+  name
+  type
+  createdAt
+  updatedAt
+  ... on File {
+    size
+    mimeType
+    version
+  }
+  ... on Folder {
+    driveMetadata {
+      driveType
+    }
+  }
+}

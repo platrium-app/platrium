@@ -25,8 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useUpload } from "@/contexts/UploadContext"
-import type { SortField, SortDirection, ViewMode } from "./FolderViewTypes"
-import { cn } from "@/lib/utils"
+import type { SortField, SortDirection, ViewMode, DriveItemNode } from "./FolderViewTypes"
+import { cn, triggerFileDownload } from "@/lib/utils"
 
 export interface FolderHeaderToolbarProps {
   selectedCount: number
@@ -37,6 +37,8 @@ export interface FolderHeaderToolbarProps {
   sortDirection: SortDirection
   onSortChange: (field: SortField) => void
   folderId: string
+  onOperation?: (mode: "CREATE_FOLDER" | "RENAME" | "MOVE" | "COPY", items: DriveItemNode[]) => void
+  selectedItems?: DriveItemNode[]
 }
 
 export function FolderHeaderToolbar({
@@ -47,6 +49,8 @@ export function FolderHeaderToolbar({
   sortField,
   onSortChange,
   folderId,
+  onOperation,
+  selectedItems = [],
 }: FolderHeaderToolbarProps) {
   const { triggerUpload } = useUpload()
 
@@ -78,7 +82,7 @@ export function FolderHeaderToolbar({
               <span>New</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onOperation?.("CREATE_FOLDER", [])}>
                 <FolderPlus className="size-4 text-muted-foreground" />
                 <span>New Folder</span>
               </DropdownMenuItem>
@@ -98,7 +102,7 @@ export function FolderHeaderToolbar({
         {/* Selection State: Action Bar */}
         <div
           className={cn(
-            "col-start-1 row-start-1 flex items-center gap-1 transition-all duration-200 ease-in-out",
+            "col-start-1 row-start-1 flex items-center gap-1 min-w-0 transition-all duration-200 ease-in-out",
             hasSelection
               ? "translate-y-0 opacity-100 visible"
               : "pointer-events-none translate-y-2 opacity-0 invisible"
@@ -121,17 +125,21 @@ export function FolderHeaderToolbar({
           <div className="mx-1 h-4 w-px bg-border shrink-0" />
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="h-8 gap-1.5 px-1 text-xs font-medium opacity-50 cursor-not-allowed"
-              title="Download"
-            >
-              <Download className="size-3.5" />
-              <span className="hidden sm:inline">Download</span>
-            </Button>
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar [&_button]:shrink-0 mask-edges min-w-0">
+            {selectedCount > 0 && selectedItems.every(i => i.type === "FILE") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-1 text-xs font-medium"
+                title="Download"
+                onClick={() => {
+                  selectedItems.forEach(i => triggerFileDownload(i.id, i.name))
+                }}
+              >
+                <Download className="size-3.5" />
+                <span className="hidden sm:inline">Download</span>
+              </Button>
+            )}
 
             <Button
               variant="ghost"
@@ -144,17 +152,49 @@ export function FolderHeaderToolbar({
               <span className="hidden sm:inline">Share</span>
             </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="h-8 gap-1.5 px-1 text-xs font-medium opacity-50 cursor-not-allowed"
-              title="Rename"
-            >
-              <Pencil className="size-3.5" />
-              <span className="hidden sm:inline">Rename</span>
-            </Button>
+            {/* Rename: Single item only */}
+            {selectedCount === 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-1 text-xs font-medium"
+                title="Rename"
+                onClick={() => onOperation?.("RENAME", selectedItems)}
+              >
+                <Pencil className="size-3.5" />
+                <span className="hidden sm:inline">Rename</span>
+              </Button>
+            )}
 
+            {/* Move: Any selected items */}
+            {selectedCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-1 text-xs font-medium"
+                title="Move"
+                onClick={() => onOperation?.("MOVE", selectedItems)}
+              >
+                <ArrowUpDown className="size-3.5" />
+                <span className="hidden sm:inline">Move</span>
+              </Button>
+            )}
+
+            {/* Copy: Only if EXACTLY one file is selected */}
+            {selectedCount === 1 && selectedItems[0]?.type === "FILE" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-1 text-xs font-medium"
+                title="Copy"
+                onClick={() => onOperation?.("COPY", selectedItems)}
+              >
+                <FileUp className="size-3.5" />
+                <span className="hidden sm:inline">Copy</span>
+              </Button>
+            )}
+
+            {/* Delete: Still disabled for now */}
             <Button
               variant="ghost"
               size="sm"

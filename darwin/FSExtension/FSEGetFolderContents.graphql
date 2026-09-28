@@ -7,16 +7,7 @@ query FSEGetFolderContents($folderId: ID!, $first: Int, $after: String) {
     edges {
       cursor
       node {
-        id
-        parentId
-        name
-        type
-        createdAt
-        updatedAt
-        ... on File {
-          size
-          mimeType
-        }
+        ...FseDriveItemFields
       }
     }
   }

@@ -1,0 +1,7 @@
+mutation FSEMoveItem($id: ID!, $newParentId: ID!) {
+  moveItem(id: $id, newParentId: $newParentId) {
+    id
+    parentId
+    updatedAt
+  }
+}

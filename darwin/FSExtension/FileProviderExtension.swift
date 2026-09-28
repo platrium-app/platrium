@@ -10,8 +10,30 @@ import Apollo
 import PlatriumGraphQL
 import PlatriumSDK
 import os
+import UniformTypeIdentifiers
 
 private let logger = Logger(subsystem: "org.platrium.FSExtension", category: "Extension")
+
+extension ApolloClient {
+    func performAsync<Mutation: GraphQLMutation>(mutation: Mutation) async throws -> Mutation.Data {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.perform(mutation: mutation) { result in
+                switch result {
+                case .success(let gqlResult):
+                    if let errors = gqlResult.errors, !errors.isEmpty {
+                        continuation.resume(throwing: NSError(domain: "FSErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: errors.map { $0.localizedDescription }.joined(separator: ", ")]))
+                    } else if let data = gqlResult.data {
+                        continuation.resume(returning: data)
+                    } else {
+                        continuation.resume(throwing: NSError(domain: "FSErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "No data returned"]))
+                    }
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+}
 
 class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     
@@ -41,9 +63,25 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     
     func item(for identifier: NSFileProviderItemIdentifier, request: NSFileProviderRequest, completionHandler: @escaping (NSFileProviderItem?, Error?) -> Void) -> Progress {
         logger.info("item(for:) called for identifier: \(identifier.rawValue, privacy: .public)")
-        // TODO: implement the actual lookup via GraphQL
-        completionHandler(FileProviderItem(identifier: identifier), nil)
-        return Progress()
+        let progress = Progress(totalUnitCount: 1)
+        
+        if identifier == .rootContainer {
+            completionHandler(FileProviderItem(identifier: identifier), nil)
+            return progress
+        }
+        
+        Task {
+            do {
+                let info = try await self.fetchItemInfo(id: identifier.rawValue)
+                let item = FileProviderItem(fragment: info.fragments.fseDriveItemFields)
+                completionHandler(item, nil)
+            } catch {
+                logger.error("item(for:) failed for \(identifier.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                completionHandler(nil, error)
+            }
+        }
+        
+        return progress
     }
     
     /// Fetches a single item's metadata (including parentId) from GraphQL
@@ -81,8 +119,8 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
 
                 async let info = self.fetchItemInfo(id: itemIdentifier.rawValue)
                 let ((url, _), itemInfo) = try await (downloadResult, info)
-                let item = FileProviderItem(identifier: itemIdentifier, info: itemInfo)
-                logger.info("fetchContents (full) succeeded for: \(itemInfo.name, privacy: .public) size=\(itemInfo.asFile?.size ?? "folder", privacy: .public)")
+                let item = FileProviderItem(fragment: itemInfo.fragments.fseDriveItemFields)
+                logger.info("fetchContents (full) succeeded for: \(itemInfo.fragments.fseDriveItemFields.name, privacy: .public) size=\(itemInfo.fragments.fseDriveItemFields.asFile?.size ?? "folder", privacy: .public)")
                 completionHandler(url, item, nil)
             } catch {
                 logger.error("fetchContents (full) failed for: \(itemIdentifier.rawValue, privacy: .public) error: \(error.localizedDescription, privacy: .public)")
@@ -95,24 +133,126 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     }
 
     func createItem(basedOn itemTemplate: NSFileProviderItem, fields: NSFileProviderItemFields, contents url: URL?, options: NSFileProviderCreateItemOptions = [], request: NSFileProviderRequest, completionHandler: @escaping (NSFileProviderItem?, NSFileProviderItemFields, Bool, Error?) -> Void) -> Progress {
-        // TODO: a new item was created on disk, process the item's creation
+        let progress = Progress(totalUnitCount: -1)
         
-        completionHandler(itemTemplate, [], false, nil)
-        return Progress()
+        Task {
+            do {
+                if itemTemplate.contentType == .folder {
+                    logger.info("createItem called for folder: \\(itemTemplate.filename, privacy: .public) in parent: \\(itemTemplate.parentItemIdentifier.rawValue, privacy: .public)")
+                    
+                    let mutation = FSECreateFolderMutation(
+                        parentId: itemTemplate.parentItemIdentifier.rawValue,
+                        name: itemTemplate.filename
+                    )
+
+                    let result = try await apollo.performAsync(mutation: mutation)
+                    guard let newFolderId = result.createFolder.id as String? else {
+                        throw NSError(domain: "FSErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse createFolder response"])
+                    }
+                    
+                    let info = try await self.fetchItemInfo(id: newFolderId)
+                    let item = FileProviderItem(fragment: info.fragments.fseDriveItemFields)
+                    
+                    logger.info("createItem succeeded for folder: \\(info.fragments.fseDriveItemFields.name, privacy: .public) with new ID: \\(newFolderId, privacy: .public)")
+                    completionHandler(item, [], false, nil)
+                    return
+                }
+                
+                guard let fileUrl = url else {
+                    let nsError = NSError(domain: NSCocoaErrorDomain, code: NSFileProviderError.serverUnreachable.rawValue, userInfo: [:])
+                    completionHandler(nil, [], false, nsError)
+                    return
+                }
+                
+                logger.info("createItem called for file: \(itemTemplate.filename, privacy: .public) in parent: \(itemTemplate.parentItemIdentifier.rawValue, privacy: .public)")
+                
+                let utility = ContentTransferUtility.shared
+                let newFileId = try await utility.upload(
+                    parentId: itemTemplate.parentItemIdentifier.rawValue,
+                    fileName: itemTemplate.filename,
+                    url: fileUrl,
+                    progress: progress
+                )
+                
+                let info = try await self.fetchItemInfo(id: newFileId)
+                let item = FileProviderItem(fragment: info.fragments.fseDriveItemFields)
+                
+                logger.info("createItem succeeded for file: \(info.fragments.fseDriveItemFields.name, privacy: .public) with new ID: \(newFileId, privacy: .public)")
+                completionHandler(item, [], false, nil)
+            } catch {
+                logger.error("createItem failed for file: \(itemTemplate.filename, privacy: .public) error: \(error.localizedDescription, privacy: .public)")
+                let nsError = NSError(domain: NSCocoaErrorDomain, code: NSFileProviderError.serverUnreachable.rawValue, userInfo: [NSUnderlyingErrorKey: error])
+                completionHandler(nil, [], false, nsError)
+            }
+        }
+        
+        return progress
     }
     
     func modifyItem(_ item: NSFileProviderItem, baseVersion version: NSFileProviderItemVersion, changedFields: NSFileProviderItemFields, contents newContents: URL?, options: NSFileProviderModifyItemOptions = [], request: NSFileProviderRequest, completionHandler: @escaping (NSFileProviderItem?, NSFileProviderItemFields, Bool, Error?) -> Void) -> Progress {
-        // TODO: an item was modified on disk, process the item's modification
+        let progress = Progress(totalUnitCount: 1)
         
-        completionHandler(nil, [], false, NSError(domain: NSCocoaErrorDomain, code: NSFeatureUnsupportedError, userInfo:[:]))
-        return Progress()
+        Task {
+            do {
+                var updatedInfo: FileProviderItem? = nil
+                
+                if changedFields.contains(.filename) {
+                    logger.info("Renaming item: \\(item.itemIdentifier.rawValue) to \\(item.filename)")
+                    let mutation = FSERenameItemMutation(id: item.itemIdentifier.rawValue, newName: item.filename)
+                    let result = try await apollo.performAsync(mutation: mutation)
+                    
+                    if let _ = result.renameItem.id as String? {
+                        let info = try await self.fetchItemInfo(id: item.itemIdentifier.rawValue)
+                        updatedInfo = FileProviderItem(fragment: info.fragments.fseDriveItemFields)
+                    } else {
+                        throw NSError(domain: "FSErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse renameItem response"])
+                    }
+                }
+                
+                if changedFields.contains(.parentItemIdentifier) {
+                    logger.info("Moving item: \\(item.itemIdentifier.rawValue) to \\(item.parentItemIdentifier.rawValue)")
+                    let mutation = FSEMoveItemMutation(id: item.itemIdentifier.rawValue, newParentId: item.parentItemIdentifier.rawValue)
+                    let result = try await apollo.performAsync(mutation: mutation)
+                    
+                    if let _ = result.moveItem.id as String? {
+                        let info = try await self.fetchItemInfo(id: item.itemIdentifier.rawValue)
+                        updatedInfo = FileProviderItem(fragment: info.fragments.fseDriveItemFields)
+                    } else {
+                        throw NSError(domain: "FSErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse moveItem response"])
+                    }
+                }
+                
+                if let finalItem = updatedInfo {
+                    completionHandler(finalItem, [], false, nil)
+                } else {
+                    completionHandler(item, [], false, nil)
+                }
+            } catch {
+                logger.error("modifyItem failed: \\(error.localizedDescription)")
+                completionHandler(nil, [], false, error)
+            }
+        }
+        
+        return progress
     }
     
     func deleteItem(identifier: NSFileProviderItemIdentifier, baseVersion version: NSFileProviderItemVersion, options: NSFileProviderDeleteItemOptions = [], request: NSFileProviderRequest, completionHandler: @escaping (Error?) -> Void) -> Progress {
-        // TODO: an item was deleted on disk, process the item's deletion
+        let progress = Progress(totalUnitCount: 1)
         
-        completionHandler(NSError(domain: NSCocoaErrorDomain, code: NSFeatureUnsupportedError, userInfo:[:]))
-        return Progress()
+        Task {
+            do {
+                logger.info("Deleting item: \\(identifier.rawValue)")
+                let mutation = FSEDeleteItemMutation(id: identifier.rawValue)
+                let _ = try await apollo.performAsync(mutation: mutation)
+                
+                completionHandler(nil)
+            } catch {
+                logger.error("deleteItem failed: \\(error.localizedDescription)")
+                completionHandler(error)
+            }
+        }
+        
+        return progress
     }
     
     func enumerator(for containerItemIdentifier: NSFileProviderItemIdentifier, request: NSFileProviderRequest) throws -> NSFileProviderEnumerator {
@@ -145,10 +285,10 @@ extension FileProviderExtension: NSFileProviderPartialContentFetching {
                 
                 async let info = self.fetchItemInfo(id: itemIdentifier.rawValue)
                 let ((url, actualRangeEnd), itemInfo) = try await (downloadResult, info)
-                let item = FileProviderItem(identifier: itemIdentifier, info: itemInfo)
+                let item = FileProviderItem(fragment: itemInfo.fragments.fseDriveItemFields)
                 // Use actualRangeEnd (clamped to fileSize-1) so we don't report more bytes than we wrote
                 let fetchedRange = NSRange(location: startByte, length: Int(actualRangeEnd) - startByte + 1)
-                logger.info("fetchPartialContents succeeded for: \(itemInfo.name, privacy: .public) fetchedRange=\(startByte)-\(actualRangeEnd)")
+                logger.info("fetchPartialContents succeeded for: \(itemInfo.fragments.fseDriveItemFields.name, privacy: .public) fetchedRange=\(startByte)-\(actualRangeEnd)")
                 completionHandler(url, item, fetchedRange, [], nil)
             } catch {
                 logger.error("fetchPartialContents failed for: \(itemIdentifier.rawValue, privacy: .public) error: \(error.localizedDescription, privacy: .public)")

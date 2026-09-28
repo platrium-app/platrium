@@ -28,4 +28,5 @@ export interface FolderViewProps {
   sortField: SortField
   sortDirection: SortDirection
   onSortChange: (field: SortField) => void
+  onOperation?: (mode: "CREATE_FOLDER" | "RENAME" | "MOVE" | "COPY", items: DriveItemNode[]) => void
 }

@@ -82,8 +82,7 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 		return "", err
 	}
 	cypher := `
-		MATCH (parent:Resource {id: $parent_id, tenant_id: $tenant_id})
-		WHERE parent:PrivateDrive OR parent:SharedDrive OR parent:Folder
+		MATCH (parent:Resource:Folder {id: $parent_id, tenant_id: $tenant_id})
 
 		MERGE (file:Resource {id: $file_id})
 		ON CREATE SET 
@@ -178,4 +177,58 @@ func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, er
 	}
 
 	return &file, nil
+}
+
+// CopyFile copies a file to a new parent folder.
+func (f *FSOps) CopyFile(ctx context.Context, tenantID string, fileID string, newParentID string, newName string) (*File, error) {
+	// TODO: Stub permissions check (CheckPermissions)
+
+	newID := nanoid.Must()
+	query := `
+		MATCH (src:Resource:File {id: $file_id, tenant_id: $tenant_id})
+		MATCH (dest:Resource {id: $new_parent_id, tenant_id: $tenant_id})
+		
+		CREATE (new:Resource:File)
+		SET new = src, 
+		    new.id = $new_id, 
+		    new.name = CASE WHEN $new_name = "" THEN src.name ELSE $new_name END, 
+		    new.created_at = datetime(), 
+		    new.updated_at = datetime()
+		    
+		CREATE (new)-[:CHILD_OF]->(dest)
+		RETURN new.id AS id
+	`
+
+	params := map[string]interface{}{
+		"file_id":       fileID,
+		"new_parent_id": newParentID,
+		"tenant_id":     tenantID,
+		"new_id":        newID,
+		"new_name":      newName,
+	}
+
+	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
+		res, err := tx.Query(ctx, query, params)
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+
+		if !res.Next() {
+			if err := res.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("source file or destination folder not found")
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: If the file was > 4 chunks, we must also duplicate the KVStore manifest
+	// pointing to the new file_id. For now, this perfectly copies inline_chunks!
+
+	return f.GetFile(ctx, tenantID, newID)
 }

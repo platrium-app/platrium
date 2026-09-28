@@ -1,14 +1,5 @@
 query FSEGetItemInfo($id: ID!) {
   item(id: $id) {
-    id
-    parentId
-    name
-    type
-    createdAt
-    updatedAt
-    ... on File {
-      size
-      mimeType
-    }
+    ...FseDriveItemFields
   }
 }

@@ -13,9 +13,13 @@ pub enum TransferDirection {
 #[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
 #[cfg_attr(target_arch = "wasm32", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum TransferMetadata {
-    FileChunk {
+    FileUploadEvent {
         folder_id: String,
         file_name: String,
+    },
+
+    FileDownloadEvent {
+        file_id: String,
     },
     // Example of Future Transfer Type:
     // StaticAsset {
@@ -47,4 +51,3 @@ pub struct NetTransferEvent {
     pub total_bytes: u64,
     pub metadata: TransferMetadata,
 }
-

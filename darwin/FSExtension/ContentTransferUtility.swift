@@ -38,7 +38,7 @@ class ContentTransferUtility {
         
         let actualEnd = min(rangeEnd, session.fileSize() > 0 ? session.fileSize() - 1 : 0)
         
-        let listener = TransferProgressListener(progress: progress, sessionId: session.sessionId())
+        let listener = TransferProgressListener(progress: progress, targetFileId: fileId)
         filesApi.onTransferEvent(listener: listener)
         
         let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -54,32 +54,58 @@ class ContentTransferUtility {
         return (tempUrl, actualEnd)
     }
     
-    // Skeleton for future upload implementation
     func upload(
-        itemIdentifier: NSFileProviderItemIdentifier,
+        parentId: String,
+        fileName: String,
         url: URL,
         progress: Progress
-    ) async throws {
+    ) async throws -> String {
         let filesApi = client.files()
-        // 1. Get file descriptor from URL
-        // 2. Create UploadSource
-        // 3. Register TransferProgressListener
-        // 4. Start upload session
+        
+        let fileHandle = try FileHandle(forReadingFrom: url)
+        let fd = fileHandle.fileDescriptor
+        
+        let fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 ?? 0
+        if progress.totalUnitCount <= 0 {
+            progress.totalUnitCount = fileSize
+        }
+        
+        let listener = TransferProgressListener(progress: progress, targetFileName: fileName, targetFolderId: parentId)
+        filesApi.onTransferEvent(listener: listener)
+        
+        let source = UploadSource(fileName: fileName, fd: fd)
+        let newFileId = try await filesApi.upload(parentId: parentId, source: source)
+        
+        try fileHandle.close()
+        return newFileId
     }
 }
 
 final class TransferProgressListener: TransferEventListener {
     let progress: Progress
-    let sessionId: String
+    let targetFileName: String?
+    let targetFolderId: String?
+    let targetFileId: String?
     
-    init(progress: Progress, sessionId: String) {
+    init(progress: Progress, targetFileName: String? = nil, targetFolderId: String? = nil, targetFileId: String? = nil) {
         self.progress = progress
-        self.sessionId = sessionId
+        self.targetFileName = targetFileName
+        self.targetFolderId = targetFolderId
+        self.targetFileId = targetFileId
     }
     
     func onEvent(event: NetTransferEvent) {
-        if event.transferId == sessionId {
-            progress.completedUnitCount = Int64(event.bytesTransferred)
+        switch event.metadata {
+        case let .fileUploadEvent(folderId, fileName):
+            if folderId == targetFolderId && fileName == targetFileName {
+                progress.completedUnitCount = Int64(event.bytesTransferred)
+            }
+        case let .fileDownloadEvent(fileId):
+            if fileId == targetFileId {
+                progress.completedUnitCount = Int64(event.bytesTransferred)
+            }
+        default:
+            break
         }
     }
 }

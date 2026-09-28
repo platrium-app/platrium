@@ -32,6 +32,13 @@ type DriveItemEdge struct {
 	Node   DriveItem `json:"node"`
 }
 
+type DriveItemEvent struct {
+	EventType DriveItemEventType `json:"eventType"`
+	ItemID    string             `json:"itemId"`
+	Item      DriveItem          `json:"item,omitempty"`
+	DeletedID *string            `json:"deletedId,omitempty"`
+}
+
 type DriveMetadata struct {
 	DriveType    DriveType `json:"driveType"`
 	StorageUsed  int64     `json:"storageUsed"`
@@ -116,6 +123,64 @@ type PageInfo struct {
 type Query struct {
 }
 
+type Subscription struct {
+}
+
+type DriveItemEventType string
+
+const (
+	DriveItemEventTypeUpdated DriveItemEventType = "UPDATED"
+	DriveItemEventTypeDeleted DriveItemEventType = "DELETED"
+)
+
+var AllDriveItemEventType = []DriveItemEventType{
+	DriveItemEventTypeUpdated,
+	DriveItemEventTypeDeleted,
+}
+
+func (e DriveItemEventType) IsValid() bool {
+	switch e {
+	case DriveItemEventTypeUpdated, DriveItemEventTypeDeleted:
+		return true
+	}
+	return false
+}
+
+func (e DriveItemEventType) String() string {
+	return string(e)
+}
+
+func (e *DriveItemEventType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DriveItemEventType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DriveItemEventType", str)
+	}
+	return nil
+}
+
+func (e DriveItemEventType) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DriveItemEventType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DriveItemEventType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type DriveItemType string
 
 const (
@@ -154,7 +219,7 @@ func (e *DriveItemType) UnmarshalGQL(v any) error {
 }
 
 func (e DriveItemType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DriveItemType) UnmarshalJSON(b []byte) error {
@@ -209,7 +274,7 @@ func (e *DriveType) UnmarshalGQL(v any) error {
 }
 
 func (e DriveType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DriveType) UnmarshalJSON(b []byte) error {

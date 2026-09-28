@@ -32,6 +32,7 @@ type ResolverRoot interface {
 	Folder() FolderResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
+	Subscription() SubscriptionResolver
 }
 
 type DirectiveRoot struct {
@@ -47,6 +48,13 @@ type ComplexityRoot struct {
 	DriveItemEdge struct {
 		Cursor func(childComplexity int) int
 		Node   func(childComplexity int) int
+	}
+
+	DriveItemEvent struct {
+		DeletedID func(childComplexity int) int
+		EventType func(childComplexity int) int
+		Item      func(childComplexity int) int
+		ItemID    func(childComplexity int) int
 	}
 
 	DriveMetadata struct {
@@ -87,6 +95,7 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
+		CopyFile     func(childComplexity int, fileID string, newParentID string, newName string) int
 		CreateFolder func(childComplexity int, parentID string, name string) int
 		DeleteItem   func(childComplexity int, id string) int
 		MoveItem     func(childComplexity int, id string, newParentID string) int
@@ -101,7 +110,12 @@ type ComplexityRoot struct {
 	Query struct {
 		Drives         func(childComplexity int) int
 		FolderContents func(childComplexity int, folderID string, first *int, after *string) int
+		GetChanges     func(childComplexity int, folderID string, since time.Time) int
 		Item           func(childComplexity int, id string) int
+	}
+
+	Subscription struct {
+		DriveItemChanged func(childComplexity int) int
 	}
 }
 
@@ -119,12 +133,17 @@ type MutationResolver interface {
 	CreateFolder(ctx context.Context, parentID string, name string) (*Folder, error)
 	RenameItem(ctx context.Context, id string, newName string) (DriveItem, error)
 	MoveItem(ctx context.Context, id string, newParentID string) (DriveItem, error)
+	CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*File, error)
 	DeleteItem(ctx context.Context, id string) (bool, error)
 }
 type QueryResolver interface {
 	Item(ctx context.Context, id string) (DriveItem, error)
 	FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error)
 	Drives(ctx context.Context) ([]*Folder, error)
+	GetChanges(ctx context.Context, folderID string, since time.Time) ([]*DriveItemEvent, error)
+}
+type SubscriptionResolver interface {
+	DriveItemChanged(ctx context.Context) (<-chan *DriveItemEvent, error)
 }
 
 // endregion ************************** generated!.gotpl **************************
@@ -176,6 +195,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DriveItemEdge.Node(childComplexity), true
+
+	case "DriveItemEvent.deletedId":
+		if e.ComplexityRoot.DriveItemEvent.DeletedID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DriveItemEvent.DeletedID(childComplexity), true
+	case "DriveItemEvent.eventType":
+		if e.ComplexityRoot.DriveItemEvent.EventType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DriveItemEvent.EventType(childComplexity), true
+	case "DriveItemEvent.item":
+		if e.ComplexityRoot.DriveItemEvent.Item == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DriveItemEvent.Item(childComplexity), true
+	case "DriveItemEvent.itemId":
+		if e.ComplexityRoot.DriveItemEvent.ItemID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DriveItemEvent.ItemID(childComplexity), true
 
 	case "DriveMetadata.driveType":
 		if e.ComplexityRoot.DriveMetadata.DriveType == nil {
@@ -331,6 +375,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Folder.UpdatedAt(childComplexity), true
 
+	case "Mutation.copyFile":
+		if e.ComplexityRoot.Mutation.CopyFile == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_copyFile_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CopyFile(childComplexity, args["fileId"].(string), args["newParentId"].(string), args["newName"].(string)), true
 	case "Mutation.createFolder":
 		if e.ComplexityRoot.Mutation.CreateFolder == nil {
 			break
@@ -406,6 +461,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.FolderContents(childComplexity, args["folderId"].(string), args["first"].(*int), args["after"].(*string)), true
+	case "Query.getChanges":
+		if e.ComplexityRoot.Query.GetChanges == nil {
+			break
+		}
+
+		args, err := ec.field_Query_getChanges_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.GetChanges(childComplexity, args["folderId"].(string), args["since"].(time.Time)), true
 
 	case "Query.item":
 		if e.ComplexityRoot.Query.Item == nil {
@@ -418,6 +484,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Item(childComplexity, args["id"].(string)), true
+
+	case "Subscription.driveItemChanged":
+		if e.ComplexityRoot.Subscription.DriveItemChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Subscription.DriveItemChanged(childComplexity), true
 
 	}
 	return 0, false
@@ -469,6 +542,23 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
 			data := ec._Mutation(ctx, opCtx.Operation.SelectionSet)
 			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Subscription:
+		next := ec._Subscription(ctx, opCtx.Operation.SelectionSet)
+
+		var buf bytes.Buffer
+		return func(ctx context.Context) *graphql.Response {
+			buf.Reset()
+			data := next(ctx)
+
+			if data == nil {
+				return nil
+			}
 			data.MarshalGQL(&buf)
 
 			return &graphql.Response{
@@ -587,7 +677,28 @@ type Mutation {
   createFolder(parentId: ID!, name: String!): Folder!
   renameItem(id: ID!, newName: String!): DriveItem!
   moveItem(id: ID!, newParentId: ID!): DriveItem!
+  copyFile(fileId: ID!, newParentId: ID!, newName: String!): File!
   deleteItem(id: ID!): Boolean!
+}
+
+enum DriveItemEventType {
+  UPDATED
+  DELETED
+}
+
+type DriveItemEvent {
+  eventType: DriveItemEventType!
+  itemId: ID!
+  item: DriveItem
+  deletedId: ID
+}
+
+type Subscription {
+  driveItemChanged: DriveItemEvent!
+}
+
+extend type Query {
+  getChanges(folderId: ID!, since: DateTime!): [DriveItemEvent!]!
 }
 `, BuiltIn: false},
 }
@@ -619,6 +730,20 @@ func (ec *executionContext) childFields_DriveItemEdge(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type DriveItemEdge", field.Name)
 }
 
+func (ec *executionContext) childFields_DriveItemEvent(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "eventType":
+		return ec.fieldContext_DriveItemEvent_eventType(ctx, field)
+	case "itemId":
+		return ec.fieldContext_DriveItemEvent_itemId(ctx, field)
+	case "item":
+		return ec.fieldContext_DriveItemEvent_item(ctx, field)
+	case "deletedId":
+		return ec.fieldContext_DriveItemEvent_deletedId(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DriveItemEvent", field.Name)
+}
+
 func (ec *executionContext) childFields_DriveMetadata(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "driveType":
@@ -629,6 +754,34 @@ func (ec *executionContext) childFields_DriveMetadata(ctx context.Context, field
 		return ec.fieldContext_DriveMetadata_storageQuota(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type DriveMetadata", field.Name)
+}
+
+func (ec *executionContext) childFields_File(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_File_id(ctx, field)
+	case "parentId":
+		return ec.fieldContext_File_parentId(ctx, field)
+	case "name":
+		return ec.fieldContext_File_name(ctx, field)
+	case "type":
+		return ec.fieldContext_File_type(ctx, field)
+	case "size":
+		return ec.fieldContext_File_size(ctx, field)
+	case "mimeType":
+		return ec.fieldContext_File_mimeType(ctx, field)
+	case "version":
+		return ec.fieldContext_File_version(ctx, field)
+	case "versions":
+		return ec.fieldContext_File_versions(ctx, field)
+	case "path":
+		return ec.fieldContext_File_path(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_File_createdAt(ctx, field)
+	case "updatedAt":
+		return ec.fieldContext_File_updatedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type File", field.Name)
 }
 
 func (ec *executionContext) childFields_FileVersion(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -791,6 +944,36 @@ func (ec *executionContext) childFields___Type(ctx context.Context, field graphq
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) field_Mutation_copyFile_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "fileId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fileId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "newParentId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["newParentId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "newName",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["newName"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createFolder_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -912,6 +1095,28 @@ func (ec *executionContext) field_Query_folderContents_args(ctx context.Context,
 		return nil, err
 	}
 	args["after"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_getChanges_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "folderId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["folderId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "since",
+		func(ctx context.Context, v any) (time.Time, error) {
+			return ec.unmarshalNDateTime2timeᚐTime(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["since"] = arg1
 	return args, nil
 }
 
@@ -1129,6 +1334,107 @@ func (ec *executionContext) fieldContext_DriveItemEdge_node(_ context.Context, f
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _DriveItemEvent_eventType(ctx context.Context, field graphql.CollectedField, obj *DriveItemEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DriveItemEvent_eventType(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EventType, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v DriveItemEventType) graphql.Marshaler {
+			return ec.marshalNDriveItemEventType2platriumᚋinternalᚋgraphqlᚐDriveItemEventType(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DriveItemEvent_eventType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DriveItemEvent", field, false, false, errors.New("field of type DriveItemEventType does not have child fields"))
+}
+
+func (ec *executionContext) _DriveItemEvent_itemId(ctx context.Context, field graphql.CollectedField, obj *DriveItemEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DriveItemEvent_itemId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ItemID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DriveItemEvent_itemId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DriveItemEvent", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _DriveItemEvent_item(ctx context.Context, field graphql.CollectedField, obj *DriveItemEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DriveItemEvent_item(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Item, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v DriveItem) graphql.Marshaler {
+			return ec.marshalODriveItem2platriumᚋinternalᚋgraphqlᚐDriveItem(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DriveItemEvent_item(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DriveItemEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("FieldContext.Child cannot be called on type INTERFACE")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DriveItemEvent_deletedId(ctx context.Context, field graphql.CollectedField, obj *DriveItemEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DriveItemEvent_deletedId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DeletedID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOID2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DriveItemEvent_deletedId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DriveItemEvent", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
 func (ec *executionContext) _DriveMetadata_driveType(ctx context.Context, field graphql.CollectedField, obj *DriveMetadata) (ret graphql.Marshaler) {
@@ -1874,6 +2180,50 @@ func (ec *executionContext) fieldContext_Mutation_moveItem(ctx context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_copyFile(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_copyFile(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CopyFile(ctx, fc.Args["fileId"].(string), fc.Args["newParentId"].(string), fc.Args["newName"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *File) graphql.Marshaler {
+			return ec.marshalNFile2ᚖplatriumᚋinternalᚋgraphqlᚐFile(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_copyFile(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_File(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_copyFile_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_deleteItem(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2084,6 +2434,50 @@ func (ec *executionContext) fieldContext_Query_drives(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_getChanges(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_getChanges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().GetChanges(ctx, fc.Args["folderId"].(string), fc.Args["since"].(time.Time))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*DriveItemEvent) graphql.Marshaler {
+			return ec.marshalNDriveItemEvent2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDriveItemEventᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_getChanges(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DriveItemEvent(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_getChanges_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2155,6 +2549,38 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields___Schema(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_driveItemChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Subscription_driveItemChanged(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Subscription().DriveItemChanged(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *DriveItemEvent) graphql.Marshaler {
+			return ec.marshalNDriveItemEvent2ᚖplatriumᚋinternalᚋgraphqlᚐDriveItemEvent(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Subscription_driveItemChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DriveItemEvent(ctx, field)
 		},
 	}
 	return fc, nil
@@ -3345,6 +3771,59 @@ func (ec *executionContext) _DriveItemEdge(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var driveItemEventImplementors = []string{"DriveItemEvent"}
+
+func (ec *executionContext) _DriveItemEvent(ctx context.Context, sel ast.SelectionSet, obj *DriveItemEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, driveItemEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DriveItemEvent")
+		case "eventType":
+			out.Values[i] = ec._DriveItemEvent_eventType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "itemId":
+			out.Values[i] = ec._DriveItemEvent_itemId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "item":
+			out.Values[i] = ec._DriveItemEvent_item(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "deletedId":
+			out.Values[i] = ec._DriveItemEvent_deletedId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var driveMetadataImplementors = []string{"DriveMetadata"}
 
 func (ec *executionContext) _DriveMetadata(ctx context.Context, sel ast.SelectionSet, obj *DriveMetadata) graphql.Marshaler {
@@ -3709,6 +4188,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "copyFile":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_copyFile(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "deleteItem":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteItem(ctx, field)
@@ -3866,6 +4352,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "getChanges":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_getChanges(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -3899,6 +4407,26 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	})
 
 	return out
+}
+
+var subscriptionImplementors = []string{"Subscription"}
+
+func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, subscriptionImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Subscription",
+	})
+	if len(fields) != 1 {
+		graphql.AddErrorf(ctx, "must subscribe to exactly one stream")
+		return nil
+	}
+
+	switch fields[0].Name {
+	case "driveItemChanged":
+		return ec._Subscription_driveItemChanged(ctx, fields[0])
+	default:
+		panic("unknown field " + strconv.Quote(fields[0].Name))
+	}
 }
 
 var __DirectiveImplementors = []string{"__Directive"}
@@ -4335,10 +4863,6 @@ func (ec *executionContext) marshalNDriveItem2platriumᚋinternalᚋgraphqlᚐDr
 	return ec._DriveItem(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNDriveItemConnection2platriumᚋinternalᚋgraphqlᚐDriveItemConnection(ctx context.Context, sel ast.SelectionSet, v DriveItemConnection) graphql.Marshaler {
-	return ec._DriveItemConnection(ctx, sel, &v)
-}
-
 func (ec *executionContext) marshalNDriveItemConnection2ᚖplatriumᚋinternalᚋgraphqlᚐDriveItemConnection(ctx context.Context, sel ast.SelectionSet, v *DriveItemConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -4375,6 +4899,42 @@ func (ec *executionContext) marshalNDriveItemEdge2ᚖplatriumᚋinternalᚋgraph
 	return ec._DriveItemEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNDriveItemEvent2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDriveItemEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*DriveItemEvent) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNDriveItemEvent2ᚖplatriumᚋinternalᚋgraphqlᚐDriveItemEvent(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNDriveItemEvent2ᚖplatriumᚋinternalᚋgraphqlᚐDriveItemEvent(ctx context.Context, sel ast.SelectionSet, v *DriveItemEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DriveItemEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNDriveItemEventType2platriumᚋinternalᚋgraphqlᚐDriveItemEventType(ctx context.Context, v any) (DriveItemEventType, error) {
+	var res DriveItemEventType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDriveItemEventType2platriumᚋinternalᚋgraphqlᚐDriveItemEventType(ctx context.Context, sel ast.SelectionSet, v DriveItemEventType) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNDriveItemType2platriumᚋinternalᚋgraphqlᚐDriveItemType(ctx context.Context, v any) (DriveItemType, error) {
 	var res DriveItemType
 	err := res.UnmarshalGQL(v)
@@ -4395,6 +4955,16 @@ func (ec *executionContext) marshalNDriveType2platriumᚋinternalᚋgraphqlᚐDr
 	return v
 }
 
+func (ec *executionContext) marshalNFile2ᚖplatriumᚋinternalᚋgraphqlᚐFile(ctx context.Context, sel ast.SelectionSet, v *File) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._File(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNFileVersion2ᚖplatriumᚋinternalᚋgraphqlᚐFileVersion(ctx context.Context, sel ast.SelectionSet, v *FileVersion) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -4403,10 +4973,6 @@ func (ec *executionContext) marshalNFileVersion2ᚖplatriumᚋinternalᚋgraphql
 		return graphql.Null
 	}
 	return ec._FileVersion(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNFolder2platriumᚋinternalᚋgraphqlᚐFolder(ctx context.Context, sel ast.SelectionSet, v Folder) graphql.Marshaler {
-	return ec._Folder(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNFolder2ᚕᚖplatriumᚋinternalᚋgraphqlᚐFolderᚄ(ctx context.Context, sel ast.SelectionSet, v []*Folder) graphql.Marshaler {

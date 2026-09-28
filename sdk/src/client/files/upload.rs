@@ -55,7 +55,7 @@ impl ApiInner {
                 &transfer_id,
                 crate::net::transfers::TransferDirection::Upload,
                 total_size,
-                crate::net::transfers::TransferMetadata::FileChunk {
+                crate::net::transfers::TransferMetadata::FileUploadEvent {
                     folder_id: parent_id.to_string(),
                     file_name: file_name.to_string(),
                 },

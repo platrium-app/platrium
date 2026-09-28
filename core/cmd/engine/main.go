@@ -15,6 +15,8 @@ import (
 	"platrium/internal/infra/graph"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
+	"platrium/internal/notifications"
+	"platrium/internal/notifications/transports"
 	"platrium/internal/objects"
 	"platrium/internal/restapi"
 	"platrium/internal/setup"
@@ -109,15 +111,30 @@ func main() {
 		AllowCredentials: true,
 	}))
 
+	// Setup Notifications & WebSockets
+	gqlTransport := transports.NewGraphQLTransport()
+	broker := notifications.NewBroker(gqlTransport)
+
 	// Setup GraphQL
 	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
-		FSOps: fsOps,
+		FSOps:       fsOps,
+		Broker:      broker,
+		SubsManager: gqlTransport,
 	}}))
 
 	// GraphQL Routes
 	router.Route("/graphql", func(r chi.Router) {
 		r.Use(sessionManager.LoadAndSave)
 		r.Use(session.Middleware(sessionManager, devFallback))
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Upgrade") == "websocket" {
+					r.Header.Del("Origin")
+				}
+				next.ServeHTTP(w, r)
+			})
+		})
+
 		r.Handle("/", graphqlSrv)
 		r.Handle("/playground", playground.Handler("GraphQL playground", "/graphql"))
 	})

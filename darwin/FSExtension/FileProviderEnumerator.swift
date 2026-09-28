@@ -16,7 +16,6 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
     
     private let enumeratedItemIdentifier: NSFileProviderItemIdentifier
     private let apollo: ApolloClient
-    private let anchor = NSFileProviderSyncAnchor("an anchor".data(using: .utf8)!) // TODO: Implement Later
     
     init(enumeratedItemIdentifier: NSFileProviderItemIdentifier, apollo: ApolloClient) {
         self.enumeratedItemIdentifier = enumeratedItemIdentifier
@@ -71,7 +70,7 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
                 switch result {
                 case .success(let graphQLResult):
                     if let contents = graphQLResult.data?.folderContents {
-                        let items = contents.edges.map { $0.node }.map { FileProviderItem(node: $0) }
+                        let items = contents.edges.map { $0.node.fragments.fseDriveItemFields }.map { FileProviderItem(fragment: $0) }
                         logger.info("FSExtension Yielding \(items.count) items to macOS. Names: \(items.map { $0.filename }, privacy: .public)")
                         observer.didEnumerate(items)
 
@@ -95,12 +94,115 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
     }
     
     func enumerateChanges(for observer: NSFileProviderChangeObserver, from anchor: NSFileProviderSyncAnchor) {
-        // Simply tell macOS there are no changes for now.
-        // We will implement real diff syncing later via WebSockets.
-        observer.finishEnumeratingChanges(upTo: anchor, moreComing: false)
+        if enumeratedItemIdentifier == .rootContainer {
+            enumerateRootChanges(for: observer, from: anchor)
+        } else {
+            enumerateFolderChanges(for: observer, from: anchor)
+        }
+    }
+    
+    /// Syncs changes for the Root Container (Drives). Since the number of drives is small,
+    /// we fetch the entire list, diff it against the IDs stored in the anchor, and update macOS.
+    private func enumerateRootChanges(for observer: NSFileProviderChangeObserver, from anchor: NSFileProviderSyncAnchor) {
+        apollo.fetch(query: FSEGetDomainRootQuery(), cachePolicy: .fetchIgnoringCacheData) { result in
+            switch result {
+            case .success(let graphQLResult):
+                if let drives = graphQLResult.data?.driveNodes {
+                    let items = drives.compactMap { $0 }.map { FileProviderItem(drive: $0) }
+                    let currentDriveIds = items.map { $0.itemIdentifier.rawValue }
+                    
+                    let previousDriveIds = (try? JSONDecoder().decode([String].self, from: anchor.rawValue)) ?? []
+                    
+                    let currentSet = Set(currentDriveIds)
+                    let previousSet = Set(previousDriveIds)
+                    
+                    let deletedIds = previousSet.subtracting(currentSet)
+                    
+                    if !deletedIds.isEmpty {
+                        observer.didDeleteItems(withIdentifiers: deletedIds.map { NSFileProviderItemIdentifier($0) })
+                    }
+                    
+                    // We can just pass all current drives to didUpdate; macOS ignores items that haven't changed.
+                    if !items.isEmpty {
+                        observer.didUpdate(items)
+                    }
+                    
+                    if let newAnchorData = try? JSONEncoder().encode(currentDriveIds) {
+                        observer.finishEnumeratingChanges(upTo: NSFileProviderSyncAnchor(newAnchorData), moreComing: false)
+                    } else {
+                        observer.finishEnumeratingChanges(upTo: anchor, moreComing: false)
+                    }
+                } else {
+                    observer.finishEnumeratingChanges(upTo: anchor, moreComing: false)
+                }
+            case .failure(let error):
+                logger.error("FSExtension Root GetChanges Error: \(error.localizedDescription, privacy: .public)")
+                observer.finishEnumeratingWithError(error)
+            }
+        }
+    }
+    
+    /// Syncs changes for a specific Folder. We hit the getChanges GraphQL query which returns
+    /// a differential sync of created, updated, and deleted items since the given ISO8601 anchor.
+    private func enumerateFolderChanges(for observer: NSFileProviderChangeObserver, from anchor: NSFileProviderSyncAnchor) {
+        let folderId = enumeratedItemIdentifier.rawValue
+        
+        // Parse the anchor. It should be an ISO8601 string. If not, default to 1970.
+        let sinceStr = String(data: anchor.rawValue, encoding: .utf8) ?? "1970-01-01T00:00:00Z"
+        
+        apollo.fetch(query: FSEGetChangesQuery(folderId: folderId, since: sinceStr), cachePolicy: .fetchIgnoringCacheData) { result in
+            switch result {
+            case .success(let graphQLResult):
+                if let changes = graphQLResult.data?.getChanges {
+                    var updatedItems: [FileProviderItem] = []
+                    var deletedItems: [NSFileProviderItemIdentifier] = []
+                    
+                    for change in changes {
+                        if change.eventType == .deleted, let deletedId = change.deletedId {
+                            deletedItems.append(NSFileProviderItemIdentifier(deletedId))
+                        } else if let item = change.item {
+                            updatedItems.append(FileProviderItem(fragment: item.fragments.fseDriveItemFields))
+                        }
+                    }
+                    
+                    if !deletedItems.isEmpty {
+                        observer.didDeleteItems(withIdentifiers: deletedItems)
+                    }
+                    
+                    if !updatedItems.isEmpty {
+                        observer.didUpdate(updatedItems)
+                    }
+                    
+                    // Create a new anchor for the current time to catch any new changes
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    let newAnchorData = formatter.string(from: Date()).data(using: .utf8)!
+                    
+                    observer.finishEnumeratingChanges(upTo: NSFileProviderSyncAnchor(newAnchorData), moreComing: false)
+                } else {
+                    observer.finishEnumeratingChanges(upTo: anchor, moreComing: false)
+                }
+            case .failure(let error):
+                logger.error("FSExtension GetChanges Error: \(error.localizedDescription, privacy: .public)")
+                observer.finishEnumeratingWithError(error)
+            }
+        }
     }
 
     func currentSyncAnchor(completionHandler: @escaping (NSFileProviderSyncAnchor?) -> Void) {
-        completionHandler(anchor)
+        if enumeratedItemIdentifier == .rootContainer {
+            let emptyArray: [String] = []
+            if let data = try? JSONEncoder().encode(emptyArray) {
+                completionHandler(NSFileProviderSyncAnchor(data))
+            } else {
+                completionHandler(nil)
+            }
+            return
+        }
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let anchorData = formatter.string(from: Date()).data(using: .utf8)!
+        completionHandler(NSFileProviderSyncAnchor(anchorData))
     }
 }

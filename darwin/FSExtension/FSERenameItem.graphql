@@ -1,0 +1,7 @@
+mutation FSERenameItem($id: ID!, $newName: String!) {
+  renameItem(id: $id, newName: $newName) {
+    id
+    name
+    updatedAt
+  }
+}

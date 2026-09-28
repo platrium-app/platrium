@@ -18,9 +18,9 @@ const (
 )
 
 type Drive struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	TenantID     string `json:"tenant_id"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	TenantID     string    `json:"tenant_id"`
 	OwnerID      string    `json:"owner_id"`
 	Type         DriveType `json:"type"` // "PRIVATE" or "SHARED"
 	StorageUsed  int64     `json:"storage_used"`
@@ -41,11 +41,12 @@ func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Dri
 	driveId := nanoid.Must()
 	name := params.Name
 	if name == "" {
-		name = "My Drive"
+		return nil, fmt.Errorf("drive name cannot be empty")
 	}
+
 	driveType := params.Type
-	if driveType == "" {
-		driveType = DriveTypePrivate
+	if driveType != DriveTypePrivate && driveType != DriveTypeShared {
+		return nil, fmt.Errorf("invalid or missing drive type")
 	}
 
 	query := `

@@ -14,12 +14,15 @@ import { SelectionArea } from "@/components/custom/SelectionArea"
 import { FilePreviewCore } from "../filepreview/FilePreviewCore"
 import { Dialog } from "@base-ui/react/dialog"
 import type { DriveItemNode, SortField, SortDirection, ViewMode } from "./FolderViewTypes"
+import { DriveOperationManager, type OperationMode } from "@/components/modals/DriveOperationManager"
+import { useDriveEventSubscription } from "@/hooks/useDriveEventSubscription"
 
 const GET_FOLDER_INFO = graphql(`
   query GetFolderInfo($id: ID!) {
     item(id: $id) {
       id
       name
+      type
       path {
         id
         name
@@ -65,6 +68,9 @@ export default function FolderRootView() {
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [lastSelectedIndex, setLastSelectedIndex] = React.useState<number | null>(null)
   const [previewFileId, setPreviewFileId] = React.useState<string | null>(null)
+  
+  const [opMode, setOpMode] = React.useState<OperationMode>(null)
+  const [opItems, setOpItems] = React.useState<DriveItemNode[]>([])
 
   // Clear selection on folder navigation
   React.useEffect(() => {
@@ -80,6 +86,14 @@ export default function FolderRootView() {
   const contentsQuery = useQuery(GET_FOLDER_CONTENTS, {
     variables: { folderId: id!, first: 100 },
     skip: !id,
+  })
+
+  // Real-time synchronization
+  useDriveEventSubscription(() => {
+    // When a file is modified/created/moved anywhere, we check if we need to refresh.
+    // Apollo merges the new data cleanly without jumping scroll position.
+    contentsQuery.refetch()
+    infoQuery.refetch()
   })
 
   const item = infoQuery.data?.item
@@ -228,7 +242,9 @@ export default function FolderRootView() {
     }
   }
 
-  const isLoading = infoQuery.loading || contentsQuery.loading
+  const isLoading = 
+    (infoQuery.loading && !infoQuery.data) || 
+    (contentsQuery.loading && !contentsQuery.data)
   const isError = infoQuery.error || contentsQuery.error
 
   if (isLoading) {
@@ -263,6 +279,17 @@ export default function FolderRootView() {
     )
   }
 
+  if (item.type === "FILE") {
+    return (
+      <PlaceholderView
+        icon={AlertTriangle}
+        variant="error"
+        title="Invalid Folder"
+        description="The requested resource is a file, not a folder."
+      />
+    )
+  }
+
   return (
     <FolderContextMenu folderId={id!}>
       <div className="flex h-full w-full flex-1 flex-col overflow-hidden">
@@ -276,13 +303,18 @@ export default function FolderRootView() {
           sortDirection={sortDirection}
           onSortChange={handleSortChange}
           folderId={id!}
+          onOperation={(mode, items) => {
+            setOpMode(mode)
+            setOpItems(items)
+          }}
+          selectedItems={items.filter(i => selectedIds.has(i.id))}
         />
 
         {/* Content View / Empty State wrapped with SelectionArea spanning the entire canvas below header */}
         <SelectionArea
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
-          className="flex-1 w-full min-h-0 overflow-auto"
+          className="flex-1 w-full min-h-0 flex flex-col"
         >
           {items.length === 0 ? (
             <PlaceholderView
@@ -306,6 +338,10 @@ export default function FolderRootView() {
               sortField={sortField}
               sortDirection={sortDirection}
               onSortChange={handleSortChange}
+              onOperation={(mode, items) => {
+                setOpMode(mode)
+                setOpItems(items)
+              }}
             />
           ) : (
             <FolderContentGridView
@@ -318,6 +354,10 @@ export default function FolderRootView() {
               sortField={sortField}
               sortDirection={sortDirection}
               onSortChange={handleSortChange}
+              onOperation={(mode, items) => {
+                setOpMode(mode)
+                setOpItems(items)
+              }}
             />
           )}
         </SelectionArea>
@@ -349,6 +389,18 @@ export default function FolderRootView() {
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <DriveOperationManager
+        mode={opMode}
+        items={opItems}
+        currentFolderId={id!}
+        onClose={() => setOpMode(null)}
+        onSuccess={() => {
+          infoQuery.refetch()
+          contentsQuery.refetch()
+          setSelectedIds(new Set())
+        }}
+      />
     </FolderContextMenu>
   )
 }

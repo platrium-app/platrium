@@ -15,7 +15,7 @@ export default function RootLayout() {
     <ApolloProvider client={client}>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="h-screen overflow-hidden flex flex-col">
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1" />
             <Separator
@@ -24,7 +24,7 @@ export default function RootLayout() {
             />
             <AppBreadcrumbs />
           </header>
-          <div className="flex flex-1 flex-col gap-4 p-4">
+          <div className="flex flex-1 flex-col p-4 min-h-0 overflow-hidden">
             <Outlet />
           </div>
         </SidebarInset>

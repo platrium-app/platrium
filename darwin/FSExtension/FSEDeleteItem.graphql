@@ -1,0 +1,3 @@
+mutation FSEDeleteItem($id: ID!) {
+  deleteItem(id: $id)
+}

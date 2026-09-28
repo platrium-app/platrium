@@ -19,6 +19,17 @@ func (r *Resolver) resolveItemPath(ctx context.Context, itemID string) ([]*Folde
 	return mapFsopsFolders(folders), nil
 }
 
+func mapFolderRecord(f *fsops.Folder) *Folder {
+	return &Folder{
+		ID:        f.ID,
+		ParentID:  f.ParentID,
+		Name:      f.Name,
+		Type:      DriveItemTypeFolder,
+		CreatedAt: f.CreatedAt,
+		UpdatedAt: f.UpdatedAt,
+	}
+}
+
 func mapFsopsFolders(fsopsFolders []*fsops.Folder) []*Folder {
 	var folders []*Folder
 	for _, f := range fsopsFolders {
@@ -75,5 +86,20 @@ func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
 			CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt,
 		}
+	}
+}
+
+func mapFileRecord(file *fsops.File) *File {
+	if file == nil {
+		return nil
+	}
+	return &File{
+		ID:        file.ID,
+		Name:      file.Name,
+		Type:      DriveItemTypeFile,
+		Size:      file.Size,
+		MimeType:  file.MimeType,
+		CreatedAt: file.CreatedAt,
+		UpdatedAt: file.UpdatedAt,
 	}
 }

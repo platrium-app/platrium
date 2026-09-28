@@ -73,10 +73,13 @@ func (f *FSOps) GetItem(ctx context.Context, tenantId, itemId string) (*DriveIte
 // GetItemPath traverses up the graph to find all ancestors for breadcrumbs.
 func (f *FSOps) GetItemPath(ctx context.Context, tenantId, itemId string) ([]*Folder, error) {
 	query := `
-		MATCH path = (child:Resource {id: $item_id, tenant_id: $tenant_id})-[:CHILD_OF*]->(root:Folder)
+		MATCH path = shortestPath((child:Resource {id: $item_id, tenant_id: $tenant_id})-[:CHILD_OF*0..]->(root:Folder))
 		WHERE NOT (root)-[:CHILD_OF]->()
 		WITH nodes(path) AS pathNodes
-		UNWIND pathNodes AS n
+		
+		// Exclude the child itself from the path (it's the first node in pathNodes)
+		WITH pathNodes[1..] AS ancestorNodes
+		UNWIND ancestorNodes AS n
 		WITH n WHERE n:Folder
 		RETURN 
 			n.id AS id,
@@ -203,4 +206,162 @@ func (f *FSOps) GetFolderContentsTotalCount(ctx context.Context, tenantId, folde
 	})
 
 	return total, err
+}
+
+// RenameItem renames a file or folder.
+func (f *FSOps) RenameItem(ctx context.Context, tenantID string, itemID string, newName string) (*DriveItemRecord, error) {
+	if newName == "" {
+		return nil, fmt.Errorf("new name cannot be empty")
+	}
+
+	// TODO: Stub permissions check (CheckPermissions)
+
+	query := `
+		MATCH (n:Resource {id: $item_id, tenant_id: $tenant_id})
+		SET n.name = $new_name
+		RETURN n.id
+	`
+	params := map[string]interface{}{
+		"item_id":   itemID,
+		"tenant_id": tenantID,
+		"new_name":  newName,
+	}
+
+	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
+		res, err := tx.Query(ctx, query, params)
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+
+		if !res.Next() {
+			return fmt.Errorf("item not found")
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return f.GetItem(ctx, tenantID, itemID)
+}
+
+// MoveItem moves an item to a new parent folder.
+func (f *FSOps) MoveItem(ctx context.Context, tenantID string, itemID string, newParentID string) (*DriveItemRecord, error) {
+	// TODO: Stub permissions check (CheckPermissions)
+
+	if itemID == newParentID {
+		return nil, fmt.Errorf("Cannot move an item into itself")
+	}
+
+	// Optimize cycle detection by short-circuiting. The moment Neo4j finds ANY path
+	// proving the destination is a descendant of the source, it stops searching.
+	query := `
+		MATCH (dest:Resource {id: $new_parent_id, tenant_id: $tenant_id})-[:CHILD_OF*0..]->(src:Resource {id: $item_id, tenant_id: $tenant_id})
+		RETURN true AS is_cycle LIMIT 1
+	`
+	params := map[string]interface{}{
+		"item_id":       itemID,
+		"new_parent_id": newParentID,
+		"tenant_id":     tenantID,
+	}
+
+	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
+		// 1. Check for cycles
+		res, err := tx.Query(ctx, query, params)
+		if err != nil {
+			return err
+		}
+
+		var isCycle bool
+		if res.Next() {
+			isCycle = true
+		}
+		res.Close()
+
+		if isCycle {
+			return fmt.Errorf("Cannot move a folder into itself or its own subfolder")
+		}
+
+		// 2. Perform Move
+		moveQuery := `
+			MATCH (item:Resource {id: $item_id, tenant_id: $tenant_id})-[oldRel:CHILD_OF]->(oldParent:Resource)
+			MATCH (newParent:Resource {id: $new_parent_id, tenant_id: $tenant_id})
+			DELETE oldRel
+			CREATE (item)-[:CHILD_OF]->(newParent)
+			RETURN item.id
+		`
+		moveParams := map[string]interface{}{
+			"item_id":       itemID,
+			"new_parent_id": newParentID,
+			"tenant_id":     tenantID,
+		}
+
+		moveRes, err := tx.Query(ctx, moveQuery, moveParams)
+		if err != nil {
+			return err
+		}
+		defer moveRes.Close()
+
+		if !moveRes.Next() {
+			return fmt.Errorf("item or new parent not found")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return f.GetItem(ctx, tenantID, itemID)
+}
+
+// GetFolderChanges returns all children of a folder that were created or updated after a certain time.
+func (f *FSOps) GetFolderChanges(ctx context.Context, tenantId, folderId string, since time.Time) ([]*DriveItemRecord, error) {
+	query := `
+		MATCH (child:Resource)-[:CHILD_OF]->(parent:Folder {id: $folder_id, tenant_id: $tenant_id})
+		WHERE child.updated_at > $since
+		RETURN 
+			child.id AS id,
+			child.tenant_id AS tenant_id,
+			parent.id AS parent_id,
+			child.name AS name,
+			labels(child) AS labels,
+			child.size AS size,
+			child.mime_type AS mime_type,
+			child.created_at AS created_at,
+			child.updated_at AS updated_at
+		ORDER BY child.updated_at ASC
+	`
+	params := map[string]interface{}{
+		"folder_id": folderId,
+		"tenant_id": tenantId,
+		"since":     since,
+	}
+
+	var items []*DriveItemRecord
+	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
+		res, err := tx.Query(ctx, query, params)
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+
+		for res.Next() {
+			var item DriveItemRecord
+			if err := res.Scan(&item); err != nil {
+				return err
+			}
+			items = append(items, &item)
+		}
+		return res.Err()
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }

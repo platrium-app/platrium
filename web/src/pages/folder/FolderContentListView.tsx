@@ -68,6 +68,7 @@ export function FolderContentListView({
     sortField,
     sortDirection,
     onSortChange,
+    onOperation,
 }: FolderViewProps) {
     const parentRef = React.useRef<HTMLDivElement>(null)
 
@@ -88,7 +89,7 @@ export function FolderContentListView({
     }
 
     return (
-        <div className="flex min-h-full w-full flex-col">
+        <div className="flex flex-1 w-full flex-col overflow-hidden">
             {/* Table Header */}
             <div className="grid grid-cols-12 gap-2 border-b px-4 py-3 text-sm font-medium text-muted-foreground select-none">
                 <div
@@ -123,7 +124,7 @@ export function FolderContentListView({
             </div>
 
             {/* Virtualized Rows Container */}
-            <div ref={parentRef} className="w-full">
+            <div ref={parentRef} className="w-full flex-1 overflow-auto">
                 <div
                     style={{
                         height: `${rowVirtualizer.getTotalSize()}px`,
@@ -134,9 +135,11 @@ export function FolderContentListView({
                     {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                         const item = items[virtualRow.index]
                         const isSelected = selectedIds.has(item.id)
+                        const selectedItems = items.filter(i => selectedIds.has(i.id))
+                        const menuItems = isSelected ? selectedItems : [item]
 
                         return (
-                            <ItemContextMenu key={item.id} item={item}>
+                            <ItemContextMenu key={item.id} item={item} selectedItems={menuItems} onOperation={onOperation}>
                                 <div
                                     data-selection-id={item.id}
                                     data-index={virtualRow.index}

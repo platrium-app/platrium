@@ -56,7 +56,8 @@ func (h *TenantHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
 	drive, err := h.fsOps.CreateDrive(r.Context(), fsops.CreateDriveParams{
 		TenantID: tenant.ID,
 		OwnerID:  user.ID,
-		Type:     "PRIVATE",
+		Name:     "My Drive",
+		Type:     fsops.DriveTypePrivate,
 	})
 
 	if err != nil {
