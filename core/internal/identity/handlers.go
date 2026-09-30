@@ -22,7 +22,8 @@ func NewTenantHandler(tenantStore *TenantStore, userStore *UserStore, fsOps *fso
 }
 
 type createTenantRequest struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
+	Alias string `json:"alias"`
 }
 
 func (h *TenantHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
@@ -34,18 +35,23 @@ func (h *TenantHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		http.Error(w, "tenant name is required", http.StatusBadRequest)
+	if req.Name == "" || req.Alias == "" {
+		http.Error(w, "tenant name and alias are required", http.StatusBadRequest)
 		return
 	}
 
-	tenant, err := h.tenantStore.CreateTenant(r.Context(), req.Name)
+	if len(req.Alias) < 2 {
+		http.Error(w, "tenant alias must be at least 2 characters", http.StatusBadRequest)
+		return
+	}
+
+	tenant, err := h.tenantStore.CreateTenant(r.Context(), req.Name, req.Alias)
 	if err != nil {
 		http.Error(w, "failed to create tenant", http.StatusInternalServerError)
 		return
 	}
 
-	// Hardcoded default admin for the tenant
+	// TODO: Hardcoded default admin for the tenant
 	user, err := h.userStore.CreateUser(r.Context(), tenant.ID, "admin@example.com")
 	if err != nil {
 		http.Error(w, "failed to create tenant super admin", http.StatusInternalServerError)
