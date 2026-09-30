@@ -36,8 +36,8 @@ type CreateDriveParams struct {
 	Type     DriveType // "PRIVATE" or "SHARED"
 }
 
-// CreateDrive creates a root Drive node in Graph DB and links it to the owner user via [:OWNS].
-func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Drive, error) {
+// CreateDriveTx creates a root Drive node in Graph DB within a given transaction context.
+func (f *FSOps) CreateDriveTx(ctx context.Context, tx graph.Tx, params CreateDriveParams) (*Drive, error) {
 	driveId := nanoid.Must()
 	name := params.Name
 	if name == "" {
@@ -71,35 +71,43 @@ func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Dri
 	}
 
 	var drive Drive
+	res, err := tx.Query(ctx, query, cypherParams)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Close()
+
+	if !res.Next() {
+		return nil, fmt.Errorf("failed to return created drive or user not found")
+	}
+
+	if err := res.Scan(&drive); err != nil {
+		return nil, fmt.Errorf("failed to scan drive: %w", err)
+	}
+
+	return &drive, nil
+}
+
+// CreateDrive creates a root Drive node in Graph DB and links it to the owner user via [:OWNS].
+func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Drive, error) {
+	var drive *Drive
+	var txErr error
 	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, cypherParams)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if !res.Next() {
-			return fmt.Errorf("failed to return created drive or user not found")
-		}
-
-		if err := res.Scan(&drive); err != nil {
-			return fmt.Errorf("failed to scan drive: %w", err)
-		}
-
-		return nil
+		drive, txErr = f.CreateDriveTx(ctx, tx, params)
+		return txErr
 	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create drive: %w", err)
 	}
 
-	return &drive, nil
+	return drive, nil
 }
 
 // GetUserDrives fetches all accessible private and shared drives for a user.
 func (f *FSOps) GetUserDrives(ctx context.Context, tenantId, userId string) ([]*Drive, error) {
 	query := `
-		MATCH (u:User {id: $userId, tenantId: $tenantId})-[rel:OWNS|HAS_ACCESS]->(d:Resource)
+		MATCH (t:Tenant {id: $tenantId})-[:HAS_USER]->(u:User {id: $userId})-[rel:OWNS|HAS_ACCESS]->(d:Resource {tenant_id: $tenantId})
 		RETURN 
 			d.id AS id,
 			coalesce(d.name, "My Drive") AS name,

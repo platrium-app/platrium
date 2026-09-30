@@ -3,6 +3,9 @@
     "pages": [
         "build-system",
         "storage-engine",
+        "identity",
+        "authn",
+        "authz",
         "notifications-broker",
         "web-interface",
         "darwin"

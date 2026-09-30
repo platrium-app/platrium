@@ -16,6 +16,7 @@ require (
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/vektah/gqlparser/v2 v2.5.58
+	golang.org/x/crypto v0.57.0
 )
 
 require (
