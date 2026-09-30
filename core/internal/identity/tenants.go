@@ -14,6 +14,7 @@ type Tenant struct {
 	ID        string `json:"id"`
 	Alias     string `json:"alias"` // e.g., "acme" or "family"
 	Name      string `json:"name"`
+	IsNative  bool   `json:"isNative"`
 	CreatedAt int64  `json:"createdAt"`
 }
 
@@ -27,7 +28,7 @@ func NewTenantStore(store graph.Graph) *TenantStore {
 }
 
 // CreateTenant creates a new Tenant node and a Local IdP fallback.
-func (r *TenantStore) CreateTenant(ctx context.Context, name, alias string) (*Tenant, error) {
+func (r *TenantStore) CreateTenant(ctx context.Context, name, alias string, isNative bool) (*Tenant, error) {
 	if len(alias) < 2 {
 		return nil, fmt.Errorf("tenant alias must be at least 2 characters")
 	}
@@ -41,6 +42,7 @@ func (r *TenantStore) CreateTenant(ctx context.Context, name, alias string) (*Te
 			id: $id,
 			alias: $alias,
 			name: $name,
+			isNative: $isNative,
 			createdAt: timestamp()
 		})
 		
@@ -53,17 +55,51 @@ func (r *TenantStore) CreateTenant(ctx context.Context, name, alias string) (*Te
 		})
 		CREATE (t)-[:USES_IDP]->(i)
 
-		RETURN t.id AS id, t.alias AS alias, t.name AS name, t.createdAt AS createdAt
+		RETURN t.id AS id, t.alias AS alias, t.name AS name, t.isNative AS isNative, t.createdAt AS createdAt
 	`
 	params := map[string]interface{}{
-		"id":    tenantId,
-		"alias": alias,
-		"name":  name,
-		"idpId": nanoid.Must(),
+		"id":       tenantId,
+		"alias":    alias,
+		"name":     name,
+		"isNative": isNative,
+		"idpId":    nanoid.Must(),
 	}
 
 	var tenant Tenant
 	err := r.store.WriteTx(ctx, func(tx graph.Tx) error {
+		// 1. Check constraints: Alias must be unique, and only one native tenant can exist
+		checkQuery := `
+			OPTIONAL MATCH (t1:Tenant {alias: $alias})
+			OPTIONAL MATCH (t2:Tenant {isNative: true})
+			RETURN t1 IS NOT NULL AS aliasExists, t2 IS NOT NULL AS nativeExists
+		`
+		checkRes, err := tx.Query(ctx, checkQuery, map[string]interface{}{"alias": alias})
+		if err != nil {
+			return fmt.Errorf("failed to check tenant constraints: %w", err)
+		}
+
+		var check struct {
+			AliasExists  bool `json:"aliasExists"`
+			NativeExists bool `json:"nativeExists"`
+		}
+
+		if checkRes.Next() {
+			if err := checkRes.Scan(&check); err != nil {
+				checkRes.Close()
+				return fmt.Errorf("failed to scan constraint results: %w", err)
+			}
+		}
+		checkRes.Close()
+
+		if check.AliasExists {
+			return fmt.Errorf("a tenant with alias '%s' already exists", alias)
+		}
+
+		if isNative && check.NativeExists {
+			return fmt.Errorf("a native cluster tenant already exists")
+		}
+
+		// 2. Execute Creation
 		res, err := tx.Query(ctx, query, params)
 		if err != nil {
 			return err
