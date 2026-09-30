@@ -8,6 +8,8 @@ import (
 	"os"
 
 	"platrium/internal/api"
+	"platrium/internal/auth"
+	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
 	"platrium/internal/graphql"
@@ -17,7 +19,7 @@ import (
 	"platrium/internal/infra/storage"
 	"platrium/internal/notifications"
 	"platrium/internal/notifications/transports"
-	"platrium/internal/objects"
+	"platrium/internal/orchestrator"
 	"platrium/internal/restapi"
 	"platrium/internal/setup"
 
@@ -71,11 +73,19 @@ func main() {
 	tenantStore := identity.NewTenantStore(graphStore)
 	userStore := identity.NewUserStore(graphStore)
 
+	// Setup Auth Domain
+	idpStore := auth.NewIdpStore(graphStore)
+	localUserStore := local.NewLocalUserStore(kvStore)
+
+	// Setup Cross-Domain Orchestrators
+	userOrchestrator := orchestrator.NewUserOrchestrator(userStore, fsOps)
+	tenantOrchestrator := orchestrator.NewTenantOrchestrator(graphStore, tenantStore, idpStore, userOrchestrator, localUserStore)
+
 	// Setup Instance Config Store
 	instanceConfigStore := setup.NewInstanceConfigStore(kvStore)
 
-	// Setup Cross-Domain Orchestrator
-	setupOrchestrator := setup.NewOrchestrator(instanceConfigStore, tenantStore, userStore, fsOps)
+	// Setup Setup Orchestrator
+	setupOrchestrator := setup.NewOrchestrator(instanceConfigStore, tenantOrchestrator)
 	if err := setupOrchestrator.Bootstrap(context.Background()); err != nil {
 		log.Fatalf("failed to bootstrap native tenant: %v", err)
 	}
@@ -83,17 +93,13 @@ func main() {
 	// Setup Session Manager & Dev Fallback
 	sessionManager := session.NewManager()
 	devFallback := &session.PlatriumSession{
-		UserID:   "99dff953-bdf8-40b9-859d-897c363455da",
-		TenantID: "c6038c5b-6a37-4c52-ad3c-1fa3c631fe1a",
-		Email:    "admin@example.com",
+		UserID:   "lq2gNrcJdrv8roFj6p8Wb",
+		TenantID: "bUSJKVlAHzzmKZF-_rhEd",
+		Email:    "example@platrium.org",
 	}
 
 	// Setup HTTP Routers
-	objectsRouter := objects.NewRouter(storageManager)
 	attachedFsHandler := api.NewAttachedFSHandler(storageManager) // we should give it storageManager isntead.
-
-	identityHandler := identity.NewTenantHandler(tenantStore, userStore, fsOps)
-	identityRouter := identity.NewRouter(identityHandler)
 
 	// Setup Notifications & WebSockets
 	gqlTransport := transports.NewGraphQLTransport()
@@ -145,9 +151,7 @@ func main() {
 		r.Use(session.Middleware(sessionManager, devFallback))
 
 		r.Get("/health", HealthHandler)
-		r.Mount("/objects", objectsRouter)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
-		r.Mount("/tenants", identityRouter.Routes())
 
 		// OpenAPI Generated Routes (Strict Server Mode)
 		restapi.HandlerFromMux(strictHandler, r)

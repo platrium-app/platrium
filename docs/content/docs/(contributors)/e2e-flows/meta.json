@@ -1,3 +1,8 @@
 {
-  "title": "E2E Flows"
+  "title": "E2E Flows",
+  "pages": [
+    "initial-setup",
+    "upload-sessions",
+    "download-sessions"
+  ]
 }

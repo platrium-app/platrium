@@ -1,21 +1,23 @@
-package orchestrators
+package orchestrator
 
 import (
 	"context"
 	"fmt"
+	"platrium/internal/auth"
 	"platrium/internal/identity"
 	"platrium/internal/infra/graph"
 
-	nanoid "github.com/matoous/go-nanoid/v2"
-	"platrium/internal/auth/protocols/local"
+	"platrium/internal/auth/protocol/local"
 	"time"
+
+	nanoid "github.com/matoous/go-nanoid/v2"
 )
 
 // TenantOrchestrator orchestrates complex multi-domain operations for Tenants.
 type TenantOrchestrator struct {
 	graphStore       graph.Graph
 	tenantStore      *identity.TenantStore
-	idpStore         *identity.IdpStore
+	idpStore         *auth.IdpStore
 	userOrchestrator *UserOrchestrator
 	localUserStore   *local.LocalUserStore
 }
@@ -23,7 +25,7 @@ type TenantOrchestrator struct {
 func NewTenantOrchestrator(
 	g graph.Graph,
 	ts *identity.TenantStore,
-	is *identity.IdpStore,
+	is *auth.IdpStore,
 	uo *UserOrchestrator,
 	lus *local.LocalUserStore,
 ) *TenantOrchestrator {
@@ -34,6 +36,11 @@ func NewTenantOrchestrator(
 		userOrchestrator: uo,
 		localUserStore:   lus,
 	}
+}
+
+// HasNativeTenant checks if a native tenant already exists in the graph.
+func (m *TenantOrchestrator) HasNativeTenant(ctx context.Context) (bool, error) {
+	return m.tenantStore.HasNativeTenant(ctx)
 }
 
 // ProvisionNewTenant handles the entire atomic lifecycle of setting up a new organization.
@@ -57,6 +64,39 @@ func (m *TenantOrchestrator) ProvisionNewTenant(ctx context.Context, name, alias
 
 	// 2. We open EXACTLY ONE database transaction for the entire GraphDB flow!
 	err = m.graphStore.WriteTx(ctx, func(tx graph.Tx) error {
+		// 0. Check constraints: Alias must be unique, and only one native tenant can exist
+		checkQuery := `
+			OPTIONAL MATCH (t1:Tenant {alias: $alias})
+			OPTIONAL MATCH (t2:Tenant {isNative: true})
+			RETURN t1 IS NOT NULL AS aliasExists, t2 IS NOT NULL AS nativeExists
+		`
+		checkRes, err := tx.Query(ctx, checkQuery, map[string]interface{}{"alias": alias})
+		if err != nil {
+			return fmt.Errorf("failed to check tenant constraints: %w", err)
+		}
+
+		var check struct {
+			AliasExists  bool `json:"aliasExists"`
+			NativeExists bool `json:"nativeExists"`
+		}
+
+		if checkRes.Next() {
+			if err := checkRes.Scan(&check); err != nil {
+				checkRes.Close()
+				return fmt.Errorf("failed to scan constraint results: %w", err)
+			}
+		}
+
+		checkRes.Close()
+
+		if check.AliasExists {
+			return fmt.Errorf("a tenant with alias '%s' already exists", alias)
+		}
+
+		if isNative && check.NativeExists {
+			return fmt.Errorf("a native cluster tenant already exists")
+		}
+
 		// A. Create the Tenant and Local IdP atomically
 		// Note: In a fully refactored state, this would be m.tenantStore.CreateTenantTx(tx, ...)
 		query1 := `
