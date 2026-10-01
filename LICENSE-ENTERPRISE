@@ -1,0 +1,62 @@
+The Platrium Enterprise Edition (EE) License (the “EE License”)
+Copyright (c) 2026-present Atheesh Thirumalairajan.
+
+With regard to the Platrium Software:
+
+This software and associated documentation files (the "Software") may only be
+used in production if you (and any entity that you represent) have agreed to,
+and are in compliance with, the Platrium Subscription Terms of Service, available
+at https://platrium.org/terms/ (the “EE Terms”), or other agreement governing the 
+use of the Software as agreed by you and Platrium, and otherwise have a valid 
+Platrium Enterprise Edition subscription for the authorized scope, capacity, or 
+number of user seats. 
+
+Subject to the foregoing sentence, you are free to modify this Software and publish 
+patches to the Software. You agree that Platrium and/or its licensors (as 
+applicable) retain all right, title, and interest in and to all such modifications 
+and/or patches, and all such modifications and/or patches may only be used, copied, 
+modified, displayed, distributed, or otherwise exploited with a valid Platrium 
+Enterprise Edition subscription.
+
+Notwithstanding the foregoing, you may copy and modify the Software solely for 
+internal development and testing purposes, without requiring a subscription. You 
+agree that Platrium and/or its licensors (as applicable) retain all right, title, 
+and interest in and to all such modifications. You are not granted any other rights 
+beyond what is expressly stated herein. Subject to the foregoing, it is forbidden 
+to copy, merge, publish, distribute, sublicense, and/or sell the Software.
+
+SCOPE AND APPLICATION:
+This EE License applies to:
+1. All source code, documentation, and files residing within any directory 
+   designated as "ee" (including, but not limited to, subdirectories such as 
+   "core/internal/ee/", "sdk/src/ee/", and "web/src/ee/"), as well as any 
+   individual source or generated files that are prefixed with "ee" 
+   (e.g., "ee_*", "ee-*", "*_ee.*", or "*.ee.*").
+2. Official client applications and packaged binaries distributed by Platrium 
+   (including, but not limited to, official applications for iOS, iPadOS, 
+   Android, macOS, Windows, and Linux).
+3. All compiled, transpiled, bundled, or generated artifacts derived from or 
+   incorporating any EE code or EE-designated files, including, but not limited to, 
+   backend binaries, client-side JavaScript bundles, and WebAssembly (WASM) modules, 
+   unless built strictly from the Platrium Community Edition (CE) source code 
+   without EE components.
+
+Any part of the Platrium Software that is distributed solely as part of Platrium 
+Community Edition (CE) and does not include or compile code from any "ee" directory 
+or EE-designated file is licensed under the GNU Affero General Public License 
+version 3 (AGPLv3). 
+
+The full text of this EE License shall be included in all copies or substantial 
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For all third-party components incorporated into the Platrium Software, those
+components remain licensed under the original license provided by the owner of the
+applicable component.

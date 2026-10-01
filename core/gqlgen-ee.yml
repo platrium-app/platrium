@@ -1,0 +1,25 @@
+schema:
+  - ../api/graphql/ee/*.graphql
+
+exec:
+  filename: internal/ee/graphql/generated.go
+  package: eegraphql
+
+model:
+  filename: internal/ee/graphql/models_gen.go
+  package: eegraphql
+
+resolver:
+  layout: follow-schema
+  dir: internal/ee/graphql
+  package: eegraphql
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - "platrium/internal/graphql"
+
+models:
+  DateTime:
+    model: github.com/99designs/gqlgen/graphql.Time
+  Int64:
+    model: github.com/99designs/gqlgen/graphql.Int64

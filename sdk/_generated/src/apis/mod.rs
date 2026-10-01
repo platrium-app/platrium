@@ -111,6 +111,7 @@ impl From<&str> for ContentType {
     }
 }
 
+pub mod ee_api;
 pub mod files_api;
 
 pub mod configuration;

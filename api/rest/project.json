@@ -27,11 +27,16 @@
                 "{projectRoot}/tspconfig.yaml"
             ],
             "outputs": [
-                "{projectRoot}/_generated/openapi.yaml"
+                "{projectRoot}/_generated/openapi.yaml",
+                "{projectRoot}/_generated/openapi_ee.yaml"
             ],
             "options": {
-                "command": "npm run build",
-                "cwd": "api/rest"
+                "commands": [
+                    "npx tsp compile src/",
+                    "npx tsp compile src/ee/ --option=\"@typespec/openapi3.output-file=openapi_ee.yaml\""
+                ],
+                "cwd": "api/rest",
+                "parallel": false
             }
         }
     }

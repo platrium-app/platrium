@@ -17,8 +17,14 @@
                 "_generate_graphql_bindings"
             ],
             "options": {
-                "command": "tsc -b && vite build",
+                "command": "VITE_EDITION=EE tsc -b && VITE_EDITION=EE vite build",
                 "cwd": "web"
+            },
+            "configurations": {
+                "ce": {
+                    "command": "tsc -b && vite build",
+                    "cwd": "web"
+                }
             }
         },
         "serve": {
@@ -28,8 +34,14 @@
                 "_generate_graphql_bindings"
             ],
             "options": {
-                "command": "vite",
+                "command": "VITE_EDITION=EE vite",
                 "cwd": "web"
+            },
+            "configurations": {
+                "ce": {
+                    "command": "vite",
+                    "cwd": "web"
+                }
             }
         },
         "lint": {

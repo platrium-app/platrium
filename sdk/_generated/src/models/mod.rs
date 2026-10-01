@@ -1,3 +1,5 @@
+pub mod ee_health_response;
+pub use self::ee_health_response::EeHealthResponse;
 pub mod errors_engine_internal;
 pub use self::errors_engine_internal::ErrorsEngineInternal;
 pub mod errors_missing_chunks;
