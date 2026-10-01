@@ -12,10 +12,10 @@ import (
 // Group represents a structural group node in the GraphDB.
 type Group struct {
 	ID         string `json:"id"`
-	IdpID      string `json:"idpId"`
-	ExternalID string `json:"externalId"`
+	IdpID      string `json:"idp_id"`
+	ExternalID string `json:"external_id"`
 	Name       string `json:"name"`
-	CreatedAt  int64  `json:"createdAt"`
+	CreatedAt  int64  `json:"created_at"`
 }
 
 // GroupStore manages Group nodes in the GraphDB.

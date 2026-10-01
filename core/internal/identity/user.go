@@ -12,11 +12,11 @@ import (
 // User represents a structural identity node in the GraphDB used strictly for Authorization.
 type User struct {
 	ID          string `json:"id"`
-	IdpID       string `json:"idpId"`
-	ExternalID  string `json:"externalId"`
+	IdpID       string `json:"idp_id"`
+	ExternalID  string `json:"external_id"`
 	Email       string `json:"email"`
-	DisplayName string `json:"displayName"`
-	CreatedAt   int64  `json:"createdAt"`
+	DisplayName string `json:"display_name"`
+	CreatedAt   int64  `json:"created_at"`
 }
 
 // UserStore manages User nodes in the GraphDB.

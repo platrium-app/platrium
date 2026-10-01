@@ -10,10 +10,10 @@ import (
 // Device represents a user's registered physical device for push notifications, MDM, etc.
 type Device struct {
 	ID                        string            `json:"id"`
-	UserID                    string            `json:"userId"`
-	NotificationTransportType string            `json:"notificationTransportType"` // Maps to notifications.TransportType (e.g. "GRAPHQL", "APNS")
+	UserID                    string            `json:"user_id"`
+	NotificationTransportType string            `json:"notification_transport_type"` // Maps to notifications.TransportType (e.g. "GRAPHQL", "APNS")
 	Metadata                  map[string]string `json:"metadata"`
-	CreatedAt                 int64             `json:"createdAt"`
+	CreatedAt                 int64             `json:"created_at"`
 }
 
 // DeviceStore defines operations for managing user devices.

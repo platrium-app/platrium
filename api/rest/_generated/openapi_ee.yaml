@@ -1,0 +1,393 @@
+openapi: 3.0.0
+info:
+  title: Platrium Core API
+  version: 0.0.0
+tags:
+  - name: ee
+  - name: Files
+paths:
+  /ee/monitoring/health:
+    get:
+      operationId: Monitoring_checkHealth
+      summary: Enterprise health check
+      description: Verifies that the Enterprise API is loaded and functioning.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EE.HealthResponse'
+      tags:
+        - ee
+  /files/downloadsession/chunks:
+    post:
+      operationId: DownloadSession_chunks
+      summary: Presign a batch of chunks for download
+      description: Generates time-bound client-direct download URLs for specific file chunk indices using a download session token.
+      parameters:
+        - name: x-platrium-downloadsession
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.DownloadSessionChunksResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.DownloadSessionChunksRequest'
+  /files/downloadsession/init:
+    post:
+      operationId: DownloadSession_initialize
+      summary: Initialize a new download session
+      description: Initialize a file download session. Verifies file ACLs and returns a sealed download session token and metadata.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.DownloadSessionInitResponse'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.NotFound'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.DownloadSessionInitRequest'
+  /files/uploadsession/chunks:
+    post:
+      operationId: UploadSession_chunks
+      summary: Presign a batch of chunks for upload
+      description: Batch request presigned URLs and cryptographic authorization receipts for chunk uploading.
+      parameters:
+        - name: x-platrium-uploadsession
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.UploadSessionChunksResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.UploadSessionChunksRequest'
+  /files/uploadsession/commit:
+    post:
+      operationId: UploadSession_commit
+      summary: Commit an upload session and finalize the file
+      description: Commit an upload session and finalize the file layout using the provided cryptographic receipts.
+      parameters:
+        - name: x-platrium-uploadsession
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.UploadSessionCommitResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.UploadSessionCommitRequest'
+  /files/uploadsession/init:
+    post:
+      operationId: UploadSession_initialize
+      summary: Initialize a new upload session
+      description: Initialize a file upload session. Verifies destination folder ACLs and returns a sealed passport token.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Files.UploadSessionInitResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Files.UploadSessionInitRequest'
+components:
+  schemas:
+    EE.HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+    Errors.EngineInternal:
+      type: object
+      required:
+        - debuginfo
+      properties:
+        debuginfo:
+          type: string
+    Errors.MissingChunks:
+      type: object
+      required:
+        - missing_chunks
+      properties:
+        missing_chunks:
+          type: array
+          items:
+            type: string
+    Errors.NotFound:
+      type: object
+      properties:
+        message:
+          type: string
+    Errors.Unauthorized:
+      type: object
+      properties:
+        message:
+          type: string
+    Files.ChunkHash:
+      type: string
+      pattern: ^[a-f0-9]{64}$
+      description: Strict SHA-256 Hex Hash validation pattern (64 characters, lowercase hex)
+    Files.DownloadSessionChunksRequest:
+      type: object
+      required:
+        - indices
+      properties:
+        indices:
+          type: array
+          items:
+            type: integer
+            format: int32
+          minItems: 1
+          maxItems: 512
+          description: Batch of chunk indices to request presigned download URLs for. Capped at 512 items.
+    Files.DownloadSessionChunksResponse:
+      type: object
+      required:
+        - chunks
+      properties:
+        chunks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Files.DownloadSessionPresignedChunk'
+          description: A key-value map mapping each requested index (as string) to its presigned chunk download details.
+    Files.DownloadSessionInitRequest:
+      type: object
+      required:
+        - file_id
+      properties:
+        file_id:
+          type: string
+          description: ID of the file to download
+        version:
+          type: string
+          description: Optional file version to target. If not provided, the latest version is used.
+    Files.DownloadSessionInitResponse:
+      type: object
+      required:
+        - session_id
+        - file_name
+        - file_size
+        - mime_type
+      properties:
+        session_id:
+          type: string
+          description: Cryptographically sealed JWT token acting as the download passport
+        file_name:
+          type: string
+          description: Name of the file
+        file_size:
+          type: integer
+          format: int64
+          description: Total size of the file in bytes
+        mime_type:
+          type: string
+          description: MIME Content-Type of the file
+    Files.DownloadSessionPresignedChunk:
+      type: object
+      required:
+        - download_url
+      properties:
+        download_url:
+          type: string
+          description: The client-direct Presigned download URL for the chunk.
+    Files.UploadSessionChunksRequest:
+      type: object
+      required:
+        - hashes
+      properties:
+        hashes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Files.ChunkHash'
+          minItems: 1
+          maxItems: 512
+          description: Batch of SHA-256 chunk hashes to authorize. Capped at 512 items (2GiB window).
+        contains_eof_chunk:
+          type: boolean
+          description: Flag indicating if last element in hashes is the last (EOF) chunk in the file. Allows Chunk to be < 4MiB.
+    Files.UploadSessionChunksResponse:
+      type: object
+      required:
+        - chunks
+      properties:
+        chunks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Files.UploadSessionPresignedChunk'
+          description: A key-value map mapping each authorized ChunkHash string directly to its metadata and receipts.
+    Files.UploadSessionCommitChunk:
+      type: object
+      required:
+        - hash
+        - receipt
+      properties:
+        hash:
+          allOf:
+            - $ref: '#/components/schemas/Files.ChunkHash'
+          description: SHA-256 Hash of Chunk Previously used to obtain Presign Status
+        receipt:
+          type: string
+          description: Cryptographic HMAC receipt authorized by the server for this chunk
+    Files.UploadSessionCommitRequest:
+      type: object
+      required:
+        - chunks
+      properties:
+        chunks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Files.UploadSessionCommitChunk'
+          minItems: 1
+          maxItems: 524288
+          description: Strictly ordered list of chunks forming the master file manifest sequence. Max items support a 2TiB file.
+    Files.UploadSessionCommitResponse:
+      type: object
+      required:
+        - file_id
+      properties:
+        file_id:
+          type: string
+          description: The created FileNode ID
+    Files.UploadSessionInitRequest:
+      type: object
+      required:
+        - parent_id
+        - file_name
+        - file_size
+        - mime_type
+      properties:
+        parent_id:
+          type: string
+          description: ID of the parent folder or drive
+        file_name:
+          type: string
+          description: Name of the file
+        file_size:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2199023255552
+          description: Size of the file in bytes. Max size 2TiB.
+        mime_type:
+          type: string
+          description: MIME Content-Type of the file (e.g. application/pdf, image/png)
+    Files.UploadSessionInitResponse:
+      type: object
+      required:
+        - session_id
+      properties:
+        session_id:
+          type: string
+          description: Cryptographically sealed JWT token acting as the session_id passport
+    Files.UploadSessionPresignedChunk:
+      type: object
+      required:
+        - upload_url
+        - receipt
+      properties:
+        upload_url:
+          type: string
+          nullable: true
+          description: The client-direct Presigned upload URL. Null if the chunk already exists.
+        receipt:
+          type: string
+          description: Symmetric HMAC authorization receipt bound to this specific session and chunk.
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+    variables: {}

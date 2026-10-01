@@ -22,6 +22,7 @@ import (
 	"platrium/internal/orchestrator"
 	"platrium/internal/restapi"
 	"platrium/internal/setup"
+	"platrium/ui"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -93,8 +94,8 @@ func main() {
 	// Setup Session Manager & Dev Fallback
 	sessionManager := session.NewManager()
 	devFallback := &session.PlatriumSession{
-		UserID:   "lq2gNrcJdrv8roFj6p8Wb",
-		TenantID: "bUSJKVlAHzzmKZF-_rhEd",
+		UserID:   "TcnyA2aI3O7YiFXj2OTii",
+		TenantID: "pEbCNJV_5Uq9-jcr53YdI",
 		Email:    "example@platrium.org",
 	}
 
@@ -156,6 +157,9 @@ func main() {
 		// OpenAPI Generated Routes (Strict Server Mode)
 		restapi.HandlerFromMux(strictHandler, r)
 	})
+
+	// UI Route (Must be the last route registered so it catches all non-API paths)
+	router.Handle("/*", ui.Handler())
 
 	port := os.Getenv("PORT")
 	if port == "" {

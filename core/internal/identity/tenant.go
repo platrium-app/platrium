@@ -11,8 +11,8 @@ type Tenant struct {
 	ID        string `json:"id"`
 	Alias     string `json:"alias"` // e.g., "acme" or "family"
 	Name      string `json:"name"`
-	IsNative  bool   `json:"isNative"`
-	CreatedAt int64  `json:"createdAt"`
+	IsNative  bool   `json:"is_native"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 // TenantStore manages Tenant nodes in the GraphDB.

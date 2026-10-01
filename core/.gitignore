@@ -3,6 +3,7 @@ bin/
 *.exe
 *.dll
 data/
+ui/
 
 # OS Files
 .DS_Store

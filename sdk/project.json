@@ -19,13 +19,18 @@
                     "2. To avoid JRE hassle, use Docker to generate and replace TLS lib with rustls to support WASM",
                     "3. Disable API and Docs Generation, Remove Unnecessary Artifacts"
                 ],
-                "commands": [
-                    "rm -rf {projectRoot}/_generated/src {projectRoot}/_generated/Cargo.toml",
-                    "docker run --rm -v \"$(pwd)\":/local openapitools/openapi-generator-cli generate -i /local/api/rest/_generated/openapi.yaml -g rust -o /local/{projectRoot}/_generated --package-name platrium-restapi --additional-properties=supportAsync=true,preferPassthroughParameters=true,reqwestDefaultFeatures=reqwest/rustls --global-property apiDocs=false,modelDocs=false,apiTests=false,modelTests=false",
-                    "rm -rf {projectRoot}/_generated/.openapi-generator {projectRoot}/_generated/git_push.sh {projectRoot}/_generated/README.md {projectRoot}/_generated/.openapi-generator-ignore {projectRoot}/_generated/.travis.yml"
-                ]
+                "command": "./sdk/scripts/gen_restapi_bindings.sh ee"
+            },
+            "configurations": {
+                "ce": {
+                    "dependsOn": [
+                        "api-rest:build"
+                    ],
+                    "command": "./sdk/scripts/gen_restapi_bindings.sh ce"
+                }
             },
             "inputs": [
+                "{workspaceRoot}/api/rest/_generated/openapi_ee.yaml",
                 "{workspaceRoot}/api/rest/_generated/openapi.yaml"
             ],
             "outputs": [
@@ -63,12 +68,18 @@
                 "_generate_restapi_bindings"
             ],
             "options": {
-                "command": "cargo build",
+                "command": "cargo build --features ee",
                 "cwd": "sdk"
             },
             "configurations": {
+                "ce": {
+                    "command": "cargo build",
+                    "dependsOn": [
+                        "_generate_restapi_bindings:ce"
+                    ]
+                },
                 "release": {
-                    "command": "cargo build --release"
+                    "command": "cargo build --release --features ee"
                 }
             },
             "inputs": [
