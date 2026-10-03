@@ -1,0 +1,9 @@
+type ServerInfo {
+  version: String!
+  edition: String!
+  isMultiTenant: Boolean!
+}
+
+extend type Query {
+  serverInfo: ServerInfo!
+}

@@ -10,38 +10,48 @@ import DownloadFallbackView from "./pages/DownloadFallbackView"
 import HomeView from "./pages/HomeView"
 import { FilePreviewView } from "./pages/filepreview/FilePreviewCore"
 
+import LoginView from "./pages/LoginView"
+import { ServerInfoProvider } from "./contexts/ServerInfoContext"
+
 export function App() {
   return (
-    <UploadProvider>
-      <BreadcrumbProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/file/:id" element={<FilePreviewView />} />
-            <Route path="/" element={<RootLayout />}>
-              <Route index element={<Navigate to="/home" replace />} />
-              <Route path="home" element={<HomeView />} />
-              <Route path="folder/:id" element={<FolderRootView />} />
-              <Route
-                path="rawcontent/*"
-                element={<DownloadFallbackView />}
-              />
-              <Route
-                path="*"
-                element={
-                  <PlaceholderView
-                    icon={TelescopeIcon}
-                    title="Page Not Found"
-                    description="We've looked everywhere and the page you're looking for does not exist or has been moved."
-                  />
-                }
-              />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </BreadcrumbProvider>
-    </UploadProvider>
+    <ServerInfoProvider>
+      <UploadProvider>
+        <BreadcrumbProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* Auth Routes */}
+              <Route path="/login" element={<LoginView />} />
+              <Route path="/login/:alias" element={<LoginView />} />
+
+              <Route path="/file/:id" element={<FilePreviewView />} />
+              <Route path="/" element={<RootLayout />}>
+                <Route index element={<Navigate to="/home" replace />} />
+                <Route path="home" element={<HomeView />} />
+                <Route path="folder/:id" element={<FolderRootView />} />
+                <Route
+                  path="rawcontent/*"
+                  element={<DownloadFallbackView />}
+                />
+                <Route
+                  path="*"
+                  element={
+                    <PlaceholderView
+                      icon={TelescopeIcon}
+                      title="Page Not Found"
+                      description="We've looked everywhere and the page you're looking for does not exist or has been moved."
+                    />
+                  }
+                />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </BreadcrumbProvider>
+      </UploadProvider>
+    </ServerInfoProvider>
   )
 }
+
 
 export default App
 

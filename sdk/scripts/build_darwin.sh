@@ -4,20 +4,25 @@ set -e
 # Change to the sdk root directory
 cd "$(dirname "$0")/.."
 
+CARGO_FLAGS="--release"
+if [ "$MODE" = "ce" ]; then
+  CARGO_FLAGS="$CARGO_FLAGS --no-default-features"
+fi
+
 echo "Building for macOS (Apple Silicon)..."
-MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target aarch64-apple-darwin
+MACOSX_DEPLOYMENT_TARGET=11.0 cargo build $CARGO_FLAGS --target aarch64-apple-darwin
 
 echo "Building for macOS (Intel)..."
-MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target x86_64-apple-darwin
+MACOSX_DEPLOYMENT_TARGET=11.0 cargo build $CARGO_FLAGS --target x86_64-apple-darwin
 
 echo "Building for iOS Device (ARM64)..."
-IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios
+IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build $CARGO_FLAGS --target aarch64-apple-ios
 
 echo "Building for iOS Simulator (ARM64)..."
-IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios-sim
+IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build $CARGO_FLAGS --target aarch64-apple-ios-sim
 
 echo "Building for iOS Simulator (Intel)..."
-IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target x86_64-apple-ios
+IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build $CARGO_FLAGS --target x86_64-apple-ios
 
 # Create working directories for the build
 echo "Setting up workspace..."

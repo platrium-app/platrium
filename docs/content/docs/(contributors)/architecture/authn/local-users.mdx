@@ -69,7 +69,7 @@ This guarantees flawless atomicity across entirely different database engines!
 
 ## IdPAuthHandoff Integration (In-Progress)
 
-When a Local User attempts to log in via the web UI, the request first hits the HRD (Home Realm Discovery) router. Once HRD confirms the target Tenant uses a `LOCAL` IdpConnection, it triggers the `IdPAuthHandoff` flow.
+When a Local User attempts to log in via the web UI, the request first hits the HRD (Home Realm Discovery) router. Once HRD confirms the target Tenant uses a `LOCAL` IdpProvider, it triggers the `IdPAuthHandoff` flow.
 
 The handoff engine seamlessly ties the two databases together:
 1. It retrieves the user's `ID` from the Graph DB based on their email.

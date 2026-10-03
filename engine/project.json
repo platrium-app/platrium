@@ -1,0 +1,125 @@
+{
+  "name": "engine",
+  "projectType": "application",
+  "sourceRoot": "engine",
+  "implicitDependencies": [
+    "api-rest"
+  ],
+  "targets": {
+    "_generate_restapi_bindings": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "api-rest:build"
+      ],
+      "options": {
+        "commands": [
+          "go tool oapi-codegen -generate types -package restapi -o internal/restapi/types.gen.go ../api/rest/_generated/openapi.yaml",
+          "go tool oapi-codegen -generate chi-server,strict-server -package restapi -o internal/restapi/server.gen.go ../api/rest/_generated/openapi.yaml",
+          "go tool oapi-codegen -generate spec -package restapi -o internal/restapi/spec.gen.go ../api/rest/_generated/openapi.yaml"
+        ],
+        "cwd": "engine",
+        "parallel": false
+      },
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/api/rest/_generated/openapi.yaml"
+      ],
+      "outputs": [
+        "{projectRoot}/internal/restapi/types.gen.go",
+        "{projectRoot}/internal/restapi/server.gen.go",
+        "{projectRoot}/internal/restapi/spec.gen.go"
+      ]
+    },
+    "_generate_graphql_bindings": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "GOFLAGS=-tags=ee go run cmd/generators/graphql_ee.go"
+        ],
+        "cwd": "engine",
+        "parallel": false
+      },
+      "configurations": {
+        "ce": {
+          "commands": [
+            "go tool gqlgen generate --config gqlgen.yml"
+          ]
+        }
+      },
+      "cache": false,
+      "inputs": [
+        "{workspaceRoot}/api/graphql/**/*.graphql",
+        "{projectRoot}/gqlgen.yml",
+        "{projectRoot}/gqlgen-ee.yml"
+      ],
+      "outputs": [
+        "{projectRoot}/internal/graphql/**/*.go"
+      ]
+    },
+    "build": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "_generate_restapi_bindings",
+        "_generate_graphql_bindings",
+        "web:build"
+      ],
+      "options": {
+        "command": "./build.sh",
+        "cwd": "engine"
+      },
+      "configurations": {
+        "ce": {
+          "dependsOn": [
+            "_generate_restapi_bindings",
+            "_generate_graphql_bindings",
+            {
+              "target": "build",
+              "projects": "web",
+              "params": "forward"
+            }
+          ],
+          "command": "./build.sh --ce"
+        }
+      },
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum",
+        "{projectRoot}/build.sh"
+      ],
+      "outputs": [
+        "{projectRoot}/bin/engine"
+      ]
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "_generate_restapi_bindings",
+        "_generate_graphql_bindings"
+      ],
+      "options": {
+        "command": "./build.sh --serve",
+        "cwd": "engine"
+      },
+      "configurations": {
+        "ce": {
+          "command": "./build.sh --ce --serve"
+        }
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go test ./...",
+        "cwd": "engine"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.go",
+        "{projectRoot}/go.mod",
+        "{projectRoot}/go.sum"
+      ]
+    }
+  }
+}

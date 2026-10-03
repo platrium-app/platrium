@@ -46,8 +46,8 @@ export function FileTransferCard({
   onCancel: (transferId: string) => void
 }) {
   const fileName =
-    item.metadata && item.metadata.type === "FileChunk"
-      ? item.metadata.file_name
+    item.metadata && "file_name" in item.metadata
+      ? (item.metadata as { file_name: string }).file_name
       : "File"
   const statusType = item.status.type
   const errorMessage = item.status.type === "Error" ? item.status.message : ""

@@ -19,19 +19,16 @@
                     "2. To avoid JRE hassle, use Docker to generate and replace TLS lib with rustls to support WASM",
                     "3. Disable API and Docs Generation, Remove Unnecessary Artifacts"
                 ],
-                "command": "./sdk/scripts/gen_restapi_bindings.sh ee"
+                "command": "MODE=ee ./sdk/scripts/gen_restapi_bindings.sh"
             },
             "configurations": {
                 "ce": {
-                    "dependsOn": [
-                        "api-rest:build"
-                    ],
-                    "command": "./sdk/scripts/gen_restapi_bindings.sh ce"
+                    "command": "MODE=ce ./sdk/scripts/gen_restapi_bindings.sh"
                 }
             },
             "inputs": [
-                "{workspaceRoot}/api/rest/_generated/openapi_ee.yaml",
-                "{workspaceRoot}/api/rest/_generated/openapi.yaml"
+                "{workspaceRoot}/api/rest/_generated/openapi.yaml",
+                "{workspaceRoot}/api/rest/_generated/openapi_ee.yaml"
             ],
             "outputs": [
                 "{projectRoot}/_generated"
@@ -119,6 +116,14 @@
                 "command": "wasm-pack build --target web --out-dir _ffi/wasm --out-name platrium_sdk",
                 "cwd": "sdk"
             },
+            "configurations": {
+                "ce": {
+                    "command": "wasm-pack build --target web --out-dir _ffi/wasm --out-name platrium_sdk -- --no-default-features",
+                    "dependsOn": [
+                        "_generate_restapi_bindings:ce"
+                    ]
+                }
+            },
             "inputs": [
                 "{projectRoot}/src/**/*.rs",
                 "{projectRoot}/Cargo.toml",
@@ -135,8 +140,16 @@
                 "_generate_restapi_bindings"
             ],
             "options": {
-                "command": "./scripts/build_darwin.sh",
+                "command": "MODE=ee ./scripts/build_darwin.sh",
                 "cwd": "sdk"
+            },
+            "configurations": {
+                "ce": {
+                    "command": "MODE=ce ./scripts/build_darwin.sh",
+                    "dependsOn": [
+                        "_generate_restapi_bindings:ce"
+                    ]
+                }
             },
             "inputs": [
                 "{projectRoot}/src/**/*.rs",
