@@ -1,11 +1,10 @@
 import "@typespec/http";
 import "@typespec/openapi";
-import "../main.tsp";
 
 using TypeSpec.Http;
 using TypeSpec.OpenAPI;
 
-namespace Platrium.EE;
+namespace Platrium.EE.Monitoring;
 
 model HealthResponse {
     @statusCode _: 200;

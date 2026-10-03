@@ -37,7 +37,7 @@ If the setup crashes here, or anywhere downstream, this temporary hash will sile
 Next, the orchestrator opens a single, monolithic `WriteTx` network connection to the Graph Database. **All** subsequent structural changes happen deep inside this isolated transaction bubble.
 
 1. **Create the Native Tenant Node:** The `Tenant` node is provisioned and explicitly flagged as `isNative: true`.
-2. **Create the Local IdP:** A default `IdpConnection` node is created, representing the Platrium Local Authentication system.
+2. **Create the Local IdP:** A default `IdpProvider` node is created, representing the Platrium Local Authentication system.
 3. **Link the Tenant to the IdP:** The system draws the `(t)-[:USES_IDP]->(i)` edge, establishing the authorization baseline.
 
 ### Step 3: The User Orchestrator Handoff

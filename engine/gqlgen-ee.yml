@@ -1,0 +1,30 @@
+# gqlgen-ee.yml
+schema:
+  - ../api/graphql/core/*.graphql
+  - ../api/graphql/ee/*.graphql
+
+exec:
+  filename: internal/ee/graphql/generated.go
+  package: eegraphql
+
+model:
+  filename: internal/ee/graphql/models_gen.go
+  package: eegraphql
+
+# Stubs land next to generated.go. The plugin filters this to EE fields only.
+resolver:
+  layout: follow-schema
+  dir: internal/ee/graphql
+  package: eegraphql
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - platrium/internal/graphql
+
+skip_validation: true
+
+models:
+  DateTime: { model: github.com/99designs/gqlgen/graphql.Time }
+  Int64: { model: github.com/99designs/gqlgen/graphql.Int64 }
+  File: { fields: { path: { resolver: true } } }
+  Folder: { fields: { path: { resolver: true } } }

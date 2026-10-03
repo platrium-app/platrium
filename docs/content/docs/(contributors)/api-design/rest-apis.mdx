@@ -52,7 +52,7 @@ Our API definitions live in the [`api/rest/src`](https://github.com/platrium-app
 
 Internally, this simply runs `tsp compile src/` which gathers all the `.tsp` files and generates a monolithic standard `openapi.yaml` file located in `api/rest/_generated/openapi.yaml`. This YAML file acts as the single source of truth for the rest of the generation pipeline.
 
-## Generating the Go Backend (`core-engine`)
+## Generating the Go Backend (`engine`)
 The backend logic lives in the [`core/`](https://github.com/platrium-app/platrium/tree/main/core) directory. Before Nx even attempts to build the Go binary, it triggers the `_generate_restapi_bindings` target.
 
 This target runs `oapi-codegen` to translate the OpenAPI YAML into strongly-typed Go structs and interfaces for the Chi router:

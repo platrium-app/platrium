@@ -1,0 +1,167 @@
+---
+title: Enterprise vs Open Source Separation
+description: How we strictly isolate AGPL Community Edition (CE) code from Commercial Enterprise Edition (EE) code.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Platrium operates on an **Open Core** model. The core engine and clients are fully Open Source under the **AGPLv3** license. However, enterprise features (like Single Sign-On, Advanced E2EE, and Multi-Tenancy) are commercial and proprietary.
+
+To legally protect our customers and ourselves, we maintain a **strict, compile-time boundary**. Enterprise code must *never* physically compile into the Community Edition binaries or client bundles. We do not rely on simple runtime `if (isEnterprise)` flags, as the proprietary code would still exist in the distributed AGPL binaries.
+
+Here is how we achieve this across our entire polyglot stack.
+
+## The Backend APIs (Go Engine)
+
+We utilize Go's native build constraints (`//go:build ee`) to physically exclude Enterprise files from the compiler. 
+
+### REST API (TypeSpec & OpenAPI)
+Our REST APIs are defined in [TypeSpec](https://typespec.io/). We use a dual-compilation pipeline where CE builds output `openapi.yaml` and EE builds output `openapi_ee.yaml`.
+
+<Tabs items={['project.json', 'src/ee/main.tsp']}>
+  <Tab value="project.json">
+  ```json
+  "commands": [
+    "npx tsp compile src/",
+    "npx tsp compile src/ee/ --option=\"@typespec/openapi3.output-file=openapi_ee.yaml\""
+  ]
+  ```
+  </Tab>
+  <Tab value="src/ee/main.tsp">
+  ```tsp
+  import "../main.tsp";
+  import "./monitoring.tsp";
+
+  // The EE entrypoint imports CE routes and appends proprietary endpoints.
+  ```
+  </Tab>
+</Tabs>
+
+When generating the Go server stubs via `oapi-codegen`, we run the generator twice. The CE backend interfaces are generated into `internal/restapi/`, and the EE interfaces into `internal/ee/restapi/`. Any manual HTTP handlers we write for EE endpoints are placed in `internal/ee/restapi/` with a `//go:build ee` tag at the top of the file.
+
+### GraphQL API (`gqlgen`)
+GraphQL schemas are isolated by directory (`api/graphql/core/` and `api/graphql/ee/`). 
+
+To avoid duplicating base interfaces, we wrote a custom Go AST generator (`cmd/generators/graphql_ee.go`). When generating the EE bindings, this custom script parses the AST, filters out the duplicate CE fields, and correctly applies the `//go:build ee` tag to all generated resolvers.
+
+<Tabs items={['project.json', 'graphql_ee.go']}>
+  <Tab value="project.json">
+  ```json
+  "commands": [
+    "GOFLAGS=-tags=ee go run cmd/generators/graphql_ee.go"
+  ]
+  ```
+  </Tab>
+  <Tab value="graphql_ee.go">
+  ```go
+  // We use AST manipulation to strip out CE fields from EE structs
+  // and forcefully inject //go:build ee into the generated resolvers.
+  fset := token.NewFileSet()
+  node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+  // ... filter AST ...
+  ```
+  </Tab>
+</Tabs>
+
+## The Rust SDK (Heavy Client)
+
+Our SDK isn't just an API wrapper; it contains heavy business logic for chunk piecing, semaphore controllers, and End-to-End Encryption (E2EE). 
+
+Because the SDK is compiled into WebAssembly (WASM) and embedded into the web client, it must also respect the CE/AGPL boundary.
+
+We achieve this using **Cargo Features**:
+
+<Tabs items={['Cargo.toml', 'Rust Code', 'project.json']}>
+  <Tab value="Cargo.toml">
+  ```toml
+  [features]
+  default = ["ee"]
+  ee = []
+  ```
+  </Tab>
+  <Tab value="Rust Code">
+  ```rust
+  #[cfg(feature = "ee")]
+  pub fn enterprise_encryption() {
+      // Physically deleted from the CE binary!
+  }
+  ```
+  </Tab>
+  <Tab value="project.json">
+  ```json
+  "build:wasm": {
+    "executor": "nx:run-commands",
+    "options": {
+      "command": "wasm-pack build --target web --out-dir _ffi/wasm --out-name platrium_sdk"
+    },
+    "configurations": {
+      "ce": {
+        "command": "wasm-pack build --target web --out-dir _ffi/wasm --out-name platrium_sdk -- --no-default-features"
+      }
+    }
+  }
+  ```
+  </Tab>
+</Tabs>
+
+When building the Open Source UI, the Nx pipeline explicitly passes `--no-default-features` to `wasm-pack` and `cargo build`. The Rust compiler physically deletes all `#[cfg(feature = "ee")]` blocks, ensuring the resulting CE WASM bundle is 100% clean and AGPL compliant.
+
+## The Web Frontend (React & Vite)
+
+The web frontend uses dynamic imports and modern bundler tree-shaking to eliminate Enterprise code.
+
+Instead of statically importing Enterprise UI components (like Multi-tenant logins), we use React's `lazy()` combined with a Vite environment variable:
+
+<Tabs items={['React Component', 'project.json']}>
+  <Tab value="React Component">
+  ```tsx
+  import { lazy } from 'react';
+
+  const EECompanyAliasLogin = import.meta.env.VITE_EDITION === 'EE'
+    ? lazy(() => import('../ee/pages/CompanyAliasLogin'))
+    : null;
+  ```
+  </Tab>
+  <Tab value="project.json">
+  ```json
+  "build": {
+    "executor": "@nx/vite:build",
+    "options": {
+      "mode": "ee"
+    },
+    "configurations": {
+      "ce": {
+        "mode": "ce"
+      }
+    }
+  }
+  ```
+  </Tab>
+</Tabs>
+
+During a CE build (`VITE_EDITION=CE`), Vite evaluates the ternary to `null`. Rollup detects that the `lazy()` import is dead code and completely **severs it from the dependency tree**. The entire `src/ee/` directory is vaporized and never makes it into the final minified JavaScript bundle.
+
+## Nx Pipeline Configuration
+
+Our `project.json` files are heavily customized to orchestrate this split. Every build target (like `build`, `build:wasm`, or `serve`) defaults to the Enterprise configuration, but exposes a strict `ce` configuration.
+
+```bash
+# Builds the proprietary Enterprise backend
+nx build engine
+
+# Builds the clean, AGPL Open Source backend
+nx build engine -c ce 
+
+# Builds the Web UI (forces SDK, WASM, and React into CE mode)
+nx build web -c ce
+```
+
+<Accordions>
+  <Accordion title="Why not separate repositories?">
+    Maintaining separate `platrium` and `platrium-ee` repositories leads to massive "merge hell." Every time we update a core feature, we would have to cherry-pick it into the EE repo. A unified monorepo with compile-time isolation gives us the best of both worlds: lightning-fast developer velocity and strict legal compliance.
+  </Accordion>
+  <Accordion title="Does the CE GraphQL schema leak EE types?">
+    In the frontend `web/` project, `graphql_codegen.ts` generates TypeScript interfaces for both CE and EE regardless of the build mode. However, TypeScript vanishes during compilation. Since the EE schemas are already public in the repository, the generated `.ts` types pose no security or licensing risk.
+  </Accordion>
+</Accordions>

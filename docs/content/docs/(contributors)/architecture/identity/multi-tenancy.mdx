@@ -7,7 +7,7 @@ import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 
 Platrium is engineered to be **fundamentally multi-tenant from the ground up**. 
 
-Whether you are running a single-tenant open-source instance or a massive Enterprise SaaS cluster, the core data models and orchestrators are exactly identical. Every single `User`, `Group`, `File`, `Folder`, and `IdpConnection` is strictly mathematically bound to a specific `Tenant`. There is no global "God Mode" data.
+Whether you are running a single-tenant open-source instance or a massive Enterprise SaaS cluster, the core data models and orchestrators are exactly identical. Every single `User`, `Group`, `File`, `Folder`, and `IdpProvider` is strictly mathematically bound to a specific `Tenant`. There is no global "God Mode" data.
 
 ## The Tenant Node
 
@@ -30,7 +30,7 @@ A `Tenant` represents an isolated workspace, an organization, or a billing unit.
 
 Tenants bring their own authentication rules. A Tenant might strictly enforce Okta for employees, but allow Local passwords for external contractors, or even offer Google Workspace as a third option.
 
-Because of this, a Tenant can have **multiple** `IdpConnection` nodes linked to it.
+Because of this, a Tenant can have **multiple** `IdpProvider` nodes linked to it.
 
 ```mermaid
 flowchart TD
@@ -38,9 +38,9 @@ flowchart TD
     classDef idp fill:#10b981,stroke:#059669,stroke-width:2px,color:#fff,rx:6px,ry:6px;
 
     T["Tenant (Acme)"]:::tenant
-    I1["IdpConnection (Okta SAML)"]:::idp
-    I2["IdpConnection (Google OIDC)"]:::idp
-    I3["IdpConnection (Local Passwords)"]:::idp
+    I1["IdpProvider (Okta SAML)"]:::idp
+    I2["IdpProvider (Google OIDC)"]:::idp
+    I3["IdpProvider (Local Passwords)"]:::idp
 
     T -->|":USES_IDP"| I1
     T -->|":USES_IDP"| I2
@@ -86,7 +86,7 @@ sequenceDiagram
     TO->>Graph: Open tx graph.Tx
     
     TO->>Graph: Create (t:Tenant) Node
-    TO->>Graph: Create (i:IdpConnection {type: "LOCAL"})
+    TO->>Graph: Create (i:IdpProvider {type: "LOCAL"})
     TO->>Graph: Create (t)-[:USES_IDP]->(i) edge
     
     Note over TO,UO: 3. Pass tx down to User Orchestrator

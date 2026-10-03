@@ -3,8 +3,8 @@ info:
   title: Platrium Core API
   version: 0.0.0
 tags:
-  - name: ee
   - name: Files
+  - name: ee
 paths:
   /ee/monitoring/health:
     get:
@@ -18,7 +18,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EE.HealthResponse'
+                $ref: '#/components/schemas/EE.Monitoring.HealthResponse'
       tags:
         - ee
   /files/downloadsession/chunks:
@@ -185,7 +185,7 @@ paths:
               $ref: '#/components/schemas/Files.UploadSessionInitRequest'
 components:
   schemas:
-    EE.HealthResponse:
+    EE.Monitoring.HealthResponse:
       type: object
       required:
         - status

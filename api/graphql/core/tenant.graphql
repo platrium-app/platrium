@@ -1,0 +1,17 @@
+type IdpProvider {
+  id: ID!
+  name: String!
+  type: String!
+}
+
+type TenantAuthConfig {
+  tenantId: ID!
+  name: String!
+  alias: String
+  defaultIdpId: String
+  providers: [IdpProvider!]!
+}
+
+extend type Query {
+  tenantAuthConfig: TenantAuthConfig!
+}

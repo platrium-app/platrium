@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-MODE=${1:-ee}
 PROJECT_ROOT="sdk"
 
 if [ "$MODE" = "ee" ]; then

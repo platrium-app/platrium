@@ -1,4 +1,0 @@
-enum Health {
-    OK
-    NOT_OK
-}
