@@ -6,6 +6,118 @@ tags:
   - name: Files
   - name: ee
 paths:
+  /auth/login:
+    post:
+      operationId: Auth_local_user_login
+      summary: Local Login
+      description: Authenticates a user via credentials against a specific IdP and establishes a session or issues a challenge.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.LoginResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Auth.LoginRequest'
+    get:
+      operationId: Auth_idp_redirect
+      summary: SSO Login Redirect
+      description: Initiates an external SSO handshake (SAML/OIDC) and redirects the user.
+      parameters:
+        - name: idp
+          in: query
+          required: true
+          schema:
+            type: string
+          explode: false
+      responses:
+        '302':
+          description: Redirection
+          headers:
+            location:
+              required: true
+              schema:
+                type: string
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.NotFound'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+  /auth/me:
+    get:
+      operationId: Auth_me
+      summary: Get Current User
+      description: Returns the currently authenticated user's session data.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.AuthMeResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+  /auth/mfa/verify:
+    post:
+      operationId: Auth_verify
+      summary: Verify MFA Challenge
+      description: Verifies an MFA challenge token and establishes a session.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.LoginResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Auth.MFAVerifyRequest'
   /ee/monitoring/health:
     get:
       operationId: Monitoring_checkHealth
@@ -185,6 +297,60 @@ paths:
               $ref: '#/components/schemas/Files.UploadSessionInitRequest'
 components:
   schemas:
+    Auth.AuthMeResponse:
+      type: object
+      required:
+        - user_id
+        - tenant_id
+        - email
+      properties:
+        user_id:
+          type: string
+        tenant_id:
+          type: string
+        email:
+          type: string
+    Auth.LoginRequest:
+      type: object
+      required:
+        - idp_id
+        - email
+      properties:
+        idp_id:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+    Auth.LoginResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+        next_step:
+          type: string
+        challenge_token:
+          type: string
+        available_methods:
+          type: array
+          items:
+            type: string
+          minItems: 1
+    Auth.MFAVerifyRequest:
+      type: object
+      required:
+        - challenge_token
+        - method
+        - code
+      properties:
+        challenge_token:
+          type: string
+        method:
+          type: string
+        code:
+          type: string
     EE.Monitoring.HealthResponse:
       type: object
       required:

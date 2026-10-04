@@ -3,10 +3,14 @@ package restapi
 import (
 	"fmt"
 
+	"platrium/internal/auth"
+	"platrium/internal/auth/protocol/local"
 	"platrium/internal/fsops"
+	"platrium/internal/identity"
 	"platrium/internal/infra/storage"
 	"platrium/internal/notifications"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -22,10 +26,14 @@ type RestAPI struct {
 	StorageManager      *storage.Manager
 	HMACSecret          string
 	NotificationsBroker *notifications.Broker
+	IdpStore            *auth.IdpStore
+	UserStore           *identity.UserStore
+	LocalUserStore      *local.LocalUserStore
+	SessionManager      *scs.SessionManager
 }
 
 // NewRestAPI creates a new instance of the API
-func NewRestAPI(fsOps *fsops.FSOps, chunkStore *fsops.ChunkStore, storageManager *storage.Manager, broker *notifications.Broker) *RestAPI {
+func NewRestAPI(fsOps *fsops.FSOps, chunkStore *fsops.ChunkStore, storageManager *storage.Manager, broker *notifications.Broker, idpStore *auth.IdpStore, userStore *identity.UserStore, localUserStore *local.LocalUserStore, sessionManager *scs.SessionManager) *RestAPI {
 	var apiEnv RestAPIEnv
 	if err := env.Parse(&apiEnv); err != nil {
 		panic(fmt.Sprintf("failed to parse RestAPI env: %v", err))
@@ -36,6 +44,10 @@ func NewRestAPI(fsOps *fsops.FSOps, chunkStore *fsops.ChunkStore, storageManager
 		ChunkStore:          chunkStore,
 		StorageManager:      storageManager,
 		NotificationsBroker: broker,
+		IdpStore:            idpStore,
+		UserStore:           userStore,
+		LocalUserStore:      localUserStore,
+		SessionManager:      sessionManager,
 		HMACSecret:          apiEnv.HMACSecret,
 	}
 }

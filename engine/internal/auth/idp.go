@@ -40,9 +40,9 @@ func NewIdpStore(store graph.Graph) *IdpStore {
 	return &IdpStore{store: store}
 }
 
-// GetIdpsByAlias looks up all configured IdPs for a specific tenant alias.
+// GetIdpsForTenant looks up all configured IdPs for a specific tenant alias.
 // This is incredibly fast (O(1) or O(log N)) because we will put a database index on Tenant.alias.
-func (r *IdpStore) GetIdpsByAlias(ctx context.Context, alias string) ([]*IdpProvider, error) {
+func (r *IdpStore) GetIdpsForTenant(ctx context.Context, alias string) ([]*IdpProvider, error) {
 	query := `
 		MATCH (t:Tenant {alias: $alias})-[:USES_IDP]->(i:IdpProvider)
 		RETURN 
@@ -77,4 +77,45 @@ func (r *IdpStore) GetIdpsByAlias(ctx context.Context, alias string) ([]*IdpProv
 	}
 
 	return idps, nil
+}
+
+// GetIdpById fetches a specific IdP connection by its unique NanoID.
+func (r *IdpStore) GetIdpById(ctx context.Context, id string) (*IdpProvider, error) {
+	query := `
+		MATCH (t:Tenant)-[:USES_IDP]->(i:IdpProvider {id: $id})
+		RETURN 
+			i.id AS id,
+			t.id AS tenant_id,
+			i.type AS type,
+			i.name AS name,
+			i.configJSON AS proto_config
+	`
+
+	var idp IdpProvider
+	found := false
+	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
+		res, err := tx.Query(ctx, query, map[string]any{"id": id})
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+
+		if res.Next() {
+			if err := res.Scan(&idp); err != nil {
+				return fmt.Errorf("failed to scan IdpProvider: %w", err)
+			}
+			found = true
+		}
+		return res.Err()
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch idp by id: %w", err)
+	}
+
+	if !found {
+		return nil, fmt.Errorf("idp not found")
+	}
+
+	return &idp, nil
 }

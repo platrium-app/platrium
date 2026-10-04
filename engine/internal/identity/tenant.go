@@ -48,6 +48,29 @@ func (r *TenantStore) HasNativeTenant(ctx context.Context) (bool, error) {
 	return hasNative, err
 }
 
+// GetTenantCount returns the total number of Tenant nodes in the graph.
+func (r *TenantStore) GetTenantCount(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
+		res, err := tx.Query(ctx, "MATCH (t:Tenant) RETURN count(t) AS count", nil)
+		if err != nil {
+			return err
+		}
+		defer res.Close()
+		if res.Next() {
+			var row struct {
+				Count int64 `json:"count"`
+			}
+			if err := res.Scan(&row); err != nil {
+				return err
+			}
+			count = row.Count
+		}
+		return nil
+	})
+	return count, err
+}
+
 // PublicIdpProvider represents the public metadata for an Identity Provider.
 type PublicIdpProvider struct {
 	ID   string `json:"id"`

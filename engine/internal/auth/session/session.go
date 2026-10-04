@@ -29,7 +29,8 @@ type PlatriumSession struct {
 // NewManager initializes a new SCS SessionManager with platrium_sid cookie settings.
 func NewManager() *scs.SessionManager {
 	sm := scs.New()
-	sm.Lifetime = 24 * time.Hour
+	sm.Lifetime = 72 * time.Hour
+	sm.IdleTimeout = 36 * time.Hour // sliding expiration
 	sm.Cookie.Name = "platrium_sid"
 	sm.Cookie.HttpOnly = true
 	sm.Cookie.SameSite = http.SameSiteLaxMode
