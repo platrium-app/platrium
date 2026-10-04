@@ -1,9 +1,11 @@
 import * as React from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { FolderOpen, AlertTriangle, FolderRoot, Folder } from "lucide-react"
 import { FolderContextMenu } from "./FolderContextMenu"
 import { useSetBreadcrumbs, type BreadcrumbItemType } from "@/contexts/BreadcrumbContext"
 import { useQuery } from "@apollo/client/react"
+import { useAuth } from "@/contexts/AuthContext"
+import { Button } from "@/components/ui/button"
 import { graphql } from "@/graphql"
 import { PlaceholderView } from "@/components/custom/PlaceholderView"
 import { Spinner } from "@/components/ui/spinner"
@@ -16,13 +18,16 @@ import { Dialog } from "@base-ui/react/dialog"
 import type { DriveItemNode, SortField, SortDirection, ViewMode } from "./FolderViewTypes"
 import { DriveOperationManager, type OperationMode } from "@/components/modals/DriveOperationManager"
 import { useDriveEventSubscription } from "@/hooks/useDriveEventSubscription"
+import { hasCapability } from "@/lib/capabilities"
 
 const GET_FOLDER_INFO = graphql(`
   query GetFolderInfo($id: ID!) {
     item(id: $id) {
       id
+      parentId
       name
       type
+      myCapabilities
       path {
         id
         name
@@ -46,6 +51,7 @@ const GET_FOLDER_CONTENTS = graphql(`
           parentId
           name
           type
+          myCapabilities
           createdAt
           updatedAt
           ... on File {
@@ -61,6 +67,9 @@ const GET_FOLDER_CONTENTS = graphql(`
 export default function FolderRootView() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Visitors who are not signed in can still open what is shared publicly.
+  const { user } = useAuth()
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list")
   const [sortField, setSortField] = React.useState<SortField>("name")
@@ -94,7 +103,7 @@ export default function FolderRootView() {
     // Apollo merges the new data cleanly without jumping scroll position.
     contentsQuery.refetch()
     infoQuery.refetch()
-  })
+  }, !!user)
 
   const item = infoQuery.data?.item
 
@@ -113,6 +122,7 @@ export default function FolderRootView() {
         createdAt: node.createdAt,
         updatedAt: node.updatedAt,
         owner: "me",
+        capabilities: node.myCapabilities ?? [],
       }
     })
   }, [contentsQuery.data])
@@ -256,6 +266,20 @@ export default function FolderRootView() {
     )
   }
 
+  if (isError && !user) {
+    // A signed-out visitor to a private folder: it may be theirs once they sign in.
+    return (
+      <PlaceholderView
+        icon={AlertTriangle}
+        title="This folder isn't available"
+        description="It may be private. If someone shared it with you, sign in to open it."
+        action={
+          <Button onClick={() => navigate("/login", { state: { from: location } })}>Sign in</Button>
+        }
+      />
+    )
+  }
+
   if (isError) {
     const errorMsg = infoQuery.error?.message || contentsQuery.error?.message || "Failed to load folder information."
     return (
@@ -291,7 +315,7 @@ export default function FolderRootView() {
   }
 
   return (
-    <FolderContextMenu folderId={id!}>
+    <FolderContextMenu folderId={id!} canCreate={hasCapability(item.myCapabilities, "CREATE")}>
       <div className="flex h-full w-full flex-1 flex-col overflow-hidden">
         {/* Permanent Toolbar */}
         <FolderHeaderToolbar
@@ -308,6 +332,16 @@ export default function FolderRootView() {
             setOpItems(items)
           }}
           selectedItems={items.filter(i => selectedIds.has(i.id))}
+          folderCapabilities={item.myCapabilities}
+          currentFolder={{
+            id: item.id,
+            parentId: item.parentId ?? null,
+            name: item.name,
+            type: "FOLDER",
+            createdAt: "",
+            updatedAt: "",
+            capabilities: item.myCapabilities,
+          }}
         />
 
         {/* Content View / Empty State wrapped with SelectionArea spanning the entire canvas below header */}
@@ -321,10 +355,14 @@ export default function FolderRootView() {
               icon={FolderOpen}
               title="This folder is empty"
               description={
-                <>
-                  Right-click anywhere to create a new folder, or upload files directly into{" "}
-                  <span className="font-semibold text-foreground">{item.name}</span>.
-                </>
+                hasCapability(item.myCapabilities, "CREATE") ? (
+                  <>
+                    Right-click anywhere to create a new folder, or upload files directly into{" "}
+                    <span className="font-semibold text-foreground">{item.name}</span>.
+                  </>
+                ) : (
+                  <>Nothing has been added to this folder yet.</>
+                )
               }
             />
           ) : viewMode === "list" ? (

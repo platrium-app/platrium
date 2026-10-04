@@ -1,8 +1,9 @@
 import { useMutation } from "@apollo/client/react"
 import { graphql } from "@/graphql"
-import type { DriveItemNode } from "@/pages/folder/FolderViewTypes"
+import type { DriveItemNode, DriveOperation } from "@/pages/folder/FolderViewTypes"
 import { NamePromptModal } from "./NamePromptModal"
 import { TargetPickerModal } from "./TargetPickerModal"
+import { ShareItemModal } from "./ShareItemModal"
 
 const CREATE_FOLDER = graphql(`
   mutation CreateFolder($parentId: ID!, $name: String!) {
@@ -42,7 +43,7 @@ const COPY_FILE = graphql(`
   }
 `)
 
-export type OperationMode = "CREATE_FOLDER" | "RENAME" | "MOVE" | "COPY" | null
+export type OperationMode = DriveOperation | null
 
 export interface DriveOperationManagerProps {
   mode: OperationMode
@@ -137,6 +138,15 @@ export function DriveOperationManager({
         title="Make a Copy"
         submitLabel="Copy Here"
         initialTargetId={currentFolderId}
+      />
+
+      <ShareItemModal
+        isOpen={mode === "SHARE"}
+        onClose={() => {
+          onClose()
+          onSuccess?.() // sharing can change what the current user sees
+        }}
+        item={mode === "SHARE" && items.length === 1 ? items[0] : null}
       />
     </>
   )

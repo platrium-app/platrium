@@ -12,7 +12,11 @@ export interface DriveItemNode {
   createdAt: string
   updatedAt: string
   owner?: string
+  /** What the current user may do with this item (see lib/capabilities). */
+  capabilities?: string[]
 }
+
+export type DriveOperation = "CREATE_FOLDER" | "RENAME" | "MOVE" | "COPY" | "SHARE"
 
 export type SortField = "name" | "updatedAt" | "size" | "type" | "owner"
 export type SortDirection = "asc" | "desc"
@@ -28,5 +32,5 @@ export interface FolderViewProps {
   sortField: SortField
   sortDirection: SortDirection
   onSortChange: (field: SortField) => void
-  onOperation?: (mode: "CREATE_FOLDER" | "RENAME" | "MOVE" | "COPY", items: DriveItemNode[]) => void
+  onOperation?: (mode: DriveOperation, items: DriveItemNode[]) => void
 }
