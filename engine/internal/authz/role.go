@@ -38,15 +38,18 @@ var builtinRoles = func() []roleDef {
 	}
 }()
 
-// RoleContext says where a role is being offered. The roles and their
-// capabilities are the same everywhere; only the wording differs, because
-// "Drive Admin" reads wrong on a single file.
+// RoleContext says where a role is being offered. The capabilities behind a
+// role are the same everywhere, but which roles make sense, and what they are
+// called, depends on what is being shared.
 type RoleContext int
 
 const (
-	// ContextItemShare is sharing a file or folder inside a drive.
+	// ContextItemShare is sharing a file or folder: it has an owner, and can be
+	// shared with people, groups, the organization or the public as a Viewer or
+	// an Editor. Administering is not a role a single item has.
 	ContextItemShare RoleContext = iota
-	// ContextDriveMember is adding a member to a shared drive (sharing its root).
+	// ContextDriveMember is adding a member to a shared drive (sharing its
+	// root): the full ladder, from Viewer up to Drive Admin.
 	ContextDriveMember
 )
 
@@ -59,30 +62,46 @@ type RoleOption struct {
 }
 
 // RoleOptions lists the roles to offer in a context, least privileged first,
-// with the wording to show. The backend owns the wording so every client says
-// the same thing, and so future custom roles can appear in the same list.
+// with the wording to show. The backend owns both the list and the wording, so
+// every client says the same thing and the server can refuse a role that does
+// not belong (see Offers).
 func RoleOptions(c RoleContext) []RoleOption {
-	adminLabel, adminDesc := "Admin", "Can do everything with this item, including deleting it and managing who has access"
-	if c == ContextDriveMember {
-		adminLabel, adminDesc = "Drive Admin", "Can do everything in this drive, including managing members and deleting the drive"
-	}
-	text := map[Role][2]string{
-		RoleViewer:           {"Viewer", "Can view and download"},
-		RoleCommenter:        {"Commenter", "Can view, download and comment"},
-		RoleRestrictedEditor: {"Restricted Editor", "Can add and edit files, but cannot move or delete them"},
-		RoleFullEditor:       {"Full Editor", "Can add, edit, move and trash files and folders"},
-		RoleDriveAdmin:       {adminLabel, adminDesc},
+	type text struct{ label, description string }
+	var roles []Role
+	words := map[Role]text{}
+
+	switch c {
+	case ContextItemShare:
+		roles = []Role{RoleViewer, RoleFullEditor}
+		words[RoleViewer] = text{"Viewer", "Can view and download"}
+		words[RoleFullEditor] = text{"Editor", "Can add, edit, move and delete files and folders"}
+	case ContextDriveMember:
+		roles = []Role{RoleViewer, RoleCommenter, RoleRestrictedEditor, RoleFullEditor, RoleDriveAdmin}
+		words[RoleViewer] = text{"Viewer", "Can view and download"}
+		words[RoleCommenter] = text{"Commenter", "Can view, download and comment"}
+		words[RoleRestrictedEditor] = text{"Restricted Editor", "Can add and edit files, but cannot move or delete them"}
+		words[RoleFullEditor] = text{"Full Editor", "Can add, edit, move and trash files and folders"}
+		words[RoleDriveAdmin] = text{"Drive Admin", "Can do everything in this drive, including managing members and deleting the drive"}
+	default:
+		return nil
 	}
 
-	var out []RoleOption
-	for _, d := range builtinRoles {
-		t, ok := text[d.role]
-		if !ok {
-			continue
-		}
-		out = append(out, RoleOption{Role: d.role, Label: t[0], Description: t[1], Caps: d.caps})
+	out := make([]RoleOption, 0, len(roles))
+	for _, r := range roles {
+		caps, _ := r.Caps()
+		out = append(out, RoleOption{Role: r, Label: words[r].label, Description: words[r].description, Caps: caps})
 	}
 	return out
+}
+
+// Offers reports whether a role may be assigned in a context.
+func (c RoleContext) Offers(r Role) bool {
+	for _, o := range RoleOptions(c) {
+		if o.Role == r {
+			return true
+		}
+	}
+	return false
 }
 
 // Caps returns the capabilities of a built-in role.
@@ -95,15 +114,11 @@ func (r Role) Caps() (Capability, bool) {
 	return 0, false
 }
 
-// Grantable reports whether the role may be assigned through a grant. Owner is
-// implicit and Custom is derived, so neither is.
+// Grantable reports whether the role may be assigned through a grant in any
+// context. Owner is implicit and Custom is derived, so neither is. Which
+// contexts offer it is a separate question (see RoleContext.Offers).
 func (r Role) Grantable() bool {
-	for _, o := range RoleOptions(ContextItemShare) {
-		if o.Role == r {
-			return true
-		}
-	}
-	return false
+	return ContextItemShare.Offers(r) || ContextDriveMember.Offers(r)
 }
 
 // ParseRole parses a built-in role name.

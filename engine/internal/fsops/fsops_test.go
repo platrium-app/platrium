@@ -110,16 +110,24 @@ func (e *env) share(t *testing.T, w world, itemID string, who authz.Principal, r
 	e.shareOpts(t, w, itemID, who, role, false)
 }
 
+// shareOpts gives who a role on an item by writing the grant directly. The
+// enforcement tests are about what each role may do, so they can use any role
+// anywhere; the rules about which roles an item offers are tested in authz.
 func (e *env) shareOpts(t *testing.T, w world, itemID string, who authz.Principal, role authz.Role, noDownload bool) *authz.Grant {
 	t.Helper()
-	g, err := e.az.Grant(context.Background(), w.p, authz.GrantInput{
-		ItemID:     itemID,
-		Subject:    authz.Subject{Type: authz.SubjectUser, ID: who.UserID},
-		Role:       role,
-		NoDownload: noDownload,
-	})
+	ctx := context.Background()
+	item, err := e.db.DriveItem.Get(ctx, itemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps, err := authz.GrantCaps(role, noDownload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := e.db.Grant.Create().SetTenantID(item.TenantID).SetDriveID(item.DriveID).SetResourceID(itemID).
+		SetSubjectType("USER").SetSubjectID(who.UserID).SetRole(string(role)).SetCaps(int64(caps)).Save(ctx)
 	if err != nil {
 		t.Fatalf("share %s as %s: %v", itemID, role, err)
 	}
-	return g
+	return &authz.Grant{ID: g.ID, ItemID: itemID, Role: role, Caps: caps}
 }

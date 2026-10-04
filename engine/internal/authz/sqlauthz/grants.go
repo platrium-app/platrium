@@ -84,6 +84,9 @@ func (a *Authorizer) Grant(ctx context.Context, actor authz.Principal, in authz.
 			}
 			return err
 		}
+		if err := a.validateRole(ctx, tx, item, in.Role); err != nil {
+			return err
+		}
 		if err := a.validateSubject(ctx, tx, actor.TenantID, in.Subject); err != nil {
 			return err
 		}
@@ -94,6 +97,35 @@ func (a *Authorizer) Grant(ctx context.Context, actor authz.Principal, in authz.
 		return nil, err
 	}
 	return grantFromEnt(result), nil
+}
+
+// roleContext says which roles an item can be shared with: a shared drive's
+// root takes members at every level, and anything else is shared as a Viewer
+// or an Editor.
+func roleContext(ctx context.Context, tx *ent.Tx, item *ent.DriveItem) (authz.RoleContext, error) {
+	if item.ParentID == nil {
+		d, err := tx.Drive.Get(ctx, item.DriveID)
+		if err != nil {
+			return 0, err
+		}
+		if d.Type == drive.TypeSHARED {
+			return authz.ContextDriveMember, nil
+		}
+	}
+	return authz.ContextItemShare, nil
+}
+
+// validateRole refuses a role the item does not offer, such as Drive Admin on
+// a single file.
+func (a *Authorizer) validateRole(ctx context.Context, tx *ent.Tx, item *ent.DriveItem, role authz.Role) error {
+	rc, err := roleContext(ctx, tx, item)
+	if err != nil {
+		return err
+	}
+	if !rc.Offers(role) {
+		return fmt.Errorf("%w: role %q is not available for this item", authz.ErrInvalid, role)
+	}
+	return nil
 }
 
 // validateSubject checks the subject exists in the actor's tenant. Grants never

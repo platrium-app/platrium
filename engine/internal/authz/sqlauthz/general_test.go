@@ -49,11 +49,11 @@ func TestGeneralAccessLevels(t *testing.T) {
 	}
 
 	// Public replaces the tenant grant instead of adding to it.
-	e.setGeneral(t, s.pa, s.docs, authz.AccessPublic, authz.RoleCommenter)
+	e.setGeneral(t, s.pa, s.docs, authz.AccessPublic, authz.RoleViewer)
 	if got := e.generalOf(t, s.pa, s.docs); got != authz.AccessPublic {
 		t.Fatalf("level = %s", got)
 	}
-	if got := e.caps(t, authz.Anonymous(), s.spec); !got.Has(authz.CapComment) {
+	if got := e.caps(t, authz.Anonymous(), s.spec); !got.Has(authz.CapView) || got.Has(authz.CapEdit) {
 		t.Errorf("anonymous caps = %s", got)
 	}
 	grants, _ := e.az.ListGrants(context.Background(), s.pa, s.docs)
@@ -86,14 +86,13 @@ func TestGeneralAccessRoles(t *testing.T) {
 		ok    bool
 	}{
 		{authz.AccessTenant, authz.RoleViewer, true},
-		{authz.AccessTenant, authz.RoleCommenter, true},
-		{authz.AccessTenant, authz.RoleRestrictedEditor, true},
-		{authz.AccessTenant, authz.RoleFullEditor, true},
-		{authz.AccessTenant, authz.RoleDriveAdmin, false}, // managing access is never general
+		{authz.AccessTenant, authz.RoleFullEditor, true}, // "Editor"
+		{authz.AccessTenant, authz.RoleCommenter, false},
+		{authz.AccessTenant, authz.RoleRestrictedEditor, false},
+		{authz.AccessTenant, authz.RoleDriveAdmin, false}, // administering is never general
 		{authz.AccessPublic, authz.RoleViewer, true},
-		{authz.AccessPublic, authz.RoleCommenter, true},
-		{authz.AccessPublic, authz.RoleRestrictedEditor, false}, // anonymous visitors can never write
-		{authz.AccessPublic, authz.RoleFullEditor, false},
+		{authz.AccessPublic, authz.RoleCommenter, false},
+		{authz.AccessPublic, authz.RoleFullEditor, false}, // anonymous visitors can never write
 		{authz.AccessPublic, authz.RoleDriveAdmin, false},
 		{authz.AccessPublic, authz.RoleOwner, false},
 		{authz.AccessPublic, "", false},

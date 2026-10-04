@@ -4,6 +4,8 @@
 #
 #   subjectType: USER | GROUP | TENANT | PUBLIC
 #   role:        VIEWER | COMMENTER | RESTRICTED_EDITOR | FULL_EDITOR | DRIVE_ADMIN | CUSTOM
+#                A file or folder is shared as VIEWER or FULL_EDITOR (shown as "Editor");
+#                a shared drive's members can hold any of the five. Ask shareRoles(itemId).
 #   level:       RESTRICTED | TENANT | PUBLIC
 #   capability:  LIST | VIEW | DOWNLOAD | COMMENT | CREATE | EDIT | DELETE | MOVE |
 #                TRASH | MOVE_OUT | SHARE | MANAGE | DELETE_DRIVE
@@ -93,7 +95,7 @@ input GeneralAccessInput {
 }
 
 extend type Query {
-  "The roles to offer when sharing an item. A shared drive's root gets the drive-member wording."
+  "The roles to offer when sharing an item: Viewer and Editor for a file or folder, the full ladder for a shared drive's root."
   shareRoles(itemId: ID!): [RoleOption!]!
   "Find people and groups in the organization by name or email, for the people picker."
   searchDirectory(query: String!, first: Int, excludeAccessToItemId: ID): [DirectorySubject!]!

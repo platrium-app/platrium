@@ -53,9 +53,9 @@ func TestSharedWithMeMergesAndFilters(t *testing.T) {
 
 	// The same item shared two ways appears once, with the union.
 	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
-	e.share(t, s.pa, s.docs, groupSubject(team), authz.RoleRestrictedEditor)
+	e.share(t, s.pa, s.docs, groupSubject(team), authz.RoleFullEditor)
 	got, _ := e.az.SharedWithMe(ctx, pb, 50, "")
-	if len(got) != 1 || !got[0].Caps.Has(authz.CapCreate) || got[0].Role != authz.RoleRestrictedEditor {
+	if len(got) != 1 || !got[0].Caps.Has(authz.CapCreate) || got[0].Role != authz.RoleFullEditor {
 		t.Fatalf("merged entry = %+v", got)
 	}
 

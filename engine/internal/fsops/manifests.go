@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ManifestPageSize  = 1000
+	ManifestPageSize = 1000
 )
 
 // ManifestRepo manages the storage of file chunk hashes in the KV Store.

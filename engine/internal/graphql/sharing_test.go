@@ -174,7 +174,7 @@ func TestShareAndInspectAccess(t *testing.T) {
 
 func TestSharedWithMe(t *testing.T) {
 	h := newHarness(t)
-	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "DRIVE_ADMIN"}); err != nil {
+	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "FULL_EDITOR"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,7 +186,7 @@ func TestSharedWithMe(t *testing.T) {
 		t.Fatalf("shared with bob: %+v", conn)
 	}
 	e := conn.Edges[0]
-	if e.Node.Item.GetID() != h.docs || e.Node.Role != "DRIVE_ADMIN" || !slices.Contains(e.Node.Capabilities, "SHARE") || e.Cursor != h.docs {
+	if e.Node.Item.GetID() != h.docs || e.Node.Role != "FULL_EDITOR" || !slices.Contains(e.Node.Capabilities, "MOVE") || slices.Contains(e.Node.Capabilities, "SHARE") || e.Cursor != h.docs {
 		t.Fatalf("unexpected edge: %+v", e.Node)
 	}
 
@@ -263,7 +263,7 @@ func TestGeneralAccessAndAnonymousVisitors(t *testing.T) {
 func TestOrganizationWideAccessAndExpiry(t *testing.T) {
 	h := newHarness(t)
 	soon := time.Now().Add(time.Hour)
-	got, err := h.m().SetGeneralAccess(h.as(h.alice), GeneralAccessInput{ItemID: h.docs, Level: "TENANT", Role: ptr("COMMENTER"), ExpiresAt: &soon})
+	got, err := h.m().SetGeneralAccess(h.as(h.alice), GeneralAccessInput{ItemID: h.docs, Level: "TENANT", Role: ptr("FULL_EDITOR"), ExpiresAt: &soon})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestOrganizationWideAccessAndExpiry(t *testing.T) {
 	}
 
 	access, _ := h.q().ItemAccess(h.as(h.alice), h.docs)
-	if access.GeneralAccess.Role == nil || *access.GeneralAccess.Role != "COMMENTER" {
+	if access.GeneralAccess.Role == nil || *access.GeneralAccess.Role != "FULL_EDITOR" {
 		t.Fatalf("access = %+v", access.GeneralAccess)
 	}
 }
@@ -299,6 +299,14 @@ func TestSharingValidationAndErrorCodes(t *testing.T) {
 		}, "BAD_REQUEST"},
 		{"owner cannot be granted", func() error {
 			_, err := h.m().ShareItem(ctx, ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "OWNER"})
+			return err
+		}, "BAD_REQUEST"},
+		{"drive admin on a file", func() error {
+			_, err := h.m().ShareItem(ctx, ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "DRIVE_ADMIN"})
+			return err
+		}, "BAD_REQUEST"},
+		{"commenter on a file", func() error {
+			_, err := h.m().ShareItem(ctx, ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "COMMENTER"})
 			return err
 		}, "BAD_REQUEST"},
 		{"unknown subject type", func() error {
@@ -347,11 +355,11 @@ func TestSharingWithGroupsAndTheOrganization(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	grant, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "GROUP", SubjectID: groupID, Role: "RESTRICTED_EDITOR"})
+	grant, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "GROUP", SubjectID: groupID, Role: "FULL_EDITOR"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if grant.SubjectName != "design" || grant.Role != "RESTRICTED_EDITOR" {
+	if grant.SubjectName != "design" || grant.Role != "FULL_EDITOR" {
 		t.Fatalf("grant = %+v", grant)
 	}
 	if _, err := h.m().CreateFolder(h.as(h.carol), h.docs, "from-carol"); err != nil {
@@ -421,8 +429,8 @@ func TestShareRolesDependOnTheItem(t *testing.T) {
 	for _, r := range roles {
 		labels = append(labels, r.Label)
 	}
-	want := []string{"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Admin"}
-	if !slices.Equal(labels, want) || roles[3].Role != "FULL_EDITOR" || !slices.Contains(roles[3].Capabilities, "MOVE") {
+	want := []string{"Viewer", "Editor"}
+	if !slices.Equal(labels, want) || roles[1].Role != "FULL_EDITOR" || !slices.Contains(roles[1].Capabilities, "MOVE") {
 		t.Fatalf("item roles = %v", labels)
 	}
 
@@ -432,7 +440,7 @@ func TestShareRolesDependOnTheItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	roles, err = h.q().ShareRoles(h.as(h.admin), d.ID)
-	if err != nil || roles[len(roles)-1].Label != "Drive Admin" || roles[len(roles)-1].Role != "DRIVE_ADMIN" {
+	if err != nil || len(roles) != 5 || roles[4].Label != "Drive Admin" || roles[4].Role != "DRIVE_ADMIN" || roles[2].Label != "Restricted Editor" {
 		t.Fatalf("drive roles = %+v %v", roles, err)
 	}
 

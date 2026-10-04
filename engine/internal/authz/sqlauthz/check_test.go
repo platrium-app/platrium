@@ -137,7 +137,7 @@ func TestGroupGrantReachesNestedMembers(t *testing.T) {
 	if err := e.az.AddMember(ctx, s.tn.id, backend, authz.MemberUser, s.carol); err != nil {
 		t.Fatal(err)
 	}
-	e.share(t, s.pa, s.docs, groupSubject(eng), authz.RoleRestrictedEditor)
+	e.share(t, s.pa, s.docs, groupSubject(eng), authz.RoleFullEditor)
 
 	pc := e.principal(t, s.tn, s.carol)
 	if got := e.caps(t, pc, s.spec); !got.Has(authz.CapCreate) {
@@ -246,8 +246,8 @@ func TestTenantIsolation(t *testing.T) {
 	evil := e.tenant(t, "evil")
 	eve := e.principal(t, evil, e.user(t, evil, "eve"))
 
-	e.share(t, s.pa, s.docs, tenantSubject(s.tn), authz.RoleDriveAdmin)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleDriveAdmin)
+	e.share(t, s.pa, s.docs, tenantSubject(s.tn), authz.RoleFullEditor)
+	e.seedGrant(t, s.docs, userSubject(s.bob), authz.RoleDriveAdmin) // the strongest grant there is
 
 	ids := []string{s.drive, s.docs, s.spec, s.private}
 	got, err := e.az.CapsMany(context.Background(), eve, ids)

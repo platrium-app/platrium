@@ -93,9 +93,9 @@ const (
 )
 
 // GeneralAccessInput sets an item's general access. Role is required unless
-// the level is AccessRestricted. Organization-wide access may use Viewer,
-// Commenter, Restricted Editor or Full Editor; public access may use Viewer or
-// Commenter, because anonymous visitors can never write.
+// the level is AccessRestricted. Organization-wide access may use Viewer or
+// Editor (the Full Editor role); public access may only use Viewer, because
+// anonymous visitors can never write.
 type GeneralAccessInput struct {
 	ItemID     string
 	Level      GeneralAccessLevel

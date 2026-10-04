@@ -156,3 +156,36 @@ func (e *env) groupB(b testing.TB, tn tenant, name string) string  { return e.gr
 func (e *env) folderB(b testing.TB, tn tenant, driveID, parentID, name string) string {
 	return e.folder(b, tn, driveID, parentID, name)
 }
+
+// seedGrant writes a grant straight to the database, bypassing the rules about
+// which roles an item may be shared with. Tests use it to put someone in a
+// position (say, holding SHARE on one folder) that the public API only reaches
+// through a shared drive.
+func (e *env) seedGrant(t testing.TB, itemID string, s authz.Subject, role authz.Role) {
+	t.Helper()
+	ctx := context.Background()
+	item, err := e.db.DriveItem.Get(ctx, itemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps, _ := role.Caps()
+	if err := e.db.Grant.Create().SetTenantID(item.TenantID).SetDriveID(item.DriveID).SetResourceID(itemID).
+		SetSubjectType(string(s.Type)).SetSubjectID(s.ID).SetRole(string(role)).SetCaps(int64(caps)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sharedDrive creates a shared drive and its root, and makes admin its Drive Admin.
+func (e *env) sharedDrive(t testing.TB, tn tenant, name, adminUserID string) string {
+	t.Helper()
+	ctx := context.Background()
+	d, err := e.db.Drive.Create().SetTenantID(tn.id).SetName(name).SetType("SHARED").SetSharedNameKey(name).Save(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.DriveItem.Create().SetID(d.ID).SetTenantID(tn.id).SetDriveID(d.ID).SetKind("FOLDER").SetName(name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	e.seedGrant(t, d.ID, userSubject(adminUserID), authz.RoleDriveAdmin)
+	return d.ID
+}

@@ -14,8 +14,8 @@ import (
 
 // generalRoles are the roles general access may carry.
 var generalRoles = map[authz.GeneralAccessLevel][]authz.Role{
-	authz.AccessTenant: {authz.RoleViewer, authz.RoleCommenter, authz.RoleRestrictedEditor, authz.RoleFullEditor},
-	authz.AccessPublic: {authz.RoleViewer, authz.RoleCommenter},
+	authz.AccessTenant: {authz.RoleViewer, authz.RoleFullEditor}, // Viewer or Editor
+	authz.AccessPublic: {authz.RoleViewer},
 }
 
 func roleAllowed(level authz.GeneralAccessLevel, role authz.Role) bool {

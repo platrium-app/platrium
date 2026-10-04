@@ -164,3 +164,22 @@ func (r *Resolver) ownerSubject(ctx context.Context, tenantID, ownerUserID strin
 	}
 	return &DirectorySubject{Type: string(authz.SubjectUser), ID: u.ID, Name: name, Email: &email}, nil
 }
+
+// creatorGroups lists the groups allowed to create shared drives, with names.
+func (r *Resolver) creatorGroups(ctx context.Context, p authz.Principal) ([]*DirectorySubject, error) {
+	ids, err := r.DriveOrch.SharedDriveCreators(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	groups, err := r.GroupStore.GetByIDs(ctx, p.TenantID, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*DirectorySubject, 0, len(ids))
+	for _, id := range ids {
+		if g, ok := groups[id]; ok {
+			out = append(out, &DirectorySubject{Type: string(authz.SubjectGroup), ID: g.ID, Name: g.Name})
+		}
+	}
+	return out, nil
+}

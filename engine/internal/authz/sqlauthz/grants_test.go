@@ -33,7 +33,7 @@ func TestGrantRequiresShare(t *testing.T) {
 func TestManagersCanShareFurther(t *testing.T) {
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleDriveAdmin)
+	e.seedGrant(t, s.docs, userSubject(s.bob), authz.RoleDriveAdmin) // someone holding SHARE
 
 	g := e.share(t, s.pb, s.docs, userSubject(s.carol), authz.RoleFullEditor)
 	if g.CreatedBy != s.bob || g.Role != authz.RoleFullEditor {
@@ -181,8 +181,8 @@ func TestSetInheritance(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)   // can share, cannot manage
-	e.share(t, s.pa, s.docs, userSubject(s.carol), authz.RoleDriveAdmin) // can manage
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor) // can share, cannot manage
+	e.seedGrant(t, s.docs, userSubject(s.carol), authz.RoleDriveAdmin) // can manage
 
 	if err := e.az.SetInheritance(ctx, s.pb, s.specs, false); !errors.Is(err, authz.ErrForbidden) {
 		t.Errorf("an editor cannot restrict: %v", err)
@@ -284,5 +284,59 @@ func TestGrantInitial(t *testing.T) {
 		if err := call(); err == nil {
 			t.Errorf("%s must be refused", name)
 		}
+	}
+}
+
+// Which roles an item offers depends on what it is: a file or folder is shared
+// as a Viewer or an Editor, while a shared drive's members get the full ladder.
+func TestRolesDependOnWhatIsShared(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	shared := e.sharedDrive(t, s.tn, "Finance", s.carol)
+	inShared := e.folder(t, s.tn, shared, shared, "reports")
+	carol := e.principal(t, s.tn, s.carol) // a Drive Admin there
+	bob := userSubject(s.bob)
+
+	try := func(actor authz.Principal, item string, role authz.Role) error {
+		_, err := e.az.Grant(ctx, actor, authz.GrantInput{ItemID: item, Subject: bob, Role: role})
+		return err
+	}
+
+	// A file or folder: Viewer and Editor only.
+	for _, c := range []struct {
+		role authz.Role
+		ok   bool
+	}{
+		{authz.RoleViewer, true},
+		{authz.RoleFullEditor, true},
+		{authz.RoleCommenter, false},
+		{authz.RoleRestrictedEditor, false},
+		{authz.RoleDriveAdmin, false},
+	} {
+		for name, item := range map[string]string{"folder": s.docs, "file": s.spec, "private drive root": s.drive} {
+			err := try(s.pa, item, c.role)
+			if (err == nil) != c.ok || (err != nil && !errors.Is(err, authz.ErrInvalid)) {
+				t.Errorf("%s as %s: %v, want ok = %v", name, c.role, err, c.ok)
+			}
+		}
+	}
+
+	// A shared drive's root: the whole ladder.
+	for _, role := range []authz.Role{authz.RoleViewer, authz.RoleCommenter, authz.RoleRestrictedEditor, authz.RoleFullEditor, authz.RoleDriveAdmin} {
+		if err := try(carol, shared, role); err != nil {
+			t.Errorf("shared drive root as %s: %v", role, err)
+		}
+	}
+	if err := try(carol, shared, authz.RoleOwner); !errors.Is(err, authz.ErrInvalid) {
+		t.Errorf("owner is never grantable: %v", err)
+	}
+
+	// Anything inside a shared drive is an ordinary item again.
+	if err := try(carol, inShared, authz.RoleDriveAdmin); !errors.Is(err, authz.ErrInvalid) {
+		t.Errorf("a folder inside a shared drive offers Viewer and Editor: %v", err)
+	}
+	if err := try(carol, inShared, authz.RoleFullEditor); err != nil {
+		t.Errorf("editor on a folder inside a shared drive: %v", err)
 	}
 }

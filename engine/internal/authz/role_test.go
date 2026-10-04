@@ -50,23 +50,59 @@ func TestGrantable(t *testing.T) {
 }
 
 func TestRoleOptions(t *testing.T) {
-	want := []Role{RoleViewer, RoleCommenter, RoleRestrictedEditor, RoleFullEditor, RoleDriveAdmin}
-	labels := map[RoleContext][]string{
-		ContextItemShare:   {"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Admin"},
-		ContextDriveMember: {"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Drive Admin"},
+	// A single file or folder is shared as a Viewer or an Editor. Administering
+	// is a shared-drive notion, so it is not offered on items.
+	items := RoleOptions(ContextItemShare)
+	if len(items) != 2 || items[0].Role != RoleViewer || items[0].Label != "Viewer" ||
+		items[1].Role != RoleFullEditor || items[1].Label != "Editor" {
+		t.Fatalf("item roles = %+v", items)
 	}
-	for ctx, wantLabels := range labels {
-		got := RoleOptions(ctx)
-		if len(got) != len(want) {
-			t.Fatalf("context %d: %d options", ctx, len(got))
+	// A shared drive's members get the whole ladder.
+	want := []Role{RoleViewer, RoleCommenter, RoleRestrictedEditor, RoleFullEditor, RoleDriveAdmin}
+	labels := []string{"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Drive Admin"}
+	drive := RoleOptions(ContextDriveMember)
+	if len(drive) != len(want) {
+		t.Fatalf("drive roles = %+v", drive)
+	}
+	for i, o := range drive {
+		if o.Role != want[i] || o.Label != labels[i] {
+			t.Errorf("drive option %d = %+v", i, o)
 		}
-		for i, o := range got {
-			if o.Role != want[i] || o.Label != wantLabels[i] || o.Description == "" {
-				t.Errorf("context %d option %d = %+v", ctx, i, o)
-			}
-			if c, _ := o.Role.Caps(); o.Caps != c {
-				t.Errorf("%s: option capabilities do not match the role", o.Role)
-			}
+	}
+
+	for _, o := range append(items, drive...) {
+		if o.Description == "" {
+			t.Errorf("%s has no description", o.Role)
+		}
+		if c, _ := o.Role.Caps(); o.Caps != c {
+			t.Errorf("%s: option capabilities do not match the role", o.Role)
+		}
+	}
+	if RoleOptions(RoleContext(99)) != nil {
+		t.Error("an unknown context offers nothing")
+	}
+}
+
+func TestOffers(t *testing.T) {
+	cases := []struct {
+		ctx  RoleContext
+		role Role
+		want bool
+	}{
+		{ContextItemShare, RoleViewer, true},
+		{ContextItemShare, RoleFullEditor, true},
+		{ContextItemShare, RoleCommenter, false},
+		{ContextItemShare, RoleRestrictedEditor, false},
+		{ContextItemShare, RoleDriveAdmin, false},
+		{ContextItemShare, RoleOwner, false},
+		{ContextDriveMember, RoleDriveAdmin, true},
+		{ContextDriveMember, RoleRestrictedEditor, true},
+		{ContextDriveMember, RoleOwner, false},
+		{ContextDriveMember, RoleCustom, false},
+	}
+	for _, c := range cases {
+		if got := c.ctx.Offers(c.role); got != c.want {
+			t.Errorf("context %d offers %s = %v, want %v", c.ctx, c.role, got, c.want)
 		}
 	}
 }

@@ -31,7 +31,6 @@ type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 type ResolverRoot interface {
 	File() FileResolver
 	Folder() FolderResolver
-	ItemAccess() ItemAccessResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
 	Subscription() SubscriptionResolver
@@ -225,9 +224,6 @@ type FileResolver interface {
 type FolderResolver interface {
 	Path(ctx context.Context, obj *graphql1.Folder) ([]*graphql1.Folder, error)
 }
-type ItemAccessResolver interface {
-	Owner(ctx context.Context, obj *graphql1.ItemAccess) (*DirectorySubject, error)
-}
 type MutationResolver interface {
 	CreateFolder(ctx context.Context, parentID string, name string) (*graphql1.Folder, error)
 	RenameItem(ctx context.Context, id string, newName string) (graphql1.DriveItem, error)
@@ -235,7 +231,7 @@ type MutationResolver interface {
 	CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*graphql1.File, error)
 	DeleteItem(ctx context.Context, id string) (bool, error)
 	CreateSharedDrive(ctx context.Context, name string) (*graphql1.Folder, error)
-	SetSharedDriveCreators(ctx context.Context, groupIds []string) ([]*DirectorySubject, error)
+	SetSharedDriveCreators(ctx context.Context, groupIds []string) ([]*graphql1.DirectorySubject, error)
 	ShareItem(ctx context.Context, input graphql1.ShareInput) (*graphql1.AccessGrant, error)
 	RevokeAccess(ctx context.Context, grantID string) (bool, error)
 	SetGeneralAccess(ctx context.Context, input graphql1.GeneralAccessInput) (*graphql1.GeneralAccess, error)
@@ -246,11 +242,11 @@ type QueryResolver interface {
 	FolderContents(ctx context.Context, folderID string, first *int, after *string) (*graphql1.DriveItemConnection, error)
 	Drives(ctx context.Context) ([]*graphql1.Folder, error)
 	CanCreateSharedDrive(ctx context.Context) (bool, error)
-	SharedDriveCreators(ctx context.Context) ([]*DirectorySubject, error)
+	SharedDriveCreators(ctx context.Context) ([]*graphql1.DirectorySubject, error)
 	GetChanges(ctx context.Context, folderID string, since time.Time) ([]*graphql1.DriveItemEvent, error)
 	ServerInfo(ctx context.Context) (*graphql1.ServerInfo, error)
-	ShareRoles(ctx context.Context, itemID string) ([]*RoleOption, error)
-	SearchDirectory(ctx context.Context, query string, first *int, excludeAccessToItemID *string) ([]*DirectorySubject, error)
+	ShareRoles(ctx context.Context, itemID string) ([]*graphql1.RoleOption, error)
+	SearchDirectory(ctx context.Context, query string, first *int, excludeAccessToItemID *string) ([]*graphql1.DirectorySubject, error)
 	ItemAccess(ctx context.Context, itemID string) (*graphql1.ItemAccess, error)
 	SharedWithMe(ctx context.Context, first *int, after *string) (*graphql1.SharedItemConnection, error)
 	TenantAuthConfig(ctx context.Context) (*graphql1.TenantAuthConfig, error)
@@ -2462,7 +2458,7 @@ func (ec *executionContext) fieldContext_AccessGrant_createdAt(_ context.Context
 	return graphql.NewScalarFieldContext("AccessGrant", field, false, false, errors.New("field of type DateTime does not have child fields"))
 }
 
-func (ec *executionContext) _DirectorySubject_type(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+func (ec *executionContext) _DirectorySubject_type(ctx context.Context, field graphql.CollectedField, obj *graphql1.DirectorySubject) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2485,7 +2481,7 @@ func (ec *executionContext) fieldContext_DirectorySubject_type(_ context.Context
 	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _DirectorySubject_id(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+func (ec *executionContext) _DirectorySubject_id(ctx context.Context, field graphql.CollectedField, obj *graphql1.DirectorySubject) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2508,7 +2504,7 @@ func (ec *executionContext) fieldContext_DirectorySubject_id(_ context.Context, 
 	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
-func (ec *executionContext) _DirectorySubject_name(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+func (ec *executionContext) _DirectorySubject_name(ctx context.Context, field graphql.CollectedField, obj *graphql1.DirectorySubject) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2531,7 +2527,7 @@ func (ec *executionContext) fieldContext_DirectorySubject_name(_ context.Context
 	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _DirectorySubject_email(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+func (ec *executionContext) _DirectorySubject_email(ctx context.Context, field graphql.CollectedField, obj *graphql1.DirectorySubject) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3647,11 +3643,11 @@ func (ec *executionContext) _ItemAccess_owner(ctx context.Context, field graphql
 			return ec.fieldContext_ItemAccess_owner(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return ec.Resolvers.ItemAccess().Owner(ctx, obj)
+			return obj.Owner, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *DirectorySubject) graphql.Marshaler {
-			return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubject(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx, selections, v)
 		},
 		true,
 		true,
@@ -3661,8 +3657,8 @@ func (ec *executionContext) fieldContext_ItemAccess_owner(_ context.Context, fie
 	fc = &graphql.FieldContext{
 		Object:     "ItemAccess",
 		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_DirectorySubject(ctx, field)
 		},
@@ -4034,8 +4030,8 @@ func (ec *executionContext) _Mutation_setSharedDriveCreators(ctx context.Context
 			return ec.Resolvers.Mutation().SetSharedDriveCreators(ctx, fc.Args["groupIds"].([]string))
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
-			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*graphql1.DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
 		},
 		true,
 		true,
@@ -4442,8 +4438,8 @@ func (ec *executionContext) _Query_sharedDriveCreators(ctx context.Context, fiel
 			return ec.Resolvers.Query().SharedDriveCreators(ctx)
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
-			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*graphql1.DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
 		},
 		true,
 		true,
@@ -4551,8 +4547,8 @@ func (ec *executionContext) _Query_shareRoles(ctx context.Context, field graphql
 			return ec.Resolvers.Query().ShareRoles(ctx, fc.Args["itemId"].(string))
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v []*RoleOption) graphql.Marshaler {
-			return ec.marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋeeᚋgraphqlᚐRoleOptionᚄ(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*graphql1.RoleOption) graphql.Marshaler {
+			return ec.marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐRoleOptionᚄ(ctx, selections, v)
 		},
 		true,
 		true,
@@ -4595,8 +4591,8 @@ func (ec *executionContext) _Query_searchDirectory(ctx context.Context, field gr
 			return ec.Resolvers.Query().SearchDirectory(ctx, fc.Args["query"].(string), fc.Args["first"].(*int), fc.Args["excludeAccessToItemId"].(*string))
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
-			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []*graphql1.DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
 		},
 		true,
 		true,
@@ -4866,7 +4862,7 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _RoleOption_role(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+func (ec *executionContext) _RoleOption_role(ctx context.Context, field graphql.CollectedField, obj *graphql1.RoleOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -4889,7 +4885,7 @@ func (ec *executionContext) fieldContext_RoleOption_role(_ context.Context, fiel
 	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _RoleOption_label(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+func (ec *executionContext) _RoleOption_label(ctx context.Context, field graphql.CollectedField, obj *graphql1.RoleOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -4912,7 +4908,7 @@ func (ec *executionContext) fieldContext_RoleOption_label(_ context.Context, fie
 	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _RoleOption_description(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+func (ec *executionContext) _RoleOption_description(ctx context.Context, field graphql.CollectedField, obj *graphql1.RoleOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -4935,7 +4931,7 @@ func (ec *executionContext) fieldContext_RoleOption_description(_ context.Contex
 	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _RoleOption_capabilities(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+func (ec *executionContext) _RoleOption_capabilities(ctx context.Context, field graphql.CollectedField, obj *graphql1.RoleOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -6677,7 +6673,7 @@ func (ec *executionContext) _AccessGrant(ctx context.Context, sel ast.SelectionS
 
 var directorySubjectImplementors = []string{"DirectorySubject"}
 
-func (ec *executionContext) _DirectorySubject(ctx context.Context, sel ast.SelectionSet, obj *DirectorySubject) graphql.Marshaler {
+func (ec *executionContext) _DirectorySubject(ctx context.Context, sel ast.SelectionSet, obj *graphql1.DirectorySubject) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, directorySubjectImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -7321,60 +7317,27 @@ func (ec *executionContext) _ItemAccess(ctx context.Context, sel ast.SelectionSe
 		case "itemId":
 			out.Values[i] = ec._ItemAccess_itemId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "owner":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._ItemAccess_owner(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
+			out.Values[i] = ec._ItemAccess_owner(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
 			}
-
-			if field.IsDeferred() {
-				deferredFieldSet.AddField(field)
-				fieldIndex := len(deferredFieldSet.Values) - 1
-				deferredFieldSet.Concurrently(fieldIndex, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, deferredFieldSet)
-				})
-
-				for _, deferrable := range field.Deferrables {
-					view, ok := deferLabelToView[deferrable.Label]
-					if !ok {
-						view = deferredFieldSet.NewView()
-						deferLabelToView[deferrable.Label] = view
-					}
-					view.AddIndices(fieldIndex)
-				}
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "inheritsPermissions":
 			out.Values[i] = ec._ItemAccess_inheritsPermissions(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "generalAccess":
 			out.Values[i] = ec._ItemAccess_generalAccess(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		case "grants":
 			out.Values[i] = ec._ItemAccess_grants(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+				out.Invalids++
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -7901,7 +7864,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 
 var roleOptionImplementors = []string{"RoleOption"}
 
-func (ec *executionContext) _RoleOption(ctx context.Context, sel ast.SelectionSet, obj *RoleOption) graphql.Marshaler {
+func (ec *executionContext) _RoleOption(ctx context.Context, sel ast.SelectionSet, obj *graphql1.RoleOption) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, roleOptionImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -8662,11 +8625,11 @@ func (ec *executionContext) marshalNDateTime2timeᚐTime(ctx context.Context, se
 	return res
 }
 
-func (ec *executionContext) marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubjectᚄ(ctx context.Context, sel ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
+func (ec *executionContext) marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql1.DirectorySubject) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
-		return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubject(ctx, sel, v[i])
+		return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -8678,7 +8641,7 @@ func (ec *executionContext) marshalNDirectorySubject2ᚕᚖplatriumᚋinternal�
 	return ret
 }
 
-func (ec *executionContext) marshalNDirectorySubject2ᚖplatriumᚋinternalᚋeeᚋgraphqlᚐDirectorySubject(ctx context.Context, sel ast.SelectionSet, v *DirectorySubject) graphql.Marshaler {
+func (ec *executionContext) marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx context.Context, sel ast.SelectionSet, v *graphql1.DirectorySubject) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8974,11 +8937,11 @@ func (ec *executionContext) marshalNPageInfo2ᚖplatriumᚋinternalᚋgraphqlᚐ
 	return ec._PageInfo(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋeeᚋgraphqlᚐRoleOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*RoleOption) graphql.Marshaler {
+func (ec *executionContext) marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐRoleOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql1.RoleOption) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
-		return ec.marshalNRoleOption2ᚖplatriumᚋinternalᚋeeᚋgraphqlᚐRoleOption(ctx, sel, v[i])
+		return ec.marshalNRoleOption2ᚖplatriumᚋinternalᚋgraphqlᚐRoleOption(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -8990,7 +8953,7 @@ func (ec *executionContext) marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋeeᚋ
 	return ret
 }
 
-func (ec *executionContext) marshalNRoleOption2ᚖplatriumᚋinternalᚋeeᚋgraphqlᚐRoleOption(ctx context.Context, sel ast.SelectionSet, v *RoleOption) graphql.Marshaler {
+func (ec *executionContext) marshalNRoleOption2ᚖplatriumᚋinternalᚋgraphqlᚐRoleOption(ctx context.Context, sel ast.SelectionSet, v *graphql1.RoleOption) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")

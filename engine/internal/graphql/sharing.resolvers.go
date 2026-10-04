@@ -7,11 +7,10 @@ package graphql
 
 import (
 	"context"
-	"slices"
-	"strings"
-
 	"platrium/internal/auth/actor"
 	"platrium/internal/authz"
+	"slices"
+	"strings"
 )
 
 // ShareItem is the resolver for the shareItem field.
