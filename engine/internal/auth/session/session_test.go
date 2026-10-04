@@ -41,7 +41,7 @@ func TestMiddleware_DevFallback(t *testing.T) {
 	}
 
 	var capturedSession *PlatriumSession
-	handler := sm.LoadAndSave(Middleware(sm, fallback)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := sm.LoadAndSave(Middleware(sm)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := FromContext(r.Context())
 		if ok {
 			capturedSession = sess
@@ -68,11 +68,6 @@ func TestMiddleware_ActiveSession(t *testing.T) {
 		Email:    "user@custom.com",
 	}
 
-	fallback := &PlatriumSession{
-		UserID:   "fallback-user",
-		TenantID: "fallback-tenant",
-	}
-
 	// First handler populates the session
 	loginHandler := sm.LoadAndSave(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		PutSession(sm, r, activeSess)
@@ -90,7 +85,7 @@ func TestMiddleware_ActiveSession(t *testing.T) {
 	}
 
 	var captured *PlatriumSession
-	readHandler := sm.LoadAndSave(Middleware(sm, fallback)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	readHandler := sm.LoadAndSave(Middleware(sm)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := FromContext(r.Context())
 		if ok {
 			captured = sess

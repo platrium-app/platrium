@@ -1,3 +1,9 @@
+pub mod auth_login_request;
+pub use self::auth_login_request::AuthLoginRequest;
+pub mod auth_login_response;
+pub use self::auth_login_response::AuthLoginResponse;
+pub mod auth_mfa_verify_request;
+pub use self::auth_mfa_verify_request::AuthMfaVerifyRequest;
 pub mod ee_monitoring_health_response;
 pub use self::ee_monitoring_health_response::EeMonitoringHealthResponse;
 pub mod errors_engine_internal;

@@ -8,9 +8,20 @@ package graphql
 import (
 	"context"
 	"fmt"
+
+	"platrium/internal/build"
 )
 
 // ServerInfo is the resolver for the serverInfo field.
 func (r *queryResolver) ServerInfo(ctx context.Context) (*ServerInfo, error) {
-	panic(fmt.Errorf("not implemented: ServerInfo - serverInfo"))
+	tenantCount, err := r.TenantStore.GetTenantCount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count tenants: %w", err)
+	}
+
+	return &ServerInfo{
+		Version:       build.Version,
+		Edition:       build.Edition,
+		IsMultiTenant: tenantCount > 1,
+	}, nil
 }

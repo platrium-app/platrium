@@ -138,7 +138,7 @@ func (m *TenantOrchestrator) ProvisionNewTenant(ctx context.Context, name, alias
 
 		// B. Create the Super Admin User via UserOrchestrator!
 		// It creates the User node, their Personal Drive, and links everything up atomically.
-		user, err := m.userOrchestrator.ProvisionUserTx(ctx, tx, userId, tenantId, idpId, userId, adminEmail, "Admin")
+		user, err := m.userOrchestrator.ProvisionUserTx(ctx, tx, userId, tenantId, idpId, adminEmail, adminEmail, "Admin")
 		if err != nil {
 			return fmt.Errorf("failed to provision super admin user: %w", err)
 		}

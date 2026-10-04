@@ -12,6 +12,10 @@ const EECompanyAliasLogin = import.meta.env.VITE_EDITION === 'EE'
   ? lazy(() => import('../ee/pages/CompanyAliasLogin'))
   : null
 
+const EETenantLogin = import.meta.env.VITE_EDITION === 'EE'
+  ? lazy(() => import('../ee/pages/EETenantLogin'))
+  : null
+
 function AuthLoading() {
   return (
     <AuthLayout>
@@ -35,12 +39,17 @@ export default function LoginRouter() {
   }
 
   // 1. If explicit tenant alias is in URL (/login/:alias), show login form for that tenant
-  if (alias) {
-    return <SingleTenantLogin tenantAlias={alias} />
+  // Only route to the EE tenant login wrapper if it's a multi-tenant build!
+  if (alias && info?.isMultiTenant && EETenantLogin) {
+    return (
+      <Suspense fallback={<AuthLoading />}>
+        <EETenantLogin tenantAlias={alias} />
+      </Suspense>
+    )
   }
 
   // 2. If server has multi-tenancy enabled, prompt for company alias at /login
-  if (info?.isMultiTenant && EECompanyAliasLogin) {
+  if (info?.isMultiTenant && EECompanyAliasLogin && !alias) {
     return (
       <Suspense fallback={<AuthLoading />}>
         <EECompanyAliasLogin />

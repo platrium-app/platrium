@@ -12,10 +12,17 @@ import { FilePreviewView } from "./pages/filepreview/FilePreviewCore"
 
 import LoginView from "./pages/LoginView"
 import { ServerInfoProvider } from "./contexts/ServerInfoContext"
+import { ApolloProvider } from "@apollo/client/react"
+import { client } from "./lib/apollo"
+
+import { AuthProvider } from "./contexts/AuthContext"
+import { RequireAuth } from "./components/auth/RequireAuth"
 
 export function App() {
   return (
-    <ServerInfoProvider>
+    <ApolloProvider client={client}>
+      <ServerInfoProvider>
+      <AuthProvider>
       <UploadProvider>
         <BreadcrumbProvider>
           <BrowserRouter>
@@ -25,7 +32,12 @@ export function App() {
               <Route path="/login/:alias" element={<LoginView />} />
 
               <Route path="/file/:id" element={<FilePreviewView />} />
-              <Route path="/" element={<RootLayout />}>
+              
+              <Route path="/" element={
+                <RequireAuth>
+                  <RootLayout />
+                </RequireAuth>
+              }>
                 <Route index element={<Navigate to="/home" replace />} />
                 <Route path="home" element={<HomeView />} />
                 <Route path="folder/:id" element={<FolderRootView />} />
@@ -48,7 +60,9 @@ export function App() {
           </BrowserRouter>
         </BreadcrumbProvider>
       </UploadProvider>
-    </ServerInfoProvider>
+      </AuthProvider>
+      </ServerInfoProvider>
+    </ApolloProvider>
   )
 }
 

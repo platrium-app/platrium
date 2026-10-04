@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
-EDITION="Enterprise"
+# Changing EDITION will cause breaking changes.
+# All APIs and Internal Build Info use vars from this script.
+
+EDITION="enterprise"
 TAGS=("ee")
 SERVE_MODE=false
 
 for arg in "$@"; do
   case "$arg" in
     --ce|-ce)
-      EDITION="Community"
+      EDITION="community"
       TAGS=()
       ;;
     --serve)

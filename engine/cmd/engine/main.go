@@ -91,13 +91,8 @@ func main() {
 		log.Fatalf("failed to bootstrap native tenant: %v", err)
 	}
 
-	// Setup Session Manager & Dev Fallback
+	// Setup Session Manager
 	sessionManager := session.NewManager()
-	devFallback := &session.PlatriumSession{
-		UserID:   "HQmIajHp02YAOkkN98gJJ",
-		TenantID: "A5fQaTwnROXeCAIuS8Ogl",
-		Email:    "example@platrium.org",
-	}
 
 	// Setup HTTP Routers
 	attachedFsHandler := api.NewAttachedFSHandler(storageManager) // we should give it storageManager isntead.
@@ -106,7 +101,7 @@ func main() {
 	gqlTransport := transports.NewGraphQLTransport()
 	notifBroker := notifications.NewBroker(gqlTransport)
 
-	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager, notifBroker)
+	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager)
 	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
@@ -134,7 +129,7 @@ func main() {
 	// GraphQL Routes
 	router.Route("/graphql", func(r chi.Router) {
 		r.Use(sessionManager.LoadAndSave)
-		r.Use(session.Middleware(sessionManager, devFallback))
+		r.Use(session.Middleware(sessionManager))
 		r.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Header.Get("Upgrade") == "websocket" {
@@ -151,7 +146,7 @@ func main() {
 
 	router.Route("/api", func(r chi.Router) {
 		r.Use(sessionManager.LoadAndSave)
-		r.Use(session.Middleware(sessionManager, devFallback))
+		r.Use(session.Middleware(sessionManager))
 
 		r.Get("/health", HealthHandler)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())

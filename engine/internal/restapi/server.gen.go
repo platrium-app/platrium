@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -16,6 +17,18 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// SSO Login Redirect
+	// (GET /auth/login)
+	AuthIdpRedirect(w http.ResponseWriter, r *http.Request, params AuthIdpRedirectParams)
+	// Local Login
+	// (POST /auth/login)
+	AuthLocalUserLogin(w http.ResponseWriter, r *http.Request)
+	// Get Current User
+	// (GET /auth/me)
+	AuthMe(w http.ResponseWriter, r *http.Request)
+	// Verify MFA Challenge
+	// (POST /auth/mfa/verify)
+	AuthVerify(w http.ResponseWriter, r *http.Request)
 	// Presign a batch of chunks for download
 	// (POST /files/downloadsession/chunks)
 	DownloadSessionChunks(w http.ResponseWriter, r *http.Request, params DownloadSessionChunksParams)
@@ -36,6 +49,30 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// SSO Login Redirect
+// (GET /auth/login)
+func (_ Unimplemented) AuthIdpRedirect(w http.ResponseWriter, r *http.Request, params AuthIdpRedirectParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Local Login
+// (POST /auth/login)
+func (_ Unimplemented) AuthLocalUserLogin(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get Current User
+// (GET /auth/me)
+func (_ Unimplemented) AuthMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Verify MFA Challenge
+// (POST /auth/mfa/verify)
+func (_ Unimplemented) AuthVerify(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Presign a batch of chunks for download
 // (POST /files/downloadsession/chunks)
@@ -75,6 +112,81 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// AuthIdpRedirect operation middleware
+func (siw *ServerInterfaceWrapper) AuthIdpRedirect(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AuthIdpRedirectParams
+
+	// ------------- Required query parameter "idp" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, true, "idp", r.URL.Query(), &params.Idp, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "idp"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "idp", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthIdpRedirect(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthLocalUserLogin operation middleware
+func (siw *ServerInterfaceWrapper) AuthLocalUserLogin(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthLocalUserLogin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthMe operation middleware
+func (siw *ServerInterfaceWrapper) AuthMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthVerify operation middleware
+func (siw *ServerInterfaceWrapper) AuthVerify(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthVerify(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // DownloadSessionChunks operation middleware
 func (siw *ServerInterfaceWrapper) DownloadSessionChunks(w http.ResponseWriter, r *http.Request) {
@@ -353,6 +465,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/login", wrapper.AuthIdpRedirect)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/login", wrapper.AuthLocalUserLogin)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/me", wrapper.AuthMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/mfa/verify", wrapper.AuthVerify)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/files/downloadsession/chunks", wrapper.DownloadSessionChunks)
 	})
 	r.Group(func(r chi.Router) {
@@ -369,6 +493,191 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type AuthIdpRedirectRequestObject struct {
+	Params AuthIdpRedirectParams
+}
+
+type AuthIdpRedirectResponseObject interface {
+	VisitAuthIdpRedirectResponse(w http.ResponseWriter) error
+}
+
+type AuthIdpRedirect302ResponseHeaders struct {
+	Location string
+}
+
+type AuthIdpRedirect302Response struct {
+	Headers AuthIdpRedirect302ResponseHeaders
+}
+
+func (response AuthIdpRedirect302Response) VisitAuthIdpRedirectResponse(w http.ResponseWriter) error {
+	w.Header().Set("location", fmt.Sprint(response.Headers.Location))
+	w.WriteHeader(302)
+	return nil
+}
+
+type AuthIdpRedirect404JSONResponse ErrorsNotFound
+
+func (response AuthIdpRedirect404JSONResponse) VisitAuthIdpRedirectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthIdpRedirect500JSONResponse ErrorsEngineInternal
+
+func (response AuthIdpRedirect500JSONResponse) VisitAuthIdpRedirectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthLocalUserLoginRequestObject struct {
+	Body *AuthLocalUserLoginJSONRequestBody
+}
+
+type AuthLocalUserLoginResponseObject interface {
+	VisitAuthLocalUserLoginResponse(w http.ResponseWriter) error
+}
+
+type AuthLocalUserLogin200JSONResponse AuthLoginResponse
+
+func (response AuthLocalUserLogin200JSONResponse) VisitAuthLocalUserLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthLocalUserLogin401JSONResponse ErrorsUnauthorized
+
+func (response AuthLocalUserLogin401JSONResponse) VisitAuthLocalUserLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthLocalUserLogin500JSONResponse ErrorsEngineInternal
+
+func (response AuthLocalUserLogin500JSONResponse) VisitAuthLocalUserLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthMeRequestObject struct {
+}
+
+type AuthMeResponseObject interface {
+	VisitAuthMeResponse(w http.ResponseWriter) error
+}
+
+type AuthMe200JSONResponse AuthAuthMeResponse
+
+func (response AuthMe200JSONResponse) VisitAuthMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthMe401JSONResponse ErrorsUnauthorized
+
+func (response AuthMe401JSONResponse) VisitAuthMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthVerifyRequestObject struct {
+	Body *AuthVerifyJSONRequestBody
+}
+
+type AuthVerifyResponseObject interface {
+	VisitAuthVerifyResponse(w http.ResponseWriter) error
+}
+
+type AuthVerify200JSONResponse AuthLoginResponse
+
+func (response AuthVerify200JSONResponse) VisitAuthVerifyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthVerify401JSONResponse ErrorsUnauthorized
+
+func (response AuthVerify401JSONResponse) VisitAuthVerifyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthVerify500JSONResponse ErrorsEngineInternal
+
+func (response AuthVerify500JSONResponse) VisitAuthVerifyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type DownloadSessionChunksRequestObject struct {
@@ -584,6 +893,18 @@ func (response UploadSessionInitialize500JSONResponse) VisitUploadSessionInitial
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// SSO Login Redirect
+	// (GET /auth/login)
+	AuthIdpRedirect(ctx context.Context, request AuthIdpRedirectRequestObject) (AuthIdpRedirectResponseObject, error)
+	// Local Login
+	// (POST /auth/login)
+	AuthLocalUserLogin(ctx context.Context, request AuthLocalUserLoginRequestObject) (AuthLocalUserLoginResponseObject, error)
+	// Get Current User
+	// (GET /auth/me)
+	AuthMe(ctx context.Context, request AuthMeRequestObject) (AuthMeResponseObject, error)
+	// Verify MFA Challenge
+	// (POST /auth/mfa/verify)
+	AuthVerify(ctx context.Context, request AuthVerifyRequestObject) (AuthVerifyResponseObject, error)
 	// Presign a batch of chunks for download
 	// (POST /files/downloadsession/chunks)
 	DownloadSessionChunks(ctx context.Context, request DownloadSessionChunksRequestObject) (DownloadSessionChunksResponseObject, error)
@@ -628,6 +949,118 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// AuthIdpRedirect operation middleware
+func (sh *strictHandler) AuthIdpRedirect(w http.ResponseWriter, r *http.Request, params AuthIdpRedirectParams) {
+	var request AuthIdpRedirectRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthIdpRedirect(ctx, request.(AuthIdpRedirectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthIdpRedirect")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthIdpRedirectResponseObject); ok {
+		if err := validResponse.VisitAuthIdpRedirectResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthLocalUserLogin operation middleware
+func (sh *strictHandler) AuthLocalUserLogin(w http.ResponseWriter, r *http.Request) {
+	var request AuthLocalUserLoginRequestObject
+
+	var body AuthLocalUserLoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthLocalUserLogin(ctx, request.(AuthLocalUserLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthLocalUserLogin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthLocalUserLoginResponseObject); ok {
+		if err := validResponse.VisitAuthLocalUserLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthMe operation middleware
+func (sh *strictHandler) AuthMe(w http.ResponseWriter, r *http.Request) {
+	var request AuthMeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthMe(ctx, request.(AuthMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthMeResponseObject); ok {
+		if err := validResponse.VisitAuthMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthVerify operation middleware
+func (sh *strictHandler) AuthVerify(w http.ResponseWriter, r *http.Request) {
+	var request AuthVerifyRequestObject
+
+	var body AuthVerifyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthVerify(ctx, request.(AuthVerifyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthVerify")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthVerifyResponseObject); ok {
+		if err := validResponse.VisitAuthVerifyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // DownloadSessionChunks operation middleware

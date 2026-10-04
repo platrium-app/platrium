@@ -11,7 +11,7 @@ const defaultSessionStoreKey = "default_sessioninfo"
 // Middleware returns an HTTP middleware that extracts the PlatriumSession struct from SCS
 // and injects it into the request context.
 // If devFallback is non-nil and no active session exists in request, devFallback will be used instead.
-func Middleware(sm *scs.SessionManager, devFallback *PlatriumSession) func(http.Handler) http.Handler {
+func Middleware(sm *scs.SessionManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -21,11 +21,6 @@ func Middleware(sm *scs.SessionManager, devFallback *PlatriumSession) func(http.
 				if s, ok := val.(*PlatriumSession); ok {
 					sess = s
 				}
-			}
-
-			if sess == nil && devFallback != nil {
-				sess = devFallback
-				PutSession(sm, r, sess)
 			}
 
 			if sess != nil {
