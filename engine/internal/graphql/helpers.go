@@ -128,3 +128,29 @@ func MapPublicTenantAuthConfig(cfg *identity.PublicTenantAuthConfig) *TenantAuth
 		Providers:    providers,
 	}
 }
+
+// mapDrive maps a drive to the folder that represents its root.
+func mapDrive(d *fsops.Drive) *Folder {
+	driveType := DriveTypePrivate
+	if d.Type == fsops.DriveTypeShared {
+		driveType = DriveTypeShared
+	}
+	var quota *int64
+	if d.StorageQuota > 0 {
+		q := d.StorageQuota
+		quota = &q
+	}
+	return &Folder{
+		ID:   d.ID,
+		Name: d.Name,
+		Type: DriveItemTypeFolder,
+		DriveMetadata: &DriveMetadata{
+			DriveType:    driveType,
+			StorageUsed:  d.StorageUsed,
+			StorageQuota: quota,
+		},
+		MyCapabilities: d.Caps.Verbs(),
+		CreatedAt:      d.CreatedAt,
+		UpdatedAt:      d.CreatedAt,
+	}
+}

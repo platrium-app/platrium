@@ -7,6 +7,7 @@ package graphql
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"platrium/internal/auth/actor"
@@ -98,6 +99,96 @@ func (r *mutationResolver) SetInheritance(ctx context.Context, itemID string, in
 	return true, nil
 }
 
+// ShareRoles is the resolver for the shareRoles field.
+func (r *queryResolver) ShareRoles(ctx context.Context, itemID string) ([]*RoleOption, error) {
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
+	}
+	driveRoot, err := r.FSOps.IsSharedDriveRoot(ctx, p, itemID)
+	if err != nil {
+		return nil, err
+	}
+	context := authz.ContextItemShare
+	if driveRoot {
+		context = authz.ContextDriveMember
+	}
+
+	options := authz.RoleOptions(context)
+	out := make([]*RoleOption, 0, len(options))
+	for _, o := range options {
+		out = append(out, &RoleOption{Role: string(o.Role), Label: o.Label, Description: o.Description, Capabilities: o.Caps.Verbs()})
+	}
+	return out, nil
+}
+
+// SearchDirectory is the resolver for the searchDirectory field.
+func (r *queryResolver) SearchDirectory(ctx context.Context, query string, first *int, excludeAccessToItemID *string) ([]*DirectorySubject, error) {
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
+	}
+	query = strings.TrimSpace(query)
+	if len([]rune(query)) < minSearchLength {
+		return []*DirectorySubject{}, nil
+	}
+	limit := defaultSearchPage
+	if first != nil && *first > 0 {
+		limit = min(*first, maxSearchPage)
+	}
+
+	// People and groups the picker should not offer again: the caller, and
+	// anyone already named on the item.
+	skip := map[string]bool{subjectKey(authz.SubjectUser, p.UserID): true}
+	if excludeAccessToItemID != nil && *excludeAccessToItemID != "" {
+		access, err := r.Authz.ItemAccess(ctx, p, *excludeAccessToItemID)
+		if err != nil {
+			return nil, err
+		}
+		for _, g := range access.Grants {
+			skip[subjectKey(g.Subject.Type, g.Subject.ID)] = true
+		}
+		if access.OwnerUserID != "" {
+			skip[subjectKey(authz.SubjectUser, access.OwnerUserID)] = true
+		}
+	}
+
+	// Over-fetch so exclusions do not leave the page short.
+	users, err := r.UserStore.Search(ctx, p.TenantID, query, limit+len(skip))
+	if err != nil {
+		return nil, err
+	}
+	groups, err := r.GroupStore.Search(ctx, p.TenantID, query, limit+len(skip))
+	if err != nil {
+		return nil, err
+	}
+
+	found := make([]*DirectorySubject, 0, len(users)+len(groups))
+	for _, u := range users {
+		if skip[subjectKey(authz.SubjectUser, u.ID)] {
+			continue
+		}
+		name, email := u.DisplayName, u.Email
+		if name == "" {
+			name = email
+		}
+		found = append(found, &DirectorySubject{Type: string(authz.SubjectUser), ID: u.ID, Name: name, Email: &email})
+	}
+	for _, g := range groups {
+		if skip[subjectKey(authz.SubjectGroup, g.ID)] {
+			continue
+		}
+		found = append(found, &DirectorySubject{Type: string(authz.SubjectGroup), ID: g.ID, Name: g.Name})
+	}
+	slices.SortStableFunc(found, func(a, b *DirectorySubject) int {
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+	if len(found) > limit {
+		found = found[:limit]
+	}
+	return found, nil
+}
+
 // ItemAccess is the resolver for the itemAccess field.
 func (r *queryResolver) ItemAccess(ctx context.Context, itemID string) (*ItemAccess, error) {
 	p, err := actor.Principal(ctx, r.Authz)
@@ -113,9 +204,15 @@ func (r *queryResolver) ItemAccess(ctx context.Context, itemID string) (*ItemAcc
 		return nil, err
 	}
 
+	owner, err := r.ownerSubject(ctx, p.TenantID, access.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+
 	level, general := authz.GeneralAccessOf(access.Grants)
 	out := &ItemAccess{
 		ItemID:              itemID,
+		Owner:               owner,
 		InheritsPermissions: access.InheritsPermissions,
 		GeneralAccess:       mapGeneralAccess(level, general),
 		Grants:              []*AccessGrant{},

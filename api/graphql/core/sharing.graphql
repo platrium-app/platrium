@@ -3,7 +3,7 @@
 # do not recognize.
 #
 #   subjectType: USER | GROUP | TENANT | PUBLIC
-#   role:        VIEWER | COMMENTER | CONTRIBUTOR | CONTENT_MANAGER | EDITOR | MANAGER | CUSTOM
+#   role:        VIEWER | COMMENTER | RESTRICTED_EDITOR | FULL_EDITOR | DRIVE_ADMIN | CUSTOM
 #   level:       RESTRICTED | TENANT | PUBLIC
 #   capability:  LIST | VIEW | DOWNLOAD | COMMENT | CREATE | EDIT | DELETE | MOVE |
 #                TRASH | MOVE_OUT | SHARE | MANAGE | DELETE_DRIVE
@@ -30,8 +30,27 @@ type GeneralAccess {
   expiresAt: DateTime
 }
 
+"A person, group or organization shown in a picker or on an access list."
+type DirectorySubject {
+  "USER | GROUP | TENANT"
+  type: String!
+  id: ID!
+  name: String!
+  email: String
+}
+
+"A role as it should be shown when choosing one."
+type RoleOption {
+  role: String!
+  label: String!
+  description: String!
+  capabilities: [String!]!
+}
+
 type ItemAccess {
   itemId: ID!
+  "Who owns the item's drive: a person for a private drive, the organization for a shared one."
+  owner: DirectorySubject!
   "False when the item is restricted from the access of its parent folders."
   inheritsPermissions: Boolean!
   generalAccess: GeneralAccess!
@@ -74,6 +93,10 @@ input GeneralAccessInput {
 }
 
 extend type Query {
+  "The roles to offer when sharing an item. A shared drive's root gets the drive-member wording."
+  shareRoles(itemId: ID!): [RoleOption!]!
+  "Find people and groups in the organization by name or email, for the people picker."
+  searchDirectory(query: String!, first: Int, excludeAccessToItemId: ID): [DirectorySubject!]!
   "Who has access to an item. Requires permission to share it."
   itemAccess(itemId: ID!): ItemAccess!
   "Items shared directly with the signed-in user or their groups."

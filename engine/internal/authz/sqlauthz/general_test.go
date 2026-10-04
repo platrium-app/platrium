@@ -87,12 +87,14 @@ func TestGeneralAccessRoles(t *testing.T) {
 	}{
 		{authz.AccessTenant, authz.RoleViewer, true},
 		{authz.AccessTenant, authz.RoleCommenter, true},
-		{authz.AccessTenant, authz.RoleEditor, true},
-		{authz.AccessTenant, authz.RoleManager, false},
-		{authz.AccessTenant, authz.RoleContributor, false},
+		{authz.AccessTenant, authz.RoleRestrictedEditor, true},
+		{authz.AccessTenant, authz.RoleFullEditor, true},
+		{authz.AccessTenant, authz.RoleDriveAdmin, false}, // managing access is never general
 		{authz.AccessPublic, authz.RoleViewer, true},
 		{authz.AccessPublic, authz.RoleCommenter, true},
-		{authz.AccessPublic, authz.RoleEditor, false}, // anonymous visitors can never write
+		{authz.AccessPublic, authz.RoleRestrictedEditor, false}, // anonymous visitors can never write
+		{authz.AccessPublic, authz.RoleFullEditor, false},
+		{authz.AccessPublic, authz.RoleDriveAdmin, false},
 		{authz.AccessPublic, authz.RoleOwner, false},
 		{authz.AccessPublic, "", false},
 		{"EVERYONE", authz.RoleViewer, false},
@@ -111,7 +113,7 @@ func TestGeneralAccessRequiresShare(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleContentManager) // cannot share
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor) // cannot share
 	in := authz.GeneralAccessInput{ItemID: s.docs, Level: authz.AccessPublic, Role: authz.RoleViewer}
 
 	if err := e.az.SetGeneralAccess(ctx, s.pb, in); !errors.Is(err, authz.ErrForbidden) {

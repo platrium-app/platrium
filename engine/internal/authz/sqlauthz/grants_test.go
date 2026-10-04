@@ -17,7 +17,7 @@ func TestGrantRequiresShare(t *testing.T) {
 	in := authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.carol), Role: authz.RoleViewer}
 
 	// Bob can see docs but is only a content manager: no SHARE.
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleContentManager)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)
 	if _, err := e.az.Grant(ctx, s.pb, in); !errors.Is(err, authz.ErrForbidden) {
 		t.Errorf("a content manager cannot share: %v", err)
 	}
@@ -33,10 +33,10 @@ func TestGrantRequiresShare(t *testing.T) {
 func TestManagersCanShareFurther(t *testing.T) {
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleManager)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleDriveAdmin)
 
-	g := e.share(t, s.pb, s.docs, userSubject(s.carol), authz.RoleEditor)
-	if g.CreatedBy != s.bob || g.Role != authz.RoleEditor {
+	g := e.share(t, s.pb, s.docs, userSubject(s.carol), authz.RoleFullEditor)
+	if g.CreatedBy != s.bob || g.Role != authz.RoleFullEditor {
 		t.Fatalf("unexpected grant: %+v", g)
 	}
 	if got := e.caps(t, s.pc, s.spec); !got.Has(authz.CapEdit) {
@@ -57,7 +57,7 @@ func TestCannotGrantMoreThanYouHold(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := e.az.Grant(ctx, s.pb, authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.carol), Role: authz.RoleEditor})
+	_, err := e.az.Grant(ctx, s.pb, authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.carol), Role: authz.RoleFullEditor})
 	if !errors.Is(err, authz.ErrForbidden) {
 		t.Fatalf("escalation must be refused: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestGrantReplacesEarlierGrant(t *testing.T) {
 	e := newEnv(t)
 	s := newScene(t, e)
 
-	first := e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleEditor)
+	first := e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)
 	soon := time.Now().Add(time.Hour)
 	second, err := e.az.Grant(ctx, s.pa, authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.bob), Role: authz.RoleViewer, ExpiresAt: &soon})
 	if err != nil {
@@ -181,8 +181,8 @@ func TestSetInheritance(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleEditor)    // can share, cannot manage
-	e.share(t, s.pa, s.docs, userSubject(s.carol), authz.RoleManager) // can manage
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)   // can share, cannot manage
+	e.share(t, s.pa, s.docs, userSubject(s.carol), authz.RoleDriveAdmin) // can manage
 
 	if err := e.az.SetInheritance(ctx, s.pb, s.specs, false); !errors.Is(err, authz.ErrForbidden) {
 		t.Errorf("an editor cannot restrict: %v", err)
@@ -239,5 +239,50 @@ func TestItemAccess(t *testing.T) {
 	}
 	if _, err := e.az.ItemAccess(ctx, s.pc, s.docs); !errors.Is(err, authz.ErrNotFound) {
 		t.Errorf("an invisible item reads as missing: %v", err)
+	}
+}
+
+func TestItemAccessReportsTheOwner(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+
+	access, err := e.az.ItemAccess(ctx, s.pa, s.docs)
+	if err != nil || access.OwnerUserID != s.alice {
+		t.Fatalf("a private drive is owned by its user: %+v %v", access, err)
+	}
+}
+
+func TestGrantInitial(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	other := e.tenant(t, "other")
+	stranger := e.user(t, other, "stranger")
+
+	// No actor: trusted server code seeds the first administrator.
+	if err := e.az.GrantInitial(ctx, s.tn.id, s.docs, s.bob, authz.RoleDriveAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.caps(t, s.pb, s.docs); !got.Has(authz.CapDeleteDrive) || !got.Has(authz.CapShare) {
+		t.Fatalf("caps = %s", got)
+	}
+	// Idempotent: calling again changes nothing and does not duplicate.
+	if err := e.az.GrantInitial(ctx, s.tn.id, s.docs, s.bob, authz.RoleDriveAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.db.Grant.Query().Where(grant.ResourceID(s.docs)).Count(ctx); n != 1 {
+		t.Fatalf("grants = %d", n)
+	}
+
+	for name, call := range map[string]func() error{
+		"another tenant's user":  func() error { return e.az.GrantInitial(ctx, s.tn.id, s.docs, stranger, authz.RoleViewer) },
+		"missing item":           func() error { return e.az.GrantInitial(ctx, s.tn.id, "nope", s.bob, authz.RoleViewer) },
+		"item of another tenant": func() error { return e.az.GrantInitial(ctx, other.id, s.docs, stranger, authz.RoleViewer) },
+		"owner role":             func() error { return e.az.GrantInitial(ctx, s.tn.id, s.docs, s.bob, authz.RoleOwner) },
+	} {
+		if err := call(); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"platrium/internal/authz"
 	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/driveitem"
 	"platrium/internal/infra/db/ent/user"
 )
 
@@ -22,27 +23,15 @@ const (
 	DriveTypeShared  DriveType = "SHARED"
 )
 
-// DriveOwnerType says who owns a drive.
-type DriveOwnerType string
-
-const (
-	// DriveOwnedByUser is a private drive: its owner holds every capability.
-	DriveOwnedByUser DriveOwnerType = "USER"
-	// DriveOwnedByTenant is a shared drive owned by the organization. Nobody
-	// owns it implicitly; access comes from grants, and it outlives its members.
-	DriveOwnedByTenant DriveOwnerType = "TENANT"
-)
-
 type Drive struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	TenantID     string         `json:"tenant_id"`
-	OwnerType    DriveOwnerType `json:"owner_type"`
-	OwnerID      string         `json:"owner_id,omitempty"` // empty for tenant-owned drives
-	Type         DriveType      `json:"type"`               // "PRIVATE" or "SHARED"
-	StorageUsed  int64          `json:"storage_used"`
-	StorageQuota int64          `json:"storage_quota"` // 0 means unlimited
-	CreatedAt    time.Time      `json:"created_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	TenantID     string    `json:"tenant_id"`
+	OwnerID      string    `json:"owner_id,omitempty"` // the owning user; empty for shared drives
+	Type         DriveType `json:"type"`               // "PRIVATE" or "SHARED"
+	StorageUsed  int64     `json:"storage_used"`
+	StorageQuota int64     `json:"storage_quota"` // 0 means unlimited
+	CreatedAt    time.Time `json:"created_at"`
 	// Caps is what the calling principal may do with the drive.
 	Caps authz.Capability `json:"-"`
 }
@@ -61,7 +50,6 @@ func driveFromEnt(d *ent.Drive, caps authz.Capability) *Drive {
 		ID:           d.ID,
 		Name:         d.Name,
 		TenantID:     d.TenantID,
-		OwnerType:    DriveOwnerType(d.OwnerType),
 		OwnerID:      owner,
 		Type:         DriveType(d.Type),
 		StorageUsed:  d.StorageUsed,
@@ -70,63 +58,63 @@ func driveFromEnt(d *ent.Drive, caps authz.Capability) *Drive {
 	}
 }
 
+// NormalizeDriveName trims a drive name. Shared-drive names are unique per
+// tenant, ignoring case.
+func NormalizeDriveName(name string) string { return strings.TrimSpace(name) }
+
 // CreateDriveParams encapsulates inputs for creating a new Drive.
 type CreateDriveParams struct {
-	TenantID  string
-	OwnerType DriveOwnerType // defaults to DriveOwnedByUser
-	OwnerID   string         // required for user-owned drives, empty for tenant-owned
-	Name      string
-	Type      DriveType // "PRIVATE" or "SHARED"; tenant-owned drives are SHARED
+	TenantID string
+	// OwnerID is the owning user. It is required for PRIVATE drives and must be
+	// empty for SHARED ones, which belong to the tenant.
+	OwnerID string
+	Name    string
+	Type    DriveType // "PRIVATE" or "SHARED"
 }
 
 // CreateDriveTx creates a drive and its root folder within a given transaction.
 // The root folder shares the drive's ID, so a drive ID can be used anywhere a
 // folder ID is accepted.
+//
+// This only writes rows. Whether a caller may create a drive, and who can open
+// it afterwards, are decided by the callers (see orchestrator.DriveOrchestrator).
 func (f *FSOps) CreateDriveTx(ctx context.Context, tx *ent.Tx, params CreateDriveParams) (*Drive, error) {
-	if params.Name == "" {
-		return nil, fmt.Errorf("drive name cannot be empty")
-	}
-	if params.Type != DriveTypePrivate && params.Type != DriveTypeShared {
-		return nil, fmt.Errorf("invalid or missing drive type")
-	}
-
-	ownerType := params.OwnerType
-	if ownerType == "" {
-		ownerType = DriveOwnedByUser
+	name := NormalizeDriveName(params.Name)
+	if name == "" {
+		return nil, fmt.Errorf("%w: drive name cannot be empty", ErrInvalid)
 	}
 
 	driveID := nanoid.Must()
 	create := tx.Drive.Create().
 		SetID(driveID).
 		SetTenantID(params.TenantID).
-		SetOwnerType(string(ownerType)).
-		SetName(params.Name).
-		SetType(drive.Type(params.Type))
+		SetName(name)
 
-	switch ownerType {
-	case DriveOwnedByUser:
+	switch params.Type {
+	case DriveTypePrivate:
 		// Tenant isolation: the owner must exist in the drive's tenant.
 		owned, err := tx.User.Query().Where(user.ID(params.OwnerID), user.TenantID(params.TenantID)).Exist(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to look up drive owner: %w", err)
 		}
 		if !owned {
-			return nil, fmt.Errorf("failed to create drive: owner not found in tenant")
+			return nil, fmt.Errorf("%w: owner not found in tenant", ErrNotFound)
 		}
-		create.SetOwnerID(params.OwnerID)
-	case DriveOwnedByTenant:
+		create.SetType(drive.TypePRIVATE).SetOwnerID(params.OwnerID)
+	case DriveTypeShared:
 		if params.OwnerID != "" {
-			return nil, fmt.Errorf("%w: a tenant-owned drive has no owner user", ErrInvalid)
+			return nil, fmt.Errorf("%w: a shared drive belongs to the tenant, not a user", ErrInvalid)
 		}
-		if params.Type != DriveTypeShared {
-			return nil, fmt.Errorf("%w: a tenant-owned drive must be shared", ErrInvalid)
-		}
+		create.SetType(drive.TypeSHARED).SetSharedNameKey(strings.ToLower(name))
 	default:
-		return nil, fmt.Errorf("%w: unknown drive owner type %q", ErrInvalid, ownerType)
+		return nil, fmt.Errorf("%w: invalid or missing drive type", ErrInvalid)
 	}
 
 	d, err := create.Save(ctx)
 	if err != nil {
+		if ent.IsConstraintError(err) && params.Type == DriveTypeShared {
+			return nil, fmt.Errorf("%w: a shared drive named %q already exists", ErrConflict, name)
+		}
 		return nil, fmt.Errorf("failed to create drive: %w", err)
 	}
 
@@ -135,12 +123,33 @@ func (f *FSOps) CreateDriveTx(ctx context.Context, tx *ent.Tx, params CreateDriv
 		SetTenantID(params.TenantID).
 		SetDriveID(driveID).
 		SetKind("FOLDER").
-		SetName(params.Name).
+		SetName(name).
 		Save(ctx); err != nil {
 		return nil, fmt.Errorf("failed to create drive root folder: %w", err)
 	}
 
 	return driveFromEnt(d, authz.AllCaps), nil
+}
+
+// DiscardNewDrive removes a drive that was just created and never used: its
+// root folder and the drive row. It refuses if anything was added to the drive
+// since, so it can never destroy content. It exists to undo a half-finished
+// creation.
+func (f *FSOps) DiscardNewDrive(ctx context.Context, tenantID, driveID string) error {
+	return f.db.WithTx(ctx, func(tx *ent.Tx) error {
+		n, err := tx.DriveItem.Query().Where(driveitem.DriveID(driveID), driveitem.TenantID(tenantID)).Count(ctx)
+		if err != nil {
+			return err
+		}
+		if n > 1 { // the root itself is the only item a fresh drive has
+			return fmt.Errorf("%w: drive is not empty", ErrInvalid)
+		}
+		if _, err := tx.DriveItem.Delete().Where(driveitem.ID(driveID), driveitem.TenantID(tenantID)).Exec(ctx); err != nil {
+			return err
+		}
+		_, err = tx.Drive.Delete().Where(drive.ID(driveID), drive.TenantID(tenantID)).Exec(ctx)
+		return err
+	})
 }
 
 // CreateDrive creates a drive and its root folder in its own transaction.
@@ -158,7 +167,7 @@ func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Dri
 }
 
 // GetUserDrives lists the drives the actor can open: the ones they own, plus
-// tenant-owned shared drives they hold access to (LIST on the drive root).
+// shared drives they hold access to (LIST on the drive root).
 // Drives that are only shared inside someone's private drive appear through
 // shared-with-me, not here.
 func (f *FSOps) GetUserDrives(ctx context.Context, p authz.Principal) ([]*Drive, error) {
@@ -178,7 +187,7 @@ func (f *FSOps) GetUserDrives(ctx context.Context, p authz.Principal) ([]*Drive,
 	}
 
 	tenantOwned, err := f.db.Drive.Query().
-		Where(drive.TenantID(p.TenantID), drive.OwnerType(string(DriveOwnedByTenant))).
+		Where(drive.TenantID(p.TenantID), drive.TypeEQ(drive.TypeSHARED)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch shared drives: %w", err)
@@ -211,4 +220,16 @@ func (f *FSOps) GetUserDrives(ctx context.Context, p authz.Principal) ([]*Drive,
 		drives = append(drives, driveFromEnt(d, driveCaps[d.ID]))
 	}
 	return drives, nil
+}
+
+// IsSharedDriveRoot reports whether an item is the root of a shared drive, which
+// is where drive members are managed. Requires LIST on the item.
+func (f *FSOps) IsSharedDriveRoot(ctx context.Context, p authz.Principal, itemID string) (bool, error) {
+	if err := f.Require(ctx, p, itemID, authz.CapList); err != nil {
+		return false, err
+	}
+	return f.db.DriveItem.Query().
+		Where(driveitem.ID(itemID), driveitem.TenantID(p.TenantID), driveitem.ParentIDIsNil(),
+			driveitem.HasDriveWith(drive.TypeEQ(drive.TypeSHARED))).
+		Exist(ctx)
 }

@@ -115,7 +115,7 @@ func TestCapabilitiesFromSeveralGrantsAreUnioned(t *testing.T) {
 	pb := e.principal(t, s.tn, s.bob) // re-resolve to pick up the group
 
 	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
-	e.share(t, s.pa, s.specs, groupSubject(team), authz.RoleEditor)
+	e.share(t, s.pa, s.specs, groupSubject(team), authz.RoleFullEditor)
 
 	if got := e.caps(t, pb, s.spec); !got.Has(authz.CapEdit) || !got.Has(authz.CapDownload) {
 		t.Fatalf("union on spec = %s", got)
@@ -137,7 +137,7 @@ func TestGroupGrantReachesNestedMembers(t *testing.T) {
 	if err := e.az.AddMember(ctx, s.tn.id, backend, authz.MemberUser, s.carol); err != nil {
 		t.Fatal(err)
 	}
-	e.share(t, s.pa, s.docs, groupSubject(eng), authz.RoleContributor)
+	e.share(t, s.pa, s.docs, groupSubject(eng), authz.RoleRestrictedEditor)
 
 	pc := e.principal(t, s.tn, s.carol)
 	if got := e.caps(t, pc, s.spec); !got.Has(authz.CapCreate) {
@@ -194,7 +194,7 @@ func TestBreakingInheritance(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleEditor)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)
 
 	if err := e.az.SetInheritance(ctx, s.pa, s.specs, false); err != nil {
 		t.Fatal(err)
@@ -246,8 +246,8 @@ func TestTenantIsolation(t *testing.T) {
 	evil := e.tenant(t, "evil")
 	eve := e.principal(t, evil, e.user(t, evil, "eve"))
 
-	e.share(t, s.pa, s.docs, tenantSubject(s.tn), authz.RoleManager)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleManager)
+	e.share(t, s.pa, s.docs, tenantSubject(s.tn), authz.RoleDriveAdmin)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleDriveAdmin)
 
 	ids := []string{s.drive, s.docs, s.spec, s.private}
 	got, err := e.az.CapsMany(context.Background(), eve, ids)
@@ -265,7 +265,7 @@ func TestCapsManyMatchesCaps(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.specs, userSubject(s.bob), authz.RoleEditor)
+	e.share(t, s.pa, s.specs, userSubject(s.bob), authz.RoleFullEditor)
 	e.share(t, s.pa, s.notes, userSubject(s.bob), authz.RoleViewer)
 
 	ids := []string{s.drive, s.docs, s.specs, s.spec, s.notes, s.private, "missing", s.spec} // includes a dup

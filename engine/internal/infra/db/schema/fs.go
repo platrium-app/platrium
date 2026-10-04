@@ -13,10 +13,9 @@ import (
 // that shares the drive's ID, so a drive ID can be used anywhere a folder ID
 // is accepted and no circular foreign key is needed.
 //
-// A drive is owned either by a user (a private drive: the owner holds every
-// capability and the drive goes when the user does) or by its tenant (a shared
-// drive: nobody owns it implicitly, access comes only from grants, and it
-// outlives any member).
+// A PRIVATE drive belongs to a user: the owner holds every capability and the
+// drive goes when the user does. A SHARED drive belongs to the tenant: nobody
+// owns it implicitly, access comes only from grants, and it outlives any member.
 type Drive struct{ ent.Schema }
 
 func (Drive) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
@@ -24,12 +23,15 @@ func (Drive) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
 func (Drive) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
-		// USER or TENANT. A string so new owner kinds need no schema change.
-		field.String("owner_type").MaxLen(16).Default("USER").Immutable(),
-		// The owning user; NULL for tenant-owned drives (enforced by a CHECK).
+		// The owning user. Set for PRIVATE drives and NULL for SHARED ones
+		// (enforced by a CHECK).
 		field.String("owner_id").MaxLen(idLen).SchemaType(idType).Optional().Nillable().Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
 		field.Enum("type").Values("PRIVATE", "SHARED").Immutable(),
+		// Lowercased name of a SHARED drive. NULL for private drives. It is
+		// unique within the tenant, which makes shared-drive names unique
+		// case-insensitively on every backend (UNIQUE ignores NULLs).
+		field.String("shared_name_key").MaxLen(nameLen).Optional().Nillable(),
 		field.Int64("storage_used").Default(0),
 		// NULL means unlimited.
 		field.Int64("storage_quota").Optional().Nillable(),
@@ -49,13 +51,16 @@ func (Drive) Edges() []ent.Edge {
 }
 
 func (Drive) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("tenant_id", "owner_id")}
+	return []ent.Index{
+		index.Fields("tenant_id", "owner_id"),
+		index.Fields("tenant_id", "shared_name_key").Unique(),
+	}
 }
 
 func (Drive) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		entsql.Annotation{Checks: map[string]string{
-			"drive_owner_matches_type":   "owner_type = 'USER' AND owner_id IS NOT NULL OR owner_type = 'TENANT' AND owner_id IS NULL",
+			"drive_owner_matches_type":   "type = 'PRIVATE' AND owner_id IS NOT NULL AND shared_name_key IS NULL OR type = 'SHARED' AND owner_id IS NULL AND shared_name_key IS NOT NULL",
 			"drive_storage_used_nonneg":  "storage_used >= 0",
 			"drive_storage_quota_nonneg": "storage_quota IS NULL OR storage_quota >= 0",
 		}},

@@ -6,14 +6,13 @@ package authz
 type Role string
 
 const (
-	RoleViewer         Role = "VIEWER"          // list, view, download
-	RoleCommenter      Role = "COMMENTER"       // + comment
-	RoleContributor    Role = "CONTRIBUTOR"     // + create, edit
-	RoleContentManager Role = "CONTENT_MANAGER" // + move, trash
-	RoleEditor         Role = "EDITOR"          // + share (single-item sharing's "can edit")
-	RoleManager        Role = "MANAGER"         // + delete, move out, manage, delete the drive
-	RoleOwner          Role = "OWNER"           // everything; implicit for the drive owner, not grantable
-	RoleCustom         Role = "CUSTOM"          // capabilities that match no built-in role
+	RoleViewer           Role = "VIEWER"            // list, view, download
+	RoleCommenter        Role = "COMMENTER"         // + comment
+	RoleRestrictedEditor Role = "RESTRICTED_EDITOR" // + create, edit; cannot move or delete
+	RoleFullEditor       Role = "FULL_EDITOR"       // + move, trash
+	RoleDriveAdmin       Role = "DRIVE_ADMIN"       // + delete, move out, manage access, delete the drive
+	RoleOwner            Role = "OWNER"             // everything; implicit for a private drive's owner, not grantable
+	RoleCustom           Role = "CUSTOM"            // capabilities that match no built-in role
 )
 
 type roleDef struct {
@@ -26,43 +25,64 @@ type roleDef struct {
 var builtinRoles = func() []roleDef {
 	viewer := CapList | CapView | CapDownload
 	commenter := viewer | CapComment
-	contributor := commenter | CapCreate | CapEdit
-	contentManager := contributor | CapMove | CapTrash
-	editor := contentManager | CapShare
-	manager := editor | CapDelete | CapMoveOut | CapManage | CapDeleteDrive
+	restrictedEditor := commenter | CapCreate | CapEdit
+	fullEditor := restrictedEditor | CapMove | CapTrash
+	driveAdmin := fullEditor | CapDelete | CapMoveOut | CapShare | CapManage | CapDeleteDrive
 	return []roleDef{
 		{RoleViewer, Normalize(viewer)},
 		{RoleCommenter, Normalize(commenter)},
-		{RoleContributor, Normalize(contributor)},
-		{RoleContentManager, Normalize(contentManager)},
-		{RoleEditor, Normalize(editor)},
-		{RoleManager, Normalize(manager)},
+		{RoleRestrictedEditor, Normalize(restrictedEditor)},
+		{RoleFullEditor, Normalize(fullEditor)},
+		{RoleDriveAdmin, Normalize(driveAdmin)},
 		{RoleOwner, AllCaps},
 	}
 }()
 
-// RoleContext says what a role is being offered for. The capability registry
-// is shared; the context only filters which roles make sense to hand out.
+// RoleContext says where a role is being offered. The roles and their
+// capabilities are the same everywhere; only the wording differs, because
+// "Drive Admin" reads wrong on a single file.
 type RoleContext int
 
 const (
-	// ContextItemShare is sharing a single file or folder: Viewer, Commenter,
-	// Editor, and Manager.
+	// ContextItemShare is sharing a file or folder inside a drive.
 	ContextItemShare RoleContext = iota
-	// ContextDriveMember is adding a member to a shared drive: the full ladder
-	// of Viewer, Commenter, Contributor, Content Manager, and Manager.
+	// ContextDriveMember is adding a member to a shared drive (sharing its root).
 	ContextDriveMember
 )
 
-// RolesFor lists the roles to offer in a context, least privileged first.
-func RolesFor(c RoleContext) []Role {
-	switch c {
-	case ContextItemShare:
-		return []Role{RoleViewer, RoleCommenter, RoleEditor, RoleManager}
-	case ContextDriveMember:
-		return []Role{RoleViewer, RoleCommenter, RoleContributor, RoleContentManager, RoleManager}
+// RoleOption is a role as shown to people choosing one.
+type RoleOption struct {
+	Role        Role
+	Label       string
+	Description string
+	Caps        Capability
+}
+
+// RoleOptions lists the roles to offer in a context, least privileged first,
+// with the wording to show. The backend owns the wording so every client says
+// the same thing, and so future custom roles can appear in the same list.
+func RoleOptions(c RoleContext) []RoleOption {
+	adminLabel, adminDesc := "Admin", "Can do everything with this item, including deleting it and managing who has access"
+	if c == ContextDriveMember {
+		adminLabel, adminDesc = "Drive Admin", "Can do everything in this drive, including managing members and deleting the drive"
 	}
-	return nil
+	text := map[Role][2]string{
+		RoleViewer:           {"Viewer", "Can view and download"},
+		RoleCommenter:        {"Commenter", "Can view, download and comment"},
+		RoleRestrictedEditor: {"Restricted Editor", "Can add and edit files, but cannot move or delete them"},
+		RoleFullEditor:       {"Full Editor", "Can add, edit, move and trash files and folders"},
+		RoleDriveAdmin:       {adminLabel, adminDesc},
+	}
+
+	var out []RoleOption
+	for _, d := range builtinRoles {
+		t, ok := text[d.role]
+		if !ok {
+			continue
+		}
+		out = append(out, RoleOption{Role: d.role, Label: t[0], Description: t[1], Caps: d.caps})
+	}
+	return out
 }
 
 // Caps returns the capabilities of a built-in role.
@@ -75,14 +95,12 @@ func (r Role) Caps() (Capability, bool) {
 	return 0, false
 }
 
-// Grantable reports whether the role may be assigned through a grant in some
-// context. Owner is implicit and Custom is derived, so neither is.
+// Grantable reports whether the role may be assigned through a grant. Owner is
+// implicit and Custom is derived, so neither is.
 func (r Role) Grantable() bool {
-	for _, c := range []RoleContext{ContextItemShare, ContextDriveMember} {
-		for _, offered := range RolesFor(c) {
-			if offered == r {
-				return true
-			}
+	for _, o := range RoleOptions(ContextItemShare) {
+		if o.Role == r {
+			return true
 		}
 	}
 	return false

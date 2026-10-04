@@ -34,6 +34,12 @@ type Authorizer interface {
 	Grant(ctx context.Context, actor Principal, in GrantInput) (*Grant, error)
 	// Revoke removes a grant. The actor needs CapShare on the grant's item.
 	Revoke(ctx context.Context, actor Principal, grantID string) error
+	// GrantInitial gives a user a role on an item with no acting user. It is for
+	// trusted server code that has just created something nobody can reach yet,
+	// such as a new shared drive, and must never be reachable from a request that
+	// names its own arguments. It is idempotent.
+	GrantInitial(ctx context.Context, tenantID, itemID, userID string, role Role) error
+
 	// SetGeneralAccess sets who else can open an item beyond the people and
 	// groups added by name: restricted, the whole organization, or anyone with
 	// the link. It replaces any earlier general access in one step. Requires

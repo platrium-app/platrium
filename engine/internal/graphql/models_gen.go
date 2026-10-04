@@ -37,6 +37,15 @@ type AccessGrant struct {
 	CreatedAt    time.Time  `json:"createdAt"`
 }
 
+// A person, group or organization shown in a picker or on an access list.
+type DirectorySubject struct {
+	// USER | GROUP | TENANT
+	Type  string  `json:"type"`
+	ID    string  `json:"id"`
+	Name  string  `json:"name"`
+	Email *string `json:"email,omitempty"`
+}
+
 type DriveItemConnection struct {
 	Edges      []*DriveItemEdge `json:"edges"`
 	PageInfo   *PageInfo        `json:"pageInfo"`
@@ -179,6 +188,8 @@ type IdpProvider struct {
 
 type ItemAccess struct {
 	ItemID string `json:"itemId"`
+	// Who owns the item's drive: a person for a private drive, the organization for a shared one.
+	Owner *DirectorySubject `json:"owner"`
 	// False when the item is restricted from the access of its parent folders.
 	InheritsPermissions bool           `json:"inheritsPermissions"`
 	GeneralAccess       *GeneralAccess `json:"generalAccess"`
@@ -195,6 +206,14 @@ type PageInfo struct {
 }
 
 type Query struct {
+}
+
+// A role as it should be shown when choosing one.
+type RoleOption struct {
+	Role         string   `json:"role"`
+	Label        string   `json:"label"`
+	Description  string   `json:"description"`
+	Capabilities []string `json:"capabilities"`
 }
 
 type ServerInfo struct {

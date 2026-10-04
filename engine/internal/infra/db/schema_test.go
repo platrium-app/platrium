@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/drive"
 )
 
 // newTestDB opens an isolated database. SQLite names are unique per test so
@@ -29,7 +30,7 @@ func newTestDB(t *testing.T) *DB {
 }
 
 // tables lists every table, used to wipe a shared real database between tests.
-var tables = []string{"drive_items", "drives", "devices", "domains", "grants", "group_members", "group_closures", "groups", "local_credentials", "users", "idp_providers", "tenants"}
+var tables = []string{"drive_items", "drives", "devices", "domains", "grants", "group_members", "group_closures", "policy_groups", "groups", "local_credentials", "users", "idp_providers", "tenants"}
 
 func resetTables(t *testing.T, d *DB, driver string) {
 	t.Helper()
@@ -217,34 +218,44 @@ func TestIDsAreCaseSensitive(t *testing.T) {
 	}
 }
 
-// A drive is owned by a user or by its tenant, never both and never neither.
-func TestDriveOwnerMatchesOwnerType(t *testing.T) {
+// A PRIVATE drive has an owner and no shared name; a SHARED drive has a shared
+// name and no owner. Never both, never neither.
+func TestDriveOwnerMatchesType(t *testing.T) {
 	ctx := context.Background()
 	d := newTestDB(t)
 	f := seed(t, d, "acme")
 
-	create := func(ownerType string, owner *string) error {
-		c := d.Drive.Create().SetTenantID(f.tenant.ID).SetName("x").SetType("SHARED").SetOwnerType(ownerType)
-		if owner != nil {
-			c.SetOwnerID(*owner)
+	create := func(typ, owner, key string) error {
+		c := d.Drive.Create().SetTenantID(f.tenant.ID).SetName("x").SetType(drive.Type(typ))
+		if owner != "" {
+			c.SetOwnerID(owner)
+		}
+		if key != "" {
+			c.SetSharedNameKey(key)
 		}
 		return c.Exec(ctx)
 	}
 	owner := f.user.ID
 
-	if err := create("USER", &owner); err != nil {
-		t.Errorf("user-owned: %v", err)
+	if err := create("PRIVATE", owner, ""); err != nil {
+		t.Errorf("private drive: %v", err)
 	}
-	if err := create("TENANT", nil); err != nil {
-		t.Errorf("tenant-owned: %v", err)
+	if err := create("SHARED", "", "finance"); err != nil {
+		t.Errorf("shared drive: %v", err)
 	}
-	if err := create("USER", nil); err == nil {
-		t.Error("a user-owned drive needs an owner")
+	if err := create("PRIVATE", "", ""); err == nil {
+		t.Error("a private drive needs an owner")
 	}
-	if err := create("TENANT", &owner); err == nil {
-		t.Error("a tenant-owned drive has no owner user")
+	if err := create("SHARED", owner, "hr"); err == nil {
+		t.Error("a shared drive has no owner user")
 	}
-	if err := create("ROBOT", nil); err == nil {
-		t.Error("unknown owner types are rejected")
+	if err := create("SHARED", "", ""); err == nil {
+		t.Error("a shared drive needs a name key")
+	}
+	if err := create("PRIVATE", owner, "oops"); err == nil {
+		t.Error("a private drive has no shared name key")
+	}
+	if err := create("SHARED", "", "finance"); err == nil {
+		t.Error("shared-drive names are unique per tenant")
 	}
 }

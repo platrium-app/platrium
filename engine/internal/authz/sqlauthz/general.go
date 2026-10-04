@@ -14,7 +14,7 @@ import (
 
 // generalRoles are the roles general access may carry.
 var generalRoles = map[authz.GeneralAccessLevel][]authz.Role{
-	authz.AccessTenant: {authz.RoleViewer, authz.RoleCommenter, authz.RoleEditor},
+	authz.AccessTenant: {authz.RoleViewer, authz.RoleCommenter, authz.RoleRestrictedEditor, authz.RoleFullEditor},
 	authz.AccessPublic: {authz.RoleViewer, authz.RoleCommenter},
 }
 

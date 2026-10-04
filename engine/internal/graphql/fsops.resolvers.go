@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"platrium/internal/auth/actor"
 	"platrium/internal/auth/session"
-	"platrium/internal/fsops"
 	"platrium/internal/notifications/events"
 	"time"
 )
@@ -208,30 +207,7 @@ func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
 
 	var folders []*Folder
 	for _, d := range drives {
-		driveType := DriveTypePrivate
-		if d.Type == fsops.DriveTypeShared {
-			driveType = DriveTypeShared
-		}
-
-		var quota *int64
-		if d.StorageQuota > 0 {
-			q := d.StorageQuota
-			quota = &q
-		}
-
-		folders = append(folders, &Folder{
-			ID:   d.ID,
-			Name: d.Name,
-			Type: DriveItemTypeFolder,
-			DriveMetadata: &DriveMetadata{
-				DriveType:    driveType,
-				StorageUsed:  d.StorageUsed,
-				StorageQuota: quota,
-			},
-			MyCapabilities: d.Caps.Verbs(),
-			CreatedAt:      d.CreatedAt,
-			UpdatedAt:      d.CreatedAt,
-		})
+		folders = append(folders, mapDrive(d))
 	}
 
 	return folders, nil

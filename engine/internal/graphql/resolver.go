@@ -6,6 +6,7 @@ import (
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 	"platrium/internal/notifications"
+	"platrium/internal/orchestrator"
 )
 
 type SubscriptionManager interface {
@@ -20,6 +21,7 @@ type SubscriptionManager interface {
 type Resolver struct {
 	FSOps       *fsops.FSOps
 	Authz       authz.Authorizer
+	DriveOrch   *orchestrator.DriveOrchestrator
 	Broker      *notifications.Broker
 	SubsManager SubscriptionManager
 	UserStore   *identity.UserStore

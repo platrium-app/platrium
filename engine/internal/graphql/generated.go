@@ -51,6 +51,13 @@ type ComplexityRoot struct {
 		SubjectType  func(childComplexity int) int
 	}
 
+	DirectorySubject struct {
+		Email func(childComplexity int) int
+		ID    func(childComplexity int) int
+		Name  func(childComplexity int) int
+		Type  func(childComplexity int) int
+	}
+
 	DriveItemConnection struct {
 		Edges      func(childComplexity int) int
 		PageInfo   func(childComplexity int) int
@@ -126,18 +133,21 @@ type ComplexityRoot struct {
 		Grants              func(childComplexity int) int
 		InheritsPermissions func(childComplexity int) int
 		ItemID              func(childComplexity int) int
+		Owner               func(childComplexity int) int
 	}
 
 	Mutation struct {
-		CopyFile         func(childComplexity int, fileID string, newParentID string, newName string) int
-		CreateFolder     func(childComplexity int, parentID string, name string) int
-		DeleteItem       func(childComplexity int, id string) int
-		MoveItem         func(childComplexity int, id string, newParentID string) int
-		RenameItem       func(childComplexity int, id string, newName string) int
-		RevokeAccess     func(childComplexity int, grantID string) int
-		SetGeneralAccess func(childComplexity int, input GeneralAccessInput) int
-		SetInheritance   func(childComplexity int, itemID string, inherit bool) int
-		ShareItem        func(childComplexity int, input ShareInput) int
+		CopyFile               func(childComplexity int, fileID string, newParentID string, newName string) int
+		CreateFolder           func(childComplexity int, parentID string, name string) int
+		CreateSharedDrive      func(childComplexity int, name string) int
+		DeleteItem             func(childComplexity int, id string) int
+		MoveItem               func(childComplexity int, id string, newParentID string) int
+		RenameItem             func(childComplexity int, id string, newName string) int
+		RevokeAccess           func(childComplexity int, grantID string) int
+		SetGeneralAccess       func(childComplexity int, input GeneralAccessInput) int
+		SetInheritance         func(childComplexity int, itemID string, inherit bool) int
+		SetSharedDriveCreators func(childComplexity int, groupIds []string) int
+		ShareItem              func(childComplexity int, input ShareInput) int
 	}
 
 	PageInfo struct {
@@ -146,14 +156,25 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Drives           func(childComplexity int) int
-		FolderContents   func(childComplexity int, folderID string, first *int, after *string) int
-		GetChanges       func(childComplexity int, folderID string, since time.Time) int
-		Item             func(childComplexity int, id string) int
-		ItemAccess       func(childComplexity int, itemID string) int
-		ServerInfo       func(childComplexity int) int
-		SharedWithMe     func(childComplexity int, first *int, after *string) int
-		TenantAuthConfig func(childComplexity int) int
+		CanCreateSharedDrive func(childComplexity int) int
+		Drives               func(childComplexity int) int
+		FolderContents       func(childComplexity int, folderID string, first *int, after *string) int
+		GetChanges           func(childComplexity int, folderID string, since time.Time) int
+		Item                 func(childComplexity int, id string) int
+		ItemAccess           func(childComplexity int, itemID string) int
+		SearchDirectory      func(childComplexity int, query string, first *int, excludeAccessToItemID *string) int
+		ServerInfo           func(childComplexity int) int
+		ShareRoles           func(childComplexity int, itemID string) int
+		SharedDriveCreators  func(childComplexity int) int
+		SharedWithMe         func(childComplexity int, first *int, after *string) int
+		TenantAuthConfig     func(childComplexity int) int
+	}
+
+	RoleOption struct {
+		Capabilities func(childComplexity int) int
+		Description  func(childComplexity int) int
+		Label        func(childComplexity int) int
+		Role         func(childComplexity int) int
 	}
 
 	ServerInfo struct {
@@ -207,6 +228,8 @@ type MutationResolver interface {
 	MoveItem(ctx context.Context, id string, newParentID string) (DriveItem, error)
 	CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*File, error)
 	DeleteItem(ctx context.Context, id string) (bool, error)
+	CreateSharedDrive(ctx context.Context, name string) (*Folder, error)
+	SetSharedDriveCreators(ctx context.Context, groupIds []string) ([]*DirectorySubject, error)
 	ShareItem(ctx context.Context, input ShareInput) (*AccessGrant, error)
 	RevokeAccess(ctx context.Context, grantID string) (bool, error)
 	SetGeneralAccess(ctx context.Context, input GeneralAccessInput) (*GeneralAccess, error)
@@ -216,8 +239,12 @@ type QueryResolver interface {
 	Item(ctx context.Context, id string) (DriveItem, error)
 	FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error)
 	Drives(ctx context.Context) ([]*Folder, error)
+	CanCreateSharedDrive(ctx context.Context) (bool, error)
+	SharedDriveCreators(ctx context.Context) ([]*DirectorySubject, error)
 	GetChanges(ctx context.Context, folderID string, since time.Time) ([]*DriveItemEvent, error)
 	ServerInfo(ctx context.Context) (*ServerInfo, error)
+	ShareRoles(ctx context.Context, itemID string) ([]*RoleOption, error)
+	SearchDirectory(ctx context.Context, query string, first *int, excludeAccessToItemID *string) ([]*DirectorySubject, error)
 	ItemAccess(ctx context.Context, itemID string) (*ItemAccess, error)
 	SharedWithMe(ctx context.Context, first *int, after *string) (*SharedItemConnection, error)
 	TenantAuthConfig(ctx context.Context) (*TenantAuthConfig, error)
@@ -298,6 +325,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AccessGrant.SubjectType(childComplexity), true
+
+	case "DirectorySubject.email":
+		if e.ComplexityRoot.DirectorySubject.Email == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DirectorySubject.Email(childComplexity), true
+	case "DirectorySubject.id":
+		if e.ComplexityRoot.DirectorySubject.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DirectorySubject.ID(childComplexity), true
+	case "DirectorySubject.name":
+		if e.ComplexityRoot.DirectorySubject.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DirectorySubject.Name(childComplexity), true
+	case "DirectorySubject.type":
+		if e.ComplexityRoot.DirectorySubject.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DirectorySubject.Type(childComplexity), true
 
 	case "DriveItemConnection.edges":
 		if e.ComplexityRoot.DriveItemConnection.Edges == nil {
@@ -590,6 +642,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ItemAccess.ItemID(childComplexity), true
+	case "ItemAccess.owner":
+		if e.ComplexityRoot.ItemAccess.Owner == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ItemAccess.Owner(childComplexity), true
 
 	case "Mutation.copyFile":
 		if e.ComplexityRoot.Mutation.CopyFile == nil {
@@ -613,6 +671,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateFolder(childComplexity, args["parentId"].(string), args["name"].(string)), true
+	case "Mutation.createSharedDrive":
+		if e.ComplexityRoot.Mutation.CreateSharedDrive == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createSharedDrive_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateSharedDrive(childComplexity, args["name"].(string)), true
 	case "Mutation.deleteItem":
 		if e.ComplexityRoot.Mutation.DeleteItem == nil {
 			break
@@ -679,6 +748,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetInheritance(childComplexity, args["itemId"].(string), args["inherit"].(bool)), true
+	case "Mutation.setSharedDriveCreators":
+		if e.ComplexityRoot.Mutation.SetSharedDriveCreators == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setSharedDriveCreators_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetSharedDriveCreators(childComplexity, args["groupIds"].([]string)), true
 	case "Mutation.shareItem":
 		if e.ComplexityRoot.Mutation.ShareItem == nil {
 			break
@@ -704,6 +784,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PageInfo.HasNextPage(childComplexity), true
 
+	case "Query.canCreateSharedDrive":
+		if e.ComplexityRoot.Query.CanCreateSharedDrive == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.CanCreateSharedDrive(childComplexity), true
 	case "Query.drives":
 		if e.ComplexityRoot.Query.Drives == nil {
 			break
@@ -755,12 +841,40 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ItemAccess(childComplexity, args["itemId"].(string)), true
+	case "Query.searchDirectory":
+		if e.ComplexityRoot.Query.SearchDirectory == nil {
+			break
+		}
+
+		args, err := ec.field_Query_searchDirectory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SearchDirectory(childComplexity, args["query"].(string), args["first"].(*int), args["excludeAccessToItemId"].(*string)), true
 	case "Query.serverInfo":
 		if e.ComplexityRoot.Query.ServerInfo == nil {
 			break
 		}
 
 		return e.ComplexityRoot.Query.ServerInfo(childComplexity), true
+	case "Query.shareRoles":
+		if e.ComplexityRoot.Query.ShareRoles == nil {
+			break
+		}
+
+		args, err := ec.field_Query_shareRoles_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ShareRoles(childComplexity, args["itemId"].(string)), true
+	case "Query.sharedDriveCreators":
+		if e.ComplexityRoot.Query.SharedDriveCreators == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.SharedDriveCreators(childComplexity), true
 	case "Query.sharedWithMe":
 		if e.ComplexityRoot.Query.SharedWithMe == nil {
 			break
@@ -778,6 +892,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.TenantAuthConfig(childComplexity), true
+
+	case "RoleOption.capabilities":
+		if e.ComplexityRoot.RoleOption.Capabilities == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoleOption.Capabilities(childComplexity), true
+	case "RoleOption.description":
+		if e.ComplexityRoot.RoleOption.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoleOption.Description(childComplexity), true
+	case "RoleOption.label":
+		if e.ComplexityRoot.RoleOption.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoleOption.Label(childComplexity), true
+	case "RoleOption.role":
+		if e.ComplexityRoot.RoleOption.Role == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoleOption.Role(childComplexity), true
 
 	case "ServerInfo.edition":
 		if e.ComplexityRoot.ServerInfo.Edition == nil {
@@ -983,6 +1122,23 @@ func newExecutionContext(
 }
 
 var sources = []*ast.Source{
+	{Name: "../../../api/graphql/core/drives.graphql", Input: `# Shared drives. A shared drive belongs to the organization, not to a person.
+# People get access to it through the sharing API (shareItem on the drive's ID).
+
+extend type Query {
+  "Whether the signed-in user may create shared drives."
+  canCreateSharedDrive: Boolean!
+  "The groups whose members may create shared drives. Organization admins only."
+  sharedDriveCreators: [DirectorySubject!]!
+}
+
+extend type Mutation {
+  "Create a shared drive. The creator becomes its Drive Admin."
+  createSharedDrive(name: String!): Folder!
+  "Replace the groups allowed to create shared drives. Organization admins only."
+  setSharedDriveCreators(groupIds: [ID!]!): [DirectorySubject!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../api/graphql/core/fsops.graphql", Input: `scalar DateTime
 scalar Int64
 
@@ -1112,7 +1268,7 @@ extend type Query {
 # do not recognize.
 #
 #   subjectType: USER | GROUP | TENANT | PUBLIC
-#   role:        VIEWER | COMMENTER | CONTRIBUTOR | CONTENT_MANAGER | EDITOR | MANAGER | CUSTOM
+#   role:        VIEWER | COMMENTER | RESTRICTED_EDITOR | FULL_EDITOR | DRIVE_ADMIN | CUSTOM
 #   level:       RESTRICTED | TENANT | PUBLIC
 #   capability:  LIST | VIEW | DOWNLOAD | COMMENT | CREATE | EDIT | DELETE | MOVE |
 #                TRASH | MOVE_OUT | SHARE | MANAGE | DELETE_DRIVE
@@ -1139,8 +1295,27 @@ type GeneralAccess {
   expiresAt: DateTime
 }
 
+"A person, group or organization shown in a picker or on an access list."
+type DirectorySubject {
+  "USER | GROUP | TENANT"
+  type: String!
+  id: ID!
+  name: String!
+  email: String
+}
+
+"A role as it should be shown when choosing one."
+type RoleOption {
+  role: String!
+  label: String!
+  description: String!
+  capabilities: [String!]!
+}
+
 type ItemAccess {
   itemId: ID!
+  "Who owns the item's drive: a person for a private drive, the organization for a shared one."
+  owner: DirectorySubject!
   "False when the item is restricted from the access of its parent folders."
   inheritsPermissions: Boolean!
   generalAccess: GeneralAccess!
@@ -1183,6 +1358,10 @@ input GeneralAccessInput {
 }
 
 extend type Query {
+  "The roles to offer when sharing an item. A shared drive's root gets the drive-member wording."
+  shareRoles(itemId: ID!): [RoleOption!]!
+  "Find people and groups in the organization by name or email, for the people picker."
+  searchDirectory(query: String!, first: Int, excludeAccessToItemId: ID): [DirectorySubject!]!
   "Who has access to an item. Requires permission to share it."
   itemAccess(itemId: ID!): ItemAccess!
   "Items shared directly with the signed-in user or their groups."
@@ -1246,6 +1425,20 @@ func (ec *executionContext) childFields_AccessGrant(ctx context.Context, field g
 		return ec.fieldContext_AccessGrant_createdAt(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type AccessGrant", field.Name)
+}
+
+func (ec *executionContext) childFields_DirectorySubject(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "type":
+		return ec.fieldContext_DirectorySubject_type(ctx, field)
+	case "id":
+		return ec.fieldContext_DirectorySubject_id(ctx, field)
+	case "name":
+		return ec.fieldContext_DirectorySubject_name(ctx, field)
+	case "email":
+		return ec.fieldContext_DirectorySubject_email(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DirectorySubject", field.Name)
 }
 
 func (ec *executionContext) childFields_DriveItemConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1392,6 +1585,8 @@ func (ec *executionContext) childFields_ItemAccess(ctx context.Context, field gr
 	switch field.Name {
 	case "itemId":
 		return ec.fieldContext_ItemAccess_itemId(ctx, field)
+	case "owner":
+		return ec.fieldContext_ItemAccess_owner(ctx, field)
 	case "inheritsPermissions":
 		return ec.fieldContext_ItemAccess_inheritsPermissions(ctx, field)
 	case "generalAccess":
@@ -1410,6 +1605,20 @@ func (ec *executionContext) childFields_PageInfo(ctx context.Context, field grap
 		return ec.fieldContext_PageInfo_endCursor(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+}
+
+func (ec *executionContext) childFields_RoleOption(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "role":
+		return ec.fieldContext_RoleOption_role(ctx, field)
+	case "label":
+		return ec.fieldContext_RoleOption_label(ctx, field)
+	case "description":
+		return ec.fieldContext_RoleOption_description(ctx, field)
+	case "capabilities":
+		return ec.fieldContext_RoleOption_capabilities(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RoleOption", field.Name)
 }
 
 func (ec *executionContext) childFields_ServerInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1640,6 +1849,20 @@ func (ec *executionContext) field_Mutation_createFolder_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createSharedDrive_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_deleteItem_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1748,6 +1971,20 @@ func (ec *executionContext) field_Mutation_setInheritance_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_setSharedDriveCreators_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "groupIds",
+		func(ctx context.Context, v any) ([]string, error) {
+			return ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["groupIds"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_shareItem_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1853,6 +2090,50 @@ func (ec *executionContext) field_Query_item_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_searchDirectory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "query",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["query"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "excludeAccessToItemId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["excludeAccessToItemId"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_shareRoles_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "itemId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["itemId"] = arg0
 	return args, nil
 }
 
@@ -2143,6 +2424,98 @@ func (ec *executionContext) _AccessGrant_createdAt(ctx context.Context, field gr
 }
 func (ec *executionContext) fieldContext_AccessGrant_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AccessGrant", field, false, false, errors.New("field of type DateTime does not have child fields"))
+}
+
+func (ec *executionContext) _DirectorySubject_type(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DirectorySubject_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DirectorySubject_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DirectorySubject_id(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DirectorySubject_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DirectorySubject_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _DirectorySubject_name(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DirectorySubject_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DirectorySubject_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DirectorySubject_email(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DirectorySubject_email(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Email, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DirectorySubject_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _DriveItemConnection_edges(ctx context.Context, field graphql.CollectedField, obj *DriveItemConnection) (ret graphql.Marshaler) {
@@ -3229,6 +3602,38 @@ func (ec *executionContext) fieldContext_ItemAccess_itemId(_ context.Context, fi
 	return graphql.NewScalarFieldContext("ItemAccess", field, false, false, errors.New("field of type ID does not have child fields"))
 }
 
+func (ec *executionContext) _ItemAccess_owner(ctx context.Context, field graphql.CollectedField, obj *ItemAccess) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ItemAccess_owner(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Owner, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ItemAccess_owner(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ItemAccess",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DirectorySubject(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ItemAccess_inheritsPermissions(ctx context.Context, field graphql.CollectedField, obj *ItemAccess) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3530,6 +3935,94 @@ func (ec *executionContext) fieldContext_Mutation_deleteItem(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteItem_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createSharedDrive(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createSharedDrive(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateSharedDrive(ctx, fc.Args["name"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Folder) graphql.Marshaler {
+			return ec.marshalNFolder2ᚖplatriumᚋinternalᚋgraphqlᚐFolder(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createSharedDrive(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Folder(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createSharedDrive_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setSharedDriveCreators(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setSharedDriveCreators(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetSharedDriveCreators(ctx, fc.Args["groupIds"].([]string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setSharedDriveCreators(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DirectorySubject(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setSharedDriveCreators_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3878,6 +4371,61 @@ func (ec *executionContext) fieldContext_Query_drives(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_canCreateSharedDrive(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_canCreateSharedDrive(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().CanCreateSharedDrive(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_canCreateSharedDrive(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Query", field, true, true, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Query_sharedDriveCreators(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_sharedDriveCreators(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().SharedDriveCreators(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_sharedDriveCreators(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DirectorySubject(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_getChanges(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3950,6 +4498,94 @@ func (ec *executionContext) fieldContext_Query_serverInfo(_ context.Context, fie
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_ServerInfo(ctx, field)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_shareRoles(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_shareRoles(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ShareRoles(ctx, fc.Args["itemId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*RoleOption) graphql.Marshaler {
+			return ec.marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐRoleOptionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_shareRoles(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RoleOption(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_shareRoles_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_searchDirectory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_searchDirectory(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SearchDirectory(ctx, fc.Args["query"].(string), fc.Args["first"].(*int), fc.Args["excludeAccessToItemId"].(*string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
+			return ec.marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_searchDirectory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DirectorySubject(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_searchDirectory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -4148,6 +4784,98 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _RoleOption_role(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoleOption_role(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Role, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoleOption_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _RoleOption_label(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoleOption_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoleOption_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _RoleOption_description(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoleOption_description(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoleOption_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _RoleOption_capabilities(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoleOption_capabilities(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Capabilities, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoleOption_capabilities(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _ServerInfo_version(ctx context.Context, field graphql.CollectedField, obj *ServerInfo) (ret graphql.Marshaler) {
@@ -5867,6 +6595,59 @@ func (ec *executionContext) _AccessGrant(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
+var directorySubjectImplementors = []string{"DirectorySubject"}
+
+func (ec *executionContext) _DirectorySubject(ctx context.Context, sel ast.SelectionSet, obj *DirectorySubject) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, directorySubjectImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirectorySubject")
+		case "type":
+			out.Values[i] = ec._DirectorySubject_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "id":
+			out.Values[i] = ec._DirectorySubject_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._DirectorySubject_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "email":
+			out.Values[i] = ec._DirectorySubject_email(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var driveItemConnectionImplementors = []string{"DriveItemConnection"}
 
 func (ec *executionContext) _DriveItemConnection(ctx context.Context, sel ast.SelectionSet, obj *DriveItemConnection) graphql.Marshaler {
@@ -6462,6 +7243,11 @@ func (ec *executionContext) _ItemAccess(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "owner":
+			out.Values[i] = ec._ItemAccess_owner(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "inheritsPermissions":
 			out.Values[i] = ec._ItemAccess_inheritsPermissions(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -6549,6 +7335,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteItem":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteItem(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createSharedDrive":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createSharedDrive(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setSharedDriveCreators":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setSharedDriveCreators(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -6731,6 +7531,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "canCreateSharedDrive":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_canCreateSharedDrive(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sharedDriveCreators":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sharedDriveCreators(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "getChanges":
 			field := field
 
@@ -6763,6 +7607,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_serverInfo(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "shareRoles":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_shareRoles(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "searchDirectory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_searchDirectory(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -6854,6 +7742,59 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			})
 			if out.Values[i] == graphql.RequiredNull {
 				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var roleOptionImplementors = []string{"RoleOption"}
+
+func (ec *executionContext) _RoleOption(ctx context.Context, sel ast.SelectionSet, obj *RoleOption) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, roleOptionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RoleOption")
+		case "role":
+			out.Values[i] = ec._RoleOption_role(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._RoleOption_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._RoleOption_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "capabilities":
+			out.Values[i] = ec._RoleOption_capabilities(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -7586,6 +8527,32 @@ func (ec *executionContext) marshalNDateTime2timeᚐTime(ctx context.Context, se
 	return res
 }
 
+func (ec *executionContext) marshalNDirectorySubject2ᚕᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubjectᚄ(ctx context.Context, sel ast.SelectionSet, v []*DirectorySubject) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx context.Context, sel ast.SelectionSet, v *DirectorySubject) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DirectorySubject(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNDriveItem2platriumᚋinternalᚋgraphqlᚐDriveItem(ctx context.Context, sel ast.SelectionSet, v DriveItem) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -7765,6 +8732,35 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNIdpProvider2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdpProviderᚄ(ctx context.Context, sel ast.SelectionSet, v []*IdpProvider) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -7841,6 +8837,32 @@ func (ec *executionContext) marshalNPageInfo2ᚖplatriumᚋinternalᚋgraphqlᚐ
 		return graphql.Null
 	}
 	return ec._PageInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐRoleOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*RoleOption) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRoleOption2ᚖplatriumᚋinternalᚋgraphqlᚐRoleOption(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRoleOption2ᚖplatriumᚋinternalᚋgraphqlᚐRoleOption(ctx context.Context, sel ast.SelectionSet, v *RoleOption) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RoleOption(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNServerInfo2ᚖplatriumᚋinternalᚋgraphqlᚐServerInfo(ctx context.Context, sel ast.SelectionSet, v *ServerInfo) graphql.Marshaler {

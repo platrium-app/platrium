@@ -45,6 +45,10 @@ func ErrorPresenter(ctx context.Context, err error) *gqlerror.Error {
 const (
 	publicSubjectName = "Anyone with the link"
 	maxSharedPage     = 100
+
+	minSearchLength   = 2
+	defaultSearchPage = 8
+	maxSearchPage     = 25
 )
 
 // subjectNames resolves display names for the subjects of a set of grants:
@@ -134,4 +138,29 @@ func parseRole(s string) (authz.Role, error) {
 		return "", fmt.Errorf("%w: %q is not a role that can be granted", authz.ErrInvalid, s)
 	}
 	return r, nil
+}
+
+// ownerSubject describes who owns a drive: a person for a private drive, or
+// the organization when ownerUserID is empty (a shared drive).
+func (r *Resolver) ownerSubject(ctx context.Context, tenantID, ownerUserID string) (*DirectorySubject, error) {
+	if ownerUserID == "" {
+		t, err := r.TenantStore.GetTenant(ctx, tenantID)
+		if err != nil {
+			return nil, err
+		}
+		return &DirectorySubject{Type: string(authz.SubjectTenant), ID: t.ID, Name: t.Name}, nil
+	}
+	users, err := r.UserStore.GetByIDs(ctx, tenantID, []string{ownerUserID})
+	if err != nil {
+		return nil, err
+	}
+	u, ok := users[ownerUserID]
+	if !ok {
+		return &DirectorySubject{Type: string(authz.SubjectUser), ID: ownerUserID, Name: "Unknown user"}, nil
+	}
+	name, email := u.DisplayName, u.Email
+	if name == "" {
+		name = email
+	}
+	return &DirectorySubject{Type: string(authz.SubjectUser), ID: u.ID, Name: name, Email: &email}, nil
 }

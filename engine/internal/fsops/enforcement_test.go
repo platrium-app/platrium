@@ -87,7 +87,7 @@ func TestViewOnlyShareCannotDownloadOrCopy(t *testing.T) {
 	e := newEnv(t)
 	s := newScene(t, e)
 	e.shareOpts(t, s.w, s.docs, s.bob, authz.RoleViewer, true)
-	e.share(t, s.w, s.open, s.bob, authz.RoleContributor) // somewhere to copy to
+	e.share(t, s.w, s.open, s.bob, authz.RoleRestrictedEditor) // somewhere to copy to
 
 	if _, err := e.fs.GetFile(ctx, s.bob, s.file); err != nil {
 		t.Errorf("a view-only share can still see the file: %v", err)
@@ -104,7 +104,7 @@ func TestContributorCreatesAndEditsButCannotMoveOrCopyOut(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.w, s.docs, s.bob, authz.RoleContributor)
+	e.share(t, s.w, s.docs, s.bob, authz.RoleRestrictedEditor)
 
 	if _, err := e.fs.CreateFolder(ctx, s.bob, s.docs, "new"); err != nil {
 		t.Errorf("CreateFolder: %v", err)
@@ -132,7 +132,7 @@ func TestContentManagerMovesNeedsCreateOnDestination(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.w, s.docs, s.bob, authz.RoleContentManager)
+	e.share(t, s.w, s.docs, s.bob, authz.RoleFullEditor)
 	e.share(t, s.w, s.open, s.bob, authz.RoleViewer) // can see, cannot write
 
 	if got, err := e.fs.MoveItem(ctx, s.bob, s.file, s.sub); err != nil || got.ParentID == nil || *got.ParentID != s.sub {
@@ -150,7 +150,7 @@ func TestInvisibleLooksLikeMissing(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.w, s.docs, s.bob, authz.RoleManager)
+	e.share(t, s.w, s.docs, s.bob, authz.RoleDriveAdmin)
 
 	// Carol has no access to anything: every operation reads as "not found",
 	// exactly as it would for an ID that does not exist.
@@ -369,14 +369,14 @@ func TestSharedDrivesOwnedByTheTenant(t *testing.T) {
 	err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
 		var err error
 		shared, err = e.fs.CreateDriveTx(ctx, tx, fsops.CreateDriveParams{
-			TenantID: s.w.tenantID, OwnerType: fsops.DriveOwnedByTenant, Name: "Company", Type: fsops.DriveTypeShared,
+			TenantID: s.w.tenantID, Name: "Company", Type: fsops.DriveTypeShared,
 		})
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shared.OwnerType != fsops.DriveOwnedByTenant || shared.OwnerID != "" {
+	if shared.Type != fsops.DriveTypeShared || shared.OwnerID != "" {
 		t.Fatalf("unexpected drive: %+v", shared)
 	}
 
@@ -389,9 +389,9 @@ func TestSharedDrivesOwnedByTheTenant(t *testing.T) {
 	}
 
 	// Access comes from grants. Bootstrap a manager (no one can share yet).
-	managerCaps, _ := authz.RoleManager.Caps()
+	managerCaps, _ := authz.RoleDriveAdmin.Caps()
 	if err := e.db.Grant.Create().SetTenantID(s.w.tenantID).SetDriveID(shared.ID).SetResourceID(shared.ID).
-		SetSubjectType("USER").SetSubjectID(s.w.userID).SetRole("MANAGER").SetCaps(int64(managerCaps)).Exec(ctx); err != nil {
+		SetSubjectType("USER").SetSubjectID(s.w.userID).SetRole("DRIVE_ADMIN").SetCaps(int64(managerCaps)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if drives, _ := e.fs.GetUserDrives(ctx, s.w.p); len(drives) != 2 {

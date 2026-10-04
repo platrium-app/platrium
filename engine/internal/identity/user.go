@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	nanoid "github.com/matoous/go-nanoid/v2"
@@ -13,8 +14,19 @@ import (
 	"platrium/internal/infra/db/ent/user"
 )
 
-// RoleSuperAdmin is the role granted to a tenant's first administrator.
-const RoleSuperAdmin = "SUPER_ADMIN"
+// Tenant roles. A user's role says what they may administer in their tenant,
+// separate from what they can do with any one file (see package authz).
+const (
+	// RoleSuperAdmin is granted to a tenant's first administrator.
+	RoleSuperAdmin = "SUPER_ADMIN"
+	// RoleAdmin administers the tenant: settings, policies, shared drives.
+	RoleAdmin = "ADMIN"
+	// RoleMember is an ordinary user.
+	RoleMember = "MEMBER"
+)
+
+// IsAdmin reports whether a tenant role administers the tenant.
+func IsAdmin(role string) bool { return role == RoleSuperAdmin || role == RoleAdmin }
 
 // User represents an identity belonging to exactly one tenant.
 type User struct {
@@ -124,6 +136,28 @@ func (r *UserStore) GetByIDs(ctx context.Context, tenantID string, ids []string)
 	}
 	for _, u := range rows {
 		out[u.ID] = userFromEnt(u)
+	}
+	return out, nil
+}
+
+// Search finds users in a tenant by name or email, case-insensitively, ordered
+// by name. Every member of a tenant may search its directory.
+func (r *UserStore) Search(ctx context.Context, tenantID, query string, limit int) ([]*User, error) {
+	query = strings.TrimSpace(query)
+	if query == "" || limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.db.User.Query().
+		Where(user.TenantID(tenantID), user.Or(user.DisplayNameContainsFold(query), user.EmailContainsFold(query))).
+		Order(user.ByDisplayName(), user.ByID()).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search users: %w", err)
+	}
+	out := make([]*User, 0, len(rows))
+	for _, u := range rows {
+		out = append(out, userFromEnt(u))
 	}
 	return out, nil
 }

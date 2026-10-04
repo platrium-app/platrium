@@ -227,7 +227,43 @@ func (a *Authorizer) ItemAccess(ctx context.Context, actor authz.Principal, item
 		}
 		return nil, err
 	}
-	return &authz.ItemAccess{ItemID: itemID, InheritsPermissions: item.InheritPerms, Grants: grants}, nil
+	d, err := a.db.Drive.Get(ctx, item.DriveID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load drive: %w", err)
+	}
+	access := &authz.ItemAccess{ItemID: itemID, InheritsPermissions: item.InheritPerms, Grants: grants}
+	if d.OwnerID != nil {
+		access.OwnerUserID = *d.OwnerID
+	}
+	return access, nil
+}
+
+// GrantInitial gives a user a role on an item without an acting user. See
+// authz.Authorizer.GrantInitial.
+func (a *Authorizer) GrantInitial(ctx context.Context, tenantID, itemID, userID string, role authz.Role) error {
+	caps, err := authz.GrantCaps(role, false)
+	if err != nil {
+		return fmt.Errorf("%w: role %q cannot be granted", authz.ErrInvalid, role)
+	}
+	caps = authz.Normalize(caps)
+
+	return a.db.WithTx(ctx, func(tx *ent.Tx) error {
+		item, err := tx.DriveItem.Query().
+			Where(driveitem.ID(itemID), driveitem.TenantID(tenantID)).
+			Only(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: item", authz.ErrNotFound)
+			}
+			return err
+		}
+		subject := authz.Subject{Type: authz.SubjectUser, ID: userID}
+		if err := a.validateSubject(ctx, tx, tenantID, subject); err != nil {
+			return err
+		}
+		_, err = upsertGrant(ctx, tx, item, subject, role, caps, nil, userID)
+		return err
+	})
 }
 
 // SetInheritance stops or resumes an item inheriting its ancestors' grants.
@@ -268,8 +304,8 @@ func (a *Authorizer) SetInheritance(ctx context.Context, actor authz.Principal, 
 		if d.OwnerID != nil && *d.OwnerID == actor.UserID {
 			return nil
 		}
-		managerCaps, _ := authz.RoleManager.Caps()
-		_, err = upsertGrant(ctx, tx, item, authz.Subject{Type: authz.SubjectUser, ID: actor.UserID}, authz.RoleManager, managerCaps, nil, actor.UserID)
+		managerCaps, _ := authz.RoleDriveAdmin.Caps()
+		_, err = upsertGrant(ctx, tx, item, authz.Subject{Type: authz.SubjectUser, ID: actor.UserID}, authz.RoleDriveAdmin, managerCaps, nil, actor.UserID)
 		return err
 	})
 }

@@ -141,3 +141,34 @@ func (GroupClosure) Indexes() []ent.Index {
 		index.Fields("user_id"),
 	}
 }
+
+// PolicyGroup lists the groups a tenant policy applies to. A policy is a named
+// setting that a tenant admin scopes to groups, such as which groups may create
+// shared drives. The policy name is a string so new policies need no schema
+// change.
+type PolicyGroup struct{ ent.Schema }
+
+func (PolicyGroup) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
+
+func (PolicyGroup) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("policy").MaxLen(64).NotEmpty().Immutable(),
+		field.String("group_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+	}
+}
+
+func (PolicyGroup) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("tenant", Tenant.Type).
+			Field("tenant_id").Unique().Required().Immutable().
+			Annotations(entsql.OnDelete(entsql.Restrict)),
+		edge.To("group", Group.Type).
+			Field("group_id").Unique().Required().Immutable().
+			Annotations(entsql.OnDelete(entsql.Restrict)),
+	}
+}
+
+func (PolicyGroup) Indexes() []ent.Index {
+	return []ent.Index{index.Fields("tenant_id", "policy", "group_id").Unique()}
+}

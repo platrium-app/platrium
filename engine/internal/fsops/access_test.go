@@ -95,8 +95,8 @@ func TestRecordsCarryTheCallersCapabilities(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.w, s.docs, s.bob, authz.RoleContributor)
-	contributor, _ := authz.RoleContributor.Caps()
+	e.share(t, s.w, s.docs, s.bob, authz.RoleRestrictedEditor)
+	contributor, _ := authz.RoleRestrictedEditor.Caps()
 
 	item, err := e.fs.GetItem(ctx, s.bob, s.file)
 	if err != nil || item.Caps != contributor {

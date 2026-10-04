@@ -17,6 +17,7 @@ import (
 	"platrium/internal/infra/db/dbtest"
 	"platrium/internal/infra/db/ent"
 	"platrium/internal/notifications"
+	"platrium/internal/orchestrator"
 )
 
 // harness is a resolver wired to a real database, with alice owning a drive
@@ -26,6 +27,7 @@ type harness struct {
 	r                 *Resolver
 	tenant            string
 	alice, bob, carol string
+	admin             string // a tenant administrator
 	drive, docs, file string
 }
 
@@ -38,6 +40,7 @@ func newHarness(t *testing.T) *harness {
 
 	broker := notifications.NewBroker()
 	h := &harness{db: d, r: &Resolver{
+		DriveOrch:   orchestrator.NewDriveOrchestrator(d, fs, az, identity.NewUserStore(d), identity.NewPolicyStore(d)),
 		FSOps:       fs,
 		Broker:      broker,
 		Authz:       az,
@@ -56,8 +59,12 @@ func newHarness(t *testing.T) *harness {
 			return err
 		}
 		mk := func(name string) (string, error) {
+			role := identity.RoleMember
+			if name == "ada" {
+				role = identity.RoleAdmin
+			}
 			u, err := tx.User.Create().SetTenantID(tn.ID).SetIdpID(idp.ID).SetExternalID(name).
-				SetEmail(name + "@acme.com").SetDisplayName(name).Save(ctx)
+				SetEmail(name + "@acme.com").SetDisplayName(name).SetRole(role).Save(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -71,6 +78,9 @@ func newHarness(t *testing.T) *harness {
 			return err
 		}
 		if h.carol, err = mk("carol"); err != nil {
+			return err
+		}
+		if h.admin, err = mk("ada"); err != nil {
 			return err
 		}
 		dr, err := fs.CreateDriveTx(ctx, tx, fsops.CreateDriveParams{TenantID: tn.ID, OwnerID: h.alice, Name: "Alice", Type: fsops.DriveTypePrivate})
@@ -164,7 +174,7 @@ func TestShareAndInspectAccess(t *testing.T) {
 
 func TestSharedWithMe(t *testing.T) {
 	h := newHarness(t)
-	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "EDITOR"}); err != nil {
+	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "DRIVE_ADMIN"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,7 +186,7 @@ func TestSharedWithMe(t *testing.T) {
 		t.Fatalf("shared with bob: %+v", conn)
 	}
 	e := conn.Edges[0]
-	if e.Node.Item.GetID() != h.docs || e.Node.Role != "EDITOR" || !slices.Contains(e.Node.Capabilities, "SHARE") || e.Cursor != h.docs {
+	if e.Node.Item.GetID() != h.docs || e.Node.Role != "DRIVE_ADMIN" || !slices.Contains(e.Node.Capabilities, "SHARE") || e.Cursor != h.docs {
 		t.Fatalf("unexpected edge: %+v", e.Node)
 	}
 
@@ -308,7 +318,7 @@ func TestSharingValidationAndErrorCodes(t *testing.T) {
 			return err
 		}, "BAD_REQUEST"},
 		{"public editor", func() error {
-			_, err := h.m().SetGeneralAccess(ctx, GeneralAccessInput{ItemID: h.docs, Level: "PUBLIC", Role: ptr("EDITOR")})
+			_, err := h.m().SetGeneralAccess(ctx, GeneralAccessInput{ItemID: h.docs, Level: "PUBLIC", Role: ptr("FULL_EDITOR")})
 			return err
 		}, "BAD_REQUEST"},
 		{"signed out", func() error {
@@ -337,11 +347,11 @@ func TestSharingWithGroupsAndTheOrganization(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	grant, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "GROUP", SubjectID: groupID, Role: "CONTRIBUTOR"})
+	grant, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "GROUP", SubjectID: groupID, Role: "RESTRICTED_EDITOR"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if grant.SubjectName != "design" || grant.Role != "CONTRIBUTOR" {
+	if grant.SubjectName != "design" || grant.Role != "RESTRICTED_EDITOR" {
 		t.Fatalf("grant = %+v", grant)
 	}
 	if _, err := h.m().CreateFolder(h.as(h.carol), h.docs, "from-carol"); err != nil {
@@ -398,4 +408,105 @@ func mustGroup(t *testing.T, h *harness, idpID, name string) string {
 		t.Fatal(err)
 	}
 	return g.ID
+}
+
+func TestShareRolesDependOnTheItem(t *testing.T) {
+	h := newHarness(t)
+
+	roles, err := h.q().ShareRoles(h.as(h.alice), h.docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var labels []string
+	for _, r := range roles {
+		labels = append(labels, r.Label)
+	}
+	want := []string{"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Admin"}
+	if !slices.Equal(labels, want) || roles[3].Role != "FULL_EDITOR" || !slices.Contains(roles[3].Capabilities, "MOVE") {
+		t.Fatalf("item roles = %v", labels)
+	}
+
+	// A shared drive's root is where members are managed, and says "Drive Admin".
+	d, err := h.m().CreateSharedDrive(h.as(h.admin), "Finance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles, err = h.q().ShareRoles(h.as(h.admin), d.ID)
+	if err != nil || roles[len(roles)-1].Label != "Drive Admin" || roles[len(roles)-1].Role != "DRIVE_ADMIN" {
+		t.Fatalf("drive roles = %+v %v", roles, err)
+	}
+
+	if _, err := h.q().ShareRoles(h.as(h.carol), h.docs); code(err) != "NOT_FOUND" {
+		t.Fatalf("an invisible item: %v", err)
+	}
+}
+
+func TestItemAccessReportsTheOwner(t *testing.T) {
+	h := newHarness(t)
+
+	access, err := h.q().ItemAccess(h.as(h.alice), h.docs)
+	if err != nil || access.Owner.Type != "USER" || access.Owner.ID != h.alice || access.Owner.Name != "alice" {
+		t.Fatalf("private drive owner: %+v %v", access.Owner, err)
+	}
+
+	d, err := h.m().CreateSharedDrive(h.as(h.admin), "Finance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	access, err = h.q().ItemAccess(h.as(h.admin), d.ID)
+	if err != nil || access.Owner.Type != "TENANT" || access.Owner.Name != "Acme Inc" {
+		t.Fatalf("a shared drive belongs to the organization: %+v %v", access.Owner, err)
+	}
+}
+
+func TestSearchDirectory(t *testing.T) {
+	h := newHarness(t)
+	ctx := h.as(h.alice)
+	cfg, err := h.r.TenantStore.GetPublicTenantAuthConfig(context.Background(), "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustGroup(t, h, cfg.Providers[0].ID, "Design Team")
+
+	names := func(found []*DirectorySubject) []string {
+		var out []string
+		for _, f := range found {
+			out = append(out, f.Type+":"+f.Name)
+		}
+		return out
+	}
+
+	// Everyone in the tenant can search it, by name or email, case-insensitively.
+	found, err := h.q().SearchDirectory(ctx, "BO", nil, nil)
+	if err != nil || !slices.Equal(names(found), []string{"USER:bob"}) || found[0].Email == nil || *found[0].Email != "bob@acme.com" {
+		t.Fatalf("by name: %v %v", names(found), err)
+	}
+	if found, _ := h.q().SearchDirectory(ctx, "@acme.com", nil, nil); len(found) != 3 {
+		t.Fatalf("by email: %v", names(found)) // bob, carol, ada; never the caller
+	}
+	if found, _ := h.q().SearchDirectory(ctx, "design", nil, nil); !slices.Equal(names(found), []string{"GROUP:Design Team"}) {
+		t.Fatalf("groups are searchable too: %v", names(found))
+	}
+
+	// Too-short queries return nothing (no browsing the directory by accident).
+	if found, err := h.q().SearchDirectory(ctx, "b", nil, nil); err != nil || len(found) != 0 {
+		t.Fatalf("short query: %v %v", found, err)
+	}
+	if found, _ := h.q().SearchDirectory(ctx, "@acme.com", ptr(2), nil); len(found) != 2 {
+		t.Fatalf("limit: %d", len(found))
+	}
+
+	// The picker skips people who already have access, and the owner.
+	if _, err := h.m().ShareItem(ctx, ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "VIEWER"}); err != nil {
+		t.Fatal(err)
+	}
+	found, _ = h.q().SearchDirectory(ctx, "@acme.com", nil, &h.docs)
+	if slices.Contains(names(found), "USER:bob") || len(found) != 2 {
+		t.Fatalf("exclusion: %v", names(found))
+	}
+
+	// Other tenants are not searchable, and signed-out callers cannot search.
+	if _, err := h.q().SearchDirectory(anonymous(), "bob", nil, nil); !errors.Is(err, actor.ErrUnauthenticated) {
+		t.Fatalf("signed out: %v", err)
+	}
 }

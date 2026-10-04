@@ -2,6 +2,7 @@ package fsops_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"platrium/internal/authz"
@@ -79,7 +80,6 @@ func TestCreateDriveOwnership(t *testing.T) {
 
 	create := func(p fsops.CreateDriveParams) error {
 		p.TenantID = w.tenantID
-		p.Name = "x"
 		return e.db.WithTx(ctx, func(tx *ent.Tx) error { _, err := e.fs.CreateDriveTx(ctx, tx, p); return err })
 	}
 	cases := []struct {
@@ -87,16 +87,77 @@ func TestCreateDriveOwnership(t *testing.T) {
 		p    fsops.CreateDriveParams
 		ok   bool
 	}{
-		{"tenant-owned shared drive", fsops.CreateDriveParams{OwnerType: fsops.DriveOwnedByTenant, Type: fsops.DriveTypeShared}, true},
-		{"tenant-owned with an owner user", fsops.CreateDriveParams{OwnerType: fsops.DriveOwnedByTenant, OwnerID: w.userID, Type: fsops.DriveTypeShared}, false},
-		{"tenant-owned private drive", fsops.CreateDriveParams{OwnerType: fsops.DriveOwnedByTenant, Type: fsops.DriveTypePrivate}, false},
-		{"user-owned without an owner", fsops.CreateDriveParams{OwnerType: fsops.DriveOwnedByUser, Type: fsops.DriveTypePrivate}, false},
-		{"unknown owner type", fsops.CreateDriveParams{OwnerType: "ROBOT", Type: fsops.DriveTypeShared}, false},
-		{"user-owned shared drive", fsops.CreateDriveParams{OwnerID: w.userID, Type: fsops.DriveTypeShared}, true},
+		{"shared drive", fsops.CreateDriveParams{Name: "Company", Type: fsops.DriveTypeShared}, true},
+		{"shared drive with an owner", fsops.CreateDriveParams{Name: "x", OwnerID: w.userID, Type: fsops.DriveTypeShared}, false},
+		{"private drive without an owner", fsops.CreateDriveParams{Name: "x", Type: fsops.DriveTypePrivate}, false},
+		{"private drive with an owner", fsops.CreateDriveParams{Name: "x", OwnerID: w.userID, Type: fsops.DriveTypePrivate}, true},
+		{"unknown type", fsops.CreateDriveParams{Name: "x", Type: "ROBOT"}, false},
+		{"blank name", fsops.CreateDriveParams{Name: "   ", Type: fsops.DriveTypeShared}, false},
 	}
 	for _, c := range cases {
 		if err := create(c.p); (err == nil) != c.ok {
 			t.Errorf("%s: err = %v, want ok = %v", c.name, err, c.ok)
 		}
+	}
+}
+
+// Shared-drive names are unique within a tenant, ignoring case and surrounding
+// spaces. Private drives are not named uniquely (everyone has a "My Drive").
+func TestSharedDriveNamesAreUnique(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	a := e.newWorld(t, "acme")
+	b := e.newWorld(t, "other")
+
+	create := func(tenantID, name string) error {
+		_, err := e.fs.CreateDrive(ctx, fsops.CreateDriveParams{TenantID: tenantID, Name: name, Type: fsops.DriveTypeShared})
+		return err
+	}
+	if err := create(a.tenantID, "Finance"); err != nil {
+		t.Fatal(err)
+	}
+	for _, dup := range []string{"Finance", "finance", "FINANCE", "  Finance "} {
+		if err := create(a.tenantID, dup); !errors.Is(err, fsops.ErrConflict) {
+			t.Errorf("%q must conflict: %v", dup, err)
+		}
+	}
+	if err := create(a.tenantID, "Finance 2"); err != nil {
+		t.Errorf("a different name is fine: %v", err)
+	}
+	if err := create(b.tenantID, "Finance"); err != nil {
+		t.Errorf("another tenant may reuse the name: %v", err)
+	}
+	// Private drives may share a name.
+	for i := 0; i < 2; i++ {
+		if _, err := e.fs.CreateDrive(ctx, fsops.CreateDriveParams{TenantID: a.tenantID, OwnerID: a.userID, Name: "My Drive", Type: fsops.DriveTypePrivate}); err != nil {
+			t.Errorf("private drive %d: %v", i, err)
+		}
+	}
+}
+
+func TestDiscardNewDrive(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	w := e.newWorld(t, "acme")
+
+	fresh, err := e.fs.CreateDrive(ctx, fsops.CreateDriveParams{TenantID: w.tenantID, Name: "Scratch", Type: fsops.DriveTypeShared})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.fs.DiscardNewDrive(ctx, w.tenantID, fresh.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.db.Drive.Query().Count(ctx); n != 1 { // only the seeded private drive remains
+		t.Fatalf("drives left: %d", n)
+	}
+	// The name is free again.
+	if _, err := e.fs.CreateDrive(ctx, fsops.CreateDriveParams{TenantID: w.tenantID, Name: "Scratch", Type: fsops.DriveTypeShared}); err != nil {
+		t.Fatalf("name must be reusable: %v", err)
+	}
+
+	// A drive with content is never discarded.
+	e.folder(t, w, w.drive.ID, "x")
+	if err := e.fs.DiscardNewDrive(ctx, w.tenantID, w.drive.ID); !errors.Is(err, fsops.ErrInvalid) {
+		t.Fatalf("a non-empty drive must be refused: %v", err)
 	}
 }

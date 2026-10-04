@@ -83,3 +83,61 @@ func TestUserGetByIDs(t *testing.T) {
 		t.Errorf("empty input: %v %v", got, err)
 	}
 }
+
+func TestUserSearch(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	acme, acmeIdp := e.tenantWithIdp(t, "acme", false)
+	other, otherIdp := e.tenantWithIdp(t, "other", false)
+
+	err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
+		for _, u := range []identity.CreateUserParams{
+			{TenantID: acme.ID, IdpID: acmeIdp.ID, ExternalID: "1", Email: "ana@acme.com", DisplayName: "Ana Alvarez"},
+			{TenantID: acme.ID, IdpID: acmeIdp.ID, ExternalID: "2", Email: "ben@acme.com", DisplayName: "Ben Anders"},
+			{TenantID: acme.ID, IdpID: acmeIdp.ID, ExternalID: "3", Email: "cy@acme.com", DisplayName: "Cy"},
+			{TenantID: other.ID, IdpID: otherIdp.ID, ExternalID: "4", Email: "ana@other.com", DisplayName: "Ana Other"},
+		} {
+			if _, err := e.users.CreateUserTx(ctx, tx, u); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	names := func(q string, limit int) []string {
+		got, err := e.users.Search(ctx, acme.ID, q, limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, u := range got {
+			out = append(out, u.DisplayName)
+		}
+		return out
+	}
+	if got := names("AN", 10); len(got) != 2 || got[0] != "Ana Alvarez" || got[1] != "Ben Anders" {
+		t.Errorf("name match, case-insensitive, ordered: %v", got)
+	}
+	if got := names("cy@acme", 10); len(got) != 1 || got[0] != "Cy" {
+		t.Errorf("email match: %v", got)
+	}
+	if got := names("ana", 1); len(got) != 1 {
+		t.Errorf("limit: %v", got)
+	}
+	if got := names("other", 10); len(got) != 0 {
+		t.Errorf("another tenant's people are invisible: %v", got)
+	}
+	if got := names("  ", 10); len(got) != 0 {
+		t.Errorf("a blank query finds nothing: %v", got)
+	}
+	// Wildcards in a query are literal, never a way to list everyone.
+	if got := names("%", 10); len(got) != 0 {
+		t.Errorf("percent sign must not match everything: %v", got)
+	}
+	if got := names("_", 10); len(got) != 0 {
+		t.Errorf("underscore must not match everything: %v", got)
+	}
+}

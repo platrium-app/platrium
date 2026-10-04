@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"platrium/internal/infra/db"
@@ -82,6 +83,27 @@ func (r *GroupStore) GetByIDs(ctx context.Context, tenantID string, ids []string
 			Name:       g.Name,
 			CreatedAt:  g.CreatedAt,
 		}
+	}
+	return out, nil
+}
+
+// Search finds groups in a tenant by name, case-insensitively, ordered by name.
+func (r *GroupStore) Search(ctx context.Context, tenantID, query string, limit int) ([]*Group, error) {
+	query = strings.TrimSpace(query)
+	if query == "" || limit <= 0 {
+		return nil, nil
+	}
+	rows, err := r.db.Group.Query().
+		Where(group.TenantID(tenantID), group.NameContainsFold(query)).
+		Order(group.ByName(), group.ByID()).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search groups: %w", err)
+	}
+	out := make([]*Group, 0, len(rows))
+	for _, g := range rows {
+		out = append(out, &Group{ID: g.ID, TenantID: g.TenantID, IdpID: g.IdpID, ExternalID: g.ExternalID, Name: g.Name, CreatedAt: g.CreatedAt})
 	}
 	return out, nil
 }

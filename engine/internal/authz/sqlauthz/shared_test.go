@@ -19,7 +19,7 @@ func TestSharedWithMe(t *testing.T) {
 	pb := e.principal(t, s.tn, s.bob)
 
 	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
-	e.share(t, s.pa, s.private, groupSubject(team), authz.RoleEditor)
+	e.share(t, s.pa, s.private, groupSubject(team), authz.RoleFullEditor)
 	e.share(t, s.pa, s.notes, tenantSubject(s.tn), authz.RoleViewer) // org-wide: not listed
 	e.share(t, s.pa, s.specs, publicSubject(), authz.RoleViewer)     // public: not listed
 
@@ -31,7 +31,7 @@ func TestSharedWithMe(t *testing.T) {
 	for _, it := range got {
 		roles[it.ItemID] = it.Role
 	}
-	if len(got) != 2 || roles[s.docs] != authz.RoleViewer || roles[s.private] != authz.RoleEditor {
+	if len(got) != 2 || roles[s.docs] != authz.RoleViewer || roles[s.private] != authz.RoleFullEditor {
 		t.Fatalf("shared with bob = %+v", got)
 	}
 
@@ -53,9 +53,9 @@ func TestSharedWithMeMergesAndFilters(t *testing.T) {
 
 	// The same item shared two ways appears once, with the union.
 	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
-	e.share(t, s.pa, s.docs, groupSubject(team), authz.RoleContributor)
+	e.share(t, s.pa, s.docs, groupSubject(team), authz.RoleRestrictedEditor)
 	got, _ := e.az.SharedWithMe(ctx, pb, 50, "")
-	if len(got) != 1 || !got[0].Caps.Has(authz.CapCreate) || got[0].Role != authz.RoleContributor {
+	if len(got) != 1 || !got[0].Caps.Has(authz.CapCreate) || got[0].Role != authz.RoleRestrictedEditor {
 		t.Fatalf("merged entry = %+v", got)
 	}
 

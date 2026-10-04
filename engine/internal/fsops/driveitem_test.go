@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"platrium/internal/authz"
 	"platrium/internal/fsops"
 )
 
@@ -197,8 +198,14 @@ func TestMoveItemAcrossDrivesIsRejected(t *testing.T) {
 	w := e.newWorld(t, "acme")
 	f := e.folder(t, w, w.drive.ID, "a")
 
-	second, err := e.fs.CreateDrive(ctx, fsops.CreateDriveParams{TenantID: w.tenantID, OwnerID: w.userID, Name: "Team", Type: fsops.DriveTypeShared})
+	second, err := e.fs.CreateDrive(ctx, fsops.CreateDriveParams{TenantID: w.tenantID, Name: "Team", Type: fsops.DriveTypeShared})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Give alice access to the second drive so the refusal is about drives, not visibility.
+	adminCaps, _ := authz.RoleDriveAdmin.Caps()
+	if err := e.db.Grant.Create().SetTenantID(w.tenantID).SetDriveID(second.ID).SetResourceID(second.ID).
+		SetSubjectType("USER").SetSubjectID(w.userID).SetRole("DRIVE_ADMIN").SetCaps(int64(adminCaps)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.fs.MoveItem(ctx, w.p, f.ID, second.ID); !errors.Is(err, fsops.ErrInvalid) {

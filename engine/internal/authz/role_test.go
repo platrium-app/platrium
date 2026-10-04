@@ -6,12 +6,11 @@ import "testing"
 // up in stored snapshots and in documentation.
 func TestBuiltinRoleCapabilities(t *testing.T) {
 	want := map[Role]uint64{
-		RoleViewer:         7,
-		RoleCommenter:      15,
-		RoleContributor:    783,
-		RoleContentManager: 6927,
-		RoleEditor:         72463,
-		RoleManager:        474895,
+		RoleViewer:           7,
+		RoleCommenter:        15,
+		RoleRestrictedEditor: 783,
+		RoleFullEditor:       6927,
+		RoleDriveAdmin:       474895,
 	}
 	for role, v := range want {
 		c, ok := role.Caps()
@@ -38,42 +37,41 @@ func TestRolesAreOrdered(t *testing.T) {
 }
 
 func TestGrantable(t *testing.T) {
-	for _, r := range []Role{RoleViewer, RoleCommenter, RoleContributor, RoleContentManager, RoleEditor, RoleManager} {
+	for _, r := range []Role{RoleViewer, RoleCommenter, RoleRestrictedEditor, RoleFullEditor, RoleDriveAdmin} {
 		if !r.Grantable() {
 			t.Errorf("%s must be grantable", r)
 		}
 	}
-	for _, r := range []Role{RoleOwner, RoleCustom, "NOPE", ""} {
+	for _, r := range []Role{RoleOwner, RoleCustom, "NOPE", "EDITOR", "MANAGER", ""} {
 		if r.Grantable() {
 			t.Errorf("%s must not be grantable", r)
 		}
 	}
 }
 
-func TestRolesForContext(t *testing.T) {
-	item := RolesFor(ContextItemShare)
-	drive := RolesFor(ContextDriveMember)
-	wantItem := []Role{RoleViewer, RoleCommenter, RoleEditor, RoleManager}
-	wantDrive := []Role{RoleViewer, RoleCommenter, RoleContributor, RoleContentManager, RoleManager}
-	if len(item) != len(wantItem) || len(drive) != len(wantDrive) {
-		t.Fatalf("item = %v, drive = %v", item, drive)
+func TestRoleOptions(t *testing.T) {
+	want := []Role{RoleViewer, RoleCommenter, RoleRestrictedEditor, RoleFullEditor, RoleDriveAdmin}
+	labels := map[RoleContext][]string{
+		ContextItemShare:   {"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Admin"},
+		ContextDriveMember: {"Viewer", "Commenter", "Restricted Editor", "Full Editor", "Drive Admin"},
 	}
-	for i := range wantItem {
-		if item[i] != wantItem[i] {
-			t.Errorf("item roles = %v, want %v", item, wantItem)
+	for ctx, wantLabels := range labels {
+		got := RoleOptions(ctx)
+		if len(got) != len(want) {
+			t.Fatalf("context %d: %d options", ctx, len(got))
 		}
-	}
-	for i := range wantDrive {
-		if drive[i] != wantDrive[i] {
-			t.Errorf("drive roles = %v, want %v", drive, wantDrive)
+		for i, o := range got {
+			if o.Role != want[i] || o.Label != wantLabels[i] || o.Description == "" {
+				t.Errorf("context %d option %d = %+v", ctx, i, o)
+			}
+			if c, _ := o.Role.Caps(); o.Caps != c {
+				t.Errorf("%s: option capabilities do not match the role", o.Role)
+			}
 		}
-	}
-	if RolesFor(RoleContext(99)) != nil {
-		t.Error("an unknown context offers nothing")
 	}
 }
 
-// The ladder encodes the shared-drive behaviors people expect.
+// The ladder encodes the behaviors people expect from each role.
 func TestRoleBehaviors(t *testing.T) {
 	has := func(r Role, c Capability) bool { caps, _ := r.Caps(); return caps.Has(c) }
 	cases := []struct {
@@ -83,10 +81,9 @@ func TestRoleBehaviors(t *testing.T) {
 	}{
 		{RoleViewer, []Capability{CapList, CapView, CapDownload}, []Capability{CapComment, CapCreate, CapEdit}},
 		{RoleCommenter, []Capability{CapComment}, []Capability{CapCreate, CapEdit}},
-		{RoleContributor, []Capability{CapCreate, CapEdit}, []Capability{CapMove, CapTrash, CapDelete}},
-		{RoleContentManager, []Capability{CapMove, CapTrash}, []Capability{CapDelete, CapMoveOut, CapShare, CapManage}},
-		{RoleEditor, []Capability{CapMove, CapTrash, CapShare}, []Capability{CapDelete, CapMoveOut, CapManage}},
-		{RoleManager, []Capability{CapDelete, CapMoveOut, CapShare, CapManage, CapDeleteDrive}, nil},
+		{RoleRestrictedEditor, []Capability{CapCreate, CapEdit}, []Capability{CapMove, CapTrash, CapDelete}},
+		{RoleFullEditor, []Capability{CapMove, CapTrash}, []Capability{CapDelete, CapMoveOut, CapShare, CapManage}},
+		{RoleDriveAdmin, []Capability{CapDelete, CapMoveOut, CapShare, CapManage, CapDeleteDrive}, nil},
 	}
 	for _, c := range cases {
 		for _, k := range c.can {
@@ -119,7 +116,7 @@ func TestGrantCaps(t *testing.T) {
 func TestDescribe(t *testing.T) {
 	for _, d := range builtinRoles {
 		if d.role == RoleOwner {
-			continue // today identical to MANAGER; Describe labels it MANAGER
+			continue // today identical to DRIVE_ADMIN; Describe labels it DRIVE_ADMIN
 		}
 		role, nd := Describe(d.caps)
 		if role != d.role || nd {
@@ -130,9 +127,9 @@ func TestDescribe(t *testing.T) {
 	if role, nd := Describe(viewerNoDL); role != RoleViewer || !nd {
 		t.Errorf("viewer without download = %s, %v", role, nd)
 	}
-	editorNoDL, _ := GrantCaps(RoleEditor, true)
-	if role, nd := Describe(editorNoDL); role != RoleEditor || !nd {
-		t.Errorf("editor without download = %s, %v", role, nd)
+	editorNoDL, _ := GrantCaps(RoleFullEditor, true)
+	if role, nd := Describe(editorNoDL); role != RoleFullEditor || !nd {
+		t.Errorf("full editor without download = %s, %v", role, nd)
 	}
 	if role, _ := Describe(CapView | CapDelete); role != RoleCustom {
 		t.Errorf("odd combination must be custom, got %s", role)
@@ -143,13 +140,15 @@ func TestDescribe(t *testing.T) {
 }
 
 func TestParseRole(t *testing.T) {
-	if r, ok := ParseRole("EDITOR"); !ok || r != RoleEditor {
-		t.Error("EDITOR")
+	if r, ok := ParseRole("FULL_EDITOR"); !ok || r != RoleFullEditor {
+		t.Error("FULL_EDITOR")
 	}
-	if _, ok := ParseRole("editor"); ok {
+	if _, ok := ParseRole("full_editor"); ok {
 		t.Error("role names are case-sensitive")
 	}
-	if _, ok := ParseRole("NOPE"); ok {
-		t.Error("unknown role")
+	for _, old := range []string{"EDITOR", "MANAGER", "CONTRIBUTOR", "CONTENT_MANAGER", "NOPE"} {
+		if _, ok := ParseRole(old); ok {
+			t.Errorf("%s is not a role any more", old)
+		}
 	}
 }

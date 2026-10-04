@@ -94,8 +94,8 @@ const (
 
 // GeneralAccessInput sets an item's general access. Role is required unless
 // the level is AccessRestricted. Organization-wide access may use Viewer,
-// Commenter or Editor; public access may use Viewer or Commenter, because
-// anonymous visitors can never write.
+// Commenter, Restricted Editor or Full Editor; public access may use Viewer or
+// Commenter, because anonymous visitors can never write.
 type GeneralAccessInput struct {
 	ItemID     string
 	Level      GeneralAccessLevel
@@ -128,4 +128,7 @@ type ItemAccess struct {
 	ItemID              string
 	InheritsPermissions bool
 	Grants              []Grant
+	// OwnerUserID is the user who owns the item's drive. Empty for shared
+	// drives, which belong to the tenant.
+	OwnerUserID string
 }

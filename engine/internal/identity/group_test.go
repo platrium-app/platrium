@@ -55,3 +55,38 @@ func TestTenantGetTenant(t *testing.T) {
 		t.Fatal("expected not found")
 	}
 }
+
+func TestGroupSearch(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	acme, acmeIdp := e.tenantWithIdp(t, "acme", false)
+	other, otherIdp := e.tenantWithIdp(t, "other", false)
+	groups := identity.NewGroupStore(e.db)
+
+	err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
+		for _, g := range []struct{ tenant, idp, ext, name string }{
+			{acme.ID, acmeIdp.ID, "1", "Design Team"},
+			{acme.ID, acmeIdp.ID, "2", "Engineering"},
+			{other.ID, otherIdp.ID, "3", "Design Other"},
+		} {
+			if _, err := groups.CreateGroupTx(ctx, tx, g.tenant, g.idp, g.ext, g.name); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := groups.Search(ctx, acme.ID, "DESIGN", 10)
+	if err != nil || len(got) != 1 || got[0].Name != "Design Team" {
+		t.Fatalf("search: %+v %v", got, err)
+	}
+	if got, _ := groups.Search(ctx, acme.ID, "", 10); len(got) != 0 {
+		t.Errorf("blank query: %v", got)
+	}
+	if got, _ := groups.Search(ctx, acme.ID, "%", 10); len(got) != 0 {
+		t.Errorf("wildcards are literal: %v", got)
+	}
+}

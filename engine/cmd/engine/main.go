@@ -75,6 +75,7 @@ func main() {
 	// Setup Identity Domain
 	tenantStore := identity.NewTenantStore(database)
 	groupStore := identity.NewGroupStore(database)
+	policyStore := identity.NewPolicyStore(database)
 	userStore := identity.NewUserStore(database)
 
 	// Setup Auth Domain
@@ -124,6 +125,7 @@ func main() {
 	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
 		FSOps:       fsOps,
 		Authz:       authorizer,
+		DriveOrch:   orchestrator.NewDriveOrchestrator(database, fsOps, authorizer, userStore, policyStore),
 		Broker:      notifBroker,
 		SubsManager: gqlTransport,
 		TenantStore: tenantStore,

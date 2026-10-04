@@ -1,0 +1,16 @@
+# Shared drives. A shared drive belongs to the organization, not to a person.
+# People get access to it through the sharing API (shareItem on the drive's ID).
+
+extend type Query {
+  "Whether the signed-in user may create shared drives."
+  canCreateSharedDrive: Boolean!
+  "The groups whose members may create shared drives. Organization admins only."
+  sharedDriveCreators: [DirectorySubject!]!
+}
+
+extend type Mutation {
+  "Create a shared drive. The creator becomes its Drive Admin."
+  createSharedDrive(name: String!): Folder!
+  "Replace the groups allowed to create shared drives. Organization admins only."
+  setSharedDriveCreators(groupIds: [ID!]!): [DirectorySubject!]!
+}
