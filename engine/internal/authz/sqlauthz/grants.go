@@ -246,7 +246,7 @@ func (a *Authorizer) SetInheritance(ctx context.Context, actor authz.Principal, 
 		if err != nil {
 			return err
 		}
-		if d.OwnerID == actor.UserID {
+		if d.OwnerID != nil && *d.OwnerID == actor.UserID {
 			return nil
 		}
 		managerCaps, _ := authz.RoleManager.Caps()

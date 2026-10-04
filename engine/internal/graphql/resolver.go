@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"platrium/internal/auth"
+	"platrium/internal/authz"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 	"platrium/internal/notifications"
@@ -18,6 +19,7 @@ type SubscriptionManager interface {
 
 type Resolver struct {
 	FSOps       *fsops.FSOps
+	Authz       authz.Authorizer
 	Broker      *notifications.Broker
 	SubsManager SubscriptionManager
 	TenantStore *identity.TenantStore

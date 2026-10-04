@@ -22,14 +22,21 @@ import (
 type Capability uint64
 
 const (
-	CapList     Capability = 1 << 0  // see that an item exists; list a folder's children
-	CapView     Capability = 1 << 1  // read metadata and preview
-	CapDownload Capability = 1 << 2  // download or copy out the content
-	CapCreate   Capability = 1 << 8  // upload or create inside a folder
-	CapEdit     Capability = 1 << 9  // rename, replace content
-	CapDelete   Capability = 1 << 10 // delete
-	CapShare    Capability = 1 << 16 // grant access to others, up to your own capabilities
-	CapManage   Capability = 1 << 17 // break inheritance, manage links and settings
+	CapList     Capability = 1 << 0 // see that an item exists; list a folder's children
+	CapView     Capability = 1 << 1 // read metadata and preview
+	CapDownload Capability = 1 << 2 // download or copy out the content
+	CapComment  Capability = 1 << 3 // comment (takes effect once comments exist)
+
+	CapCreate  Capability = 1 << 8  // upload or create inside a folder
+	CapEdit    Capability = 1 << 9  // rename, replace content
+	CapDelete  Capability = 1 << 10 // permanently delete
+	CapMove    Capability = 1 << 11 // move or reorganize within the drive
+	CapTrash   Capability = 1 << 12 // send to trash and restore
+	CapMoveOut Capability = 1 << 13 // move or copy items out of the drive
+
+	CapShare       Capability = 1 << 16 // grant access to others, up to your own capabilities
+	CapManage      Capability = 1 << 17 // break inheritance, manage links and settings
+	CapDeleteDrive Capability = 1 << 18 // delete the whole drive (checked on its root)
 )
 
 // capDef describes one registered capability.
@@ -45,11 +52,16 @@ var registry = []capDef{
 	{CapList, "LIST", 0},
 	{CapView, "VIEW", CapList},
 	{CapDownload, "DOWNLOAD", CapView},
+	{CapComment, "COMMENT", CapView},
 	{CapCreate, "CREATE", CapView},
 	{CapEdit, "EDIT", CapView},
-	{CapDelete, "DELETE", CapView},
+	{CapDelete, "DELETE", CapTrash},
+	{CapMove, "MOVE", CapView},
+	{CapTrash, "TRASH", CapView},
+	{CapMoveOut, "MOVE_OUT", CapMove},
 	{CapShare, "SHARE", CapView},
 	{CapManage, "MANAGE", CapShare},
+	{CapDeleteDrive, "DELETE_DRIVE", CapDelete},
 }
 
 // KnownMask is the union of every registered capability.

@@ -68,7 +68,11 @@ func (User) Edges() []ent.Edge {
 			Field("idp_id").Unique().Required().Immutable().
 			Annotations(entsql.OnDelete(entsql.Restrict)),
 		edge.To("devices", Device.Type),
-		edge.To("owned_drives", Drive.Type),
+		// owner_id is nullable (tenant-owned drives), so the foreign key must be
+		// declared here with an explicit action: the default SET NULL would also
+		// forbid the owner_id CHECK on MySQL and MariaDB.
+		edge.To("owned_drives", Drive.Type).
+			Annotations(entsql.OnDelete(entsql.Restrict)),
 		edge.To("credential", LocalCredential.Type).Unique(),
 	}
 }

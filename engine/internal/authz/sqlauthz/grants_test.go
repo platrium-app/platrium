@@ -16,10 +16,10 @@ func TestGrantRequiresShare(t *testing.T) {
 	s := newScene(t, e)
 	in := authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.carol), Role: authz.RoleViewer}
 
-	// Bob can see docs but is only an editor: no SHARE.
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleEditor)
+	// Bob can see docs but is only a content manager: no SHARE.
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleContentManager)
 	if _, err := e.az.Grant(ctx, s.pb, in); !errors.Is(err, authz.ErrForbidden) {
-		t.Errorf("an editor cannot share: %v", err)
+		t.Errorf("a content manager cannot share: %v", err)
 	}
 	// Carol cannot even see the item: it does not exist as far as she knows.
 	if _, err := e.az.Grant(ctx, s.pc, in); !errors.Is(err, authz.ErrNotFound) {
@@ -181,7 +181,7 @@ func TestSetInheritance(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
-	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleEditor)    // cannot manage
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleEditor)    // can share, cannot manage
 	e.share(t, s.pa, s.docs, userSubject(s.carol), authz.RoleManager) // can manage
 
 	if err := e.az.SetInheritance(ctx, s.pb, s.specs, false); !errors.Is(err, authz.ErrForbidden) {

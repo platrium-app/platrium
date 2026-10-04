@@ -38,7 +38,7 @@ func (a *Authorizer) SharedWithMe(ctx context.Context, p authz.Principal, limit 
 		grant.TenantID(p.TenantID),
 		directlyShared(p),
 		notExpired(time.Now().UTC()),
-		grant.HasDriveWith(drive.OwnerIDNEQ(p.UserID)),
+		grant.HasDriveWith(drive.Or(drive.OwnerIDIsNil(), drive.OwnerIDNEQ(p.UserID))),
 	}
 
 	q := a.db.Grant.Query().Where(base...)

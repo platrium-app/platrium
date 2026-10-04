@@ -9,6 +9,7 @@ import (
 
 	nanoid "github.com/matoous/go-nanoid/v2"
 
+	"platrium/internal/authz"
 	"platrium/internal/infra/db"
 	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/driveitem"
@@ -18,6 +19,7 @@ import (
 type FSOps struct {
 	db           *db.DB
 	manifestRepo *ManifestRepo
+	authz        authz.Authorizer
 }
 
 // File represents a file in a drive's tree.
@@ -34,7 +36,7 @@ type File struct {
 
 // CreateFileParams encapsulates the input fields required to create a new File node.
 type CreateFileParams struct {
-	TenantID  string
+	Actor     authz.Principal
 	ParentID  string
 	Name      string
 	Size      int64
@@ -42,8 +44,8 @@ type CreateFileParams struct {
 	HexHashes []string
 }
 
-func NewFSOps(d *db.DB, m *ManifestRepo) *FSOps {
-	return &FSOps{db: d, manifestRepo: m}
+func NewFSOps(d *db.DB, m *ManifestRepo, az authz.Authorizer) *FSOps {
+	return &FSOps{db: d, manifestRepo: m, authz: az}
 }
 
 // processHashes decodes hex strings and executes the Hybrid Manifest strategy.
@@ -74,9 +76,14 @@ func (f *FSOps) processHashes(ctx context.Context, fileId string, version string
 	return inlineChunks, nil
 }
 
-// CreateFile adds a file under a parent folder, verifying inside one transaction
-// that the parent exists in the tenant and is a folder.
+// CreateFile adds a file under a parent folder. The actor needs CREATE on the
+// parent, and the parent must exist in their tenant and be a folder.
 func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string, error) {
+	// Authorize before anything is written, including the KV manifest.
+	if err := f.Require(ctx, params.Actor, params.ParentID, authz.CapCreate); err != nil {
+		return "", err
+	}
+
 	fileId := nanoid.Must()
 	version := "1" // TODO: Change to NanoID or smth else, Initial creation is always v1
 
@@ -88,7 +95,7 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 
 	err = f.db.WithTx(ctx, func(tx *ent.Tx) error {
 		parent, err := tx.DriveItem.Query().
-			Where(driveitem.ID(params.ParentID), driveitem.TenantID(params.TenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
+			Where(driveitem.ID(params.ParentID), driveitem.TenantID(params.Actor.TenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
 			Only(ctx)
 		if err != nil {
 			if ent.IsNotFound(err) {
@@ -99,7 +106,7 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 
 		create := tx.DriveItem.Create().
 			SetID(fileId).
-			SetTenantID(params.TenantID).
+			SetTenantID(params.Actor.TenantID).
 			SetDriveID(parent.DriveID).
 			SetParentID(parent.ID).
 			SetKind(driveitem.KindFILE).
@@ -138,10 +145,23 @@ func fileFromEnt(i *ent.DriveItem) *File {
 	return file
 }
 
-// GetFile retrieves the full file metadata, ensuring tenant isolation.
-func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, error) {
+// GetFile retrieves file metadata. Requires VIEW.
+func (f *FSOps) GetFile(ctx context.Context, p authz.Principal, fileId string) (*File, error) {
+	return f.getFile(ctx, p, fileId, authz.CapView)
+}
+
+// GetFileForDownload retrieves a file and the chunk list needed to download
+// it. Requires DOWNLOAD, which a view-only share does not carry.
+func (f *FSOps) GetFileForDownload(ctx context.Context, p authz.Principal, fileId string) (*File, error) {
+	return f.getFile(ctx, p, fileId, authz.CapDownload)
+}
+
+func (f *FSOps) getFile(ctx context.Context, p authz.Principal, fileId string, need authz.Capability) (*File, error) {
+	if err := f.Require(ctx, p, fileId, need); err != nil {
+		return nil, err
+	}
 	i, err := f.db.DriveItem.Query().
-		Where(driveitem.ID(fileId), driveitem.TenantID(tenantId), driveitem.KindEQ(driveitem.KindFILE)).
+		Where(driveitem.ID(fileId), driveitem.TenantID(p.TenantID), driveitem.KindEQ(driveitem.KindFILE)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -152,14 +172,27 @@ func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, er
 	return fileFromEnt(i), nil
 }
 
-// CopyFile copies a file to a new parent folder.
-func (f *FSOps) CopyFile(ctx context.Context, tenantID string, fileID string, newParentID string, newName string) (*File, error) {
-	// TODO: Stub permissions check (CheckPermissions)
+// CopyFile copies a file to a new parent folder. Requires DOWNLOAD on the
+// source (copying exposes the content) and CREATE on the destination.
+func (f *FSOps) CopyFile(ctx context.Context, p authz.Principal, fileID string, newParentID string, newName string) (*File, error) {
+	if err := requireActor(p); err != nil {
+		return nil, err
+	}
+	caps, err := f.authz.CapsMany(ctx, p, []string{fileID, newParentID})
+	if err != nil {
+		return nil, err
+	}
+	if err := denyUnless(caps[fileID], authz.CapDownload, "source file"); err != nil {
+		return nil, err
+	}
+	if err := denyUnless(caps[newParentID], authz.CapCreate, "destination folder"); err != nil {
+		return nil, err
+	}
 
 	var copied *ent.DriveItem
-	err := f.db.WithTx(ctx, func(tx *ent.Tx) error {
+	err = f.db.WithTx(ctx, func(tx *ent.Tx) error {
 		src, err := tx.DriveItem.Query().
-			Where(driveitem.ID(fileID), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFILE)).
+			Where(driveitem.ID(fileID), driveitem.TenantID(p.TenantID), driveitem.KindEQ(driveitem.KindFILE)).
 			Only(ctx)
 		if err != nil {
 			if ent.IsNotFound(err) {
@@ -168,7 +201,7 @@ func (f *FSOps) CopyFile(ctx context.Context, tenantID string, fileID string, ne
 			return err
 		}
 		dest, err := tx.DriveItem.Query().
-			Where(driveitem.ID(newParentID), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
+			Where(driveitem.ID(newParentID), driveitem.TenantID(p.TenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
 			Only(ctx)
 		if err != nil {
 			if ent.IsNotFound(err) {
@@ -183,7 +216,7 @@ func (f *FSOps) CopyFile(ctx context.Context, tenantID string, fileID string, ne
 		}
 
 		create := tx.DriveItem.Create().
-			SetTenantID(tenantID).
+			SetTenantID(p.TenantID).
 			SetDriveID(dest.DriveID).
 			SetParentID(dest.ID).
 			SetKind(driveitem.KindFILE).

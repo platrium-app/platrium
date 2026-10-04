@@ -11,6 +11,7 @@ import (
 	"platrium/internal/auth"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
+	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/fsops"
 	"platrium/internal/graphql"
 	"platrium/internal/identity"
@@ -68,7 +69,8 @@ func main() {
 	})
 
 	manifestRepo := fsops.NewManifestRepo(kvStore)
-	fsOps := fsops.NewFSOps(database, manifestRepo)
+	authorizer := sqlauthz.New(database)
+	fsOps := fsops.NewFSOps(database, manifestRepo, authorizer)
 
 	// Setup Identity Domain
 	tenantStore := identity.NewTenantStore(database)
@@ -101,7 +103,7 @@ func main() {
 	gqlTransport := transports.NewGraphQLTransport()
 	notifBroker := notifications.NewBroker(gqlTransport)
 
-	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager)
+	restAPI := restapi.NewRestAPI(fsOps, authorizer, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager)
 	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
@@ -120,6 +122,7 @@ func main() {
 	// Setup GraphQL
 	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
 		FSOps:       fsOps,
+		Authz:       authorizer,
 		Broker:      notifBroker,
 		SubsManager: gqlTransport,
 		TenantStore: tenantStore,

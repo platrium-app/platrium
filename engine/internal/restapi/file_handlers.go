@@ -11,7 +11,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	nanoid "github.com/matoous/go-nanoid/v2"
 
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/session"
+	"platrium/internal/authz"
 	"platrium/internal/fsops"
 	"platrium/internal/notifications/events"
 )
@@ -23,6 +25,9 @@ type UploadSessionPassportClaims struct {
 	FileSize       int64  `json:"file_size"`
 	MimeType       string `json:"mime_type"`
 	TenantID       string `json:"tenant_id"`
+	// UserID is who opened the upload. The commit step re-authorizes as this
+	// user, so a passport can never write somewhere its owner could not.
+	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -34,7 +39,7 @@ type DownloadSessionPassportClaims struct {
 }
 
 // GenerateUploadSessionPassport issues a cryptographically signed JWT passport for the upload session.
-func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, filename string, fileSize int64, mimeType string, tenantID string) (string, error) {
+func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, filename string, fileSize int64, mimeType string, tenantID, userID string) (string, error) {
 	claims := UploadSessionPassportClaims{
 		SessionID:      sessionID,
 		ParentFolderID: parentFolderID,
@@ -42,6 +47,7 @@ func (api *RestAPI) GenerateUploadSessionPassport(sessionID, parentFolderID, fil
 		FileSize:       fileSize,
 		MimeType:       mimeType,
 		TenantID:       tenantID,
+		UserID:         userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -128,8 +134,16 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 		return UploadSessionInitialize500JSONResponse{Debuginfo: "unauthorized: missing session"}, nil
 	}
 
-	tenantID := sess.TenantID
-	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, request.Body.MimeType, tenantID)
+	// Fail early: there is no point streaming chunks to a folder the user cannot write to.
+	principal, err := actor.Principal(ctx, api.Authz)
+	if err != nil {
+		return UploadSessionInitialize500JSONResponse{Debuginfo: "unauthorized"}, nil
+	}
+	if err := api.FSOps.Require(ctx, principal, request.Body.ParentId, authz.CapCreate); err != nil {
+		return UploadSessionInitialize500JSONResponse{Debuginfo: fmt.Sprintf("cannot upload here: %v", err)}, nil
+	}
+
+	token, err := api.GenerateUploadSessionPassport(sessionID, request.Body.ParentId, request.Body.FileName, request.Body.FileSize, request.Body.MimeType, sess.TenantID, sess.UserID)
 	if err != nil {
 		return UploadSessionInitialize500JSONResponse{Debuginfo: fmt.Sprintf("failed to generate session passport: %v", err)}, nil
 	}
@@ -241,9 +255,14 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 		hexHashes[i] = chunk.Hash
 	}
 
-	// 2. Commit file node and chunk manifest sequence to database / Manifest KV Store
+	// 2. Commit file node and chunk manifest sequence to database / Manifest KV Store,
+	// authorized as the user who opened the session, with their current access.
+	uploader, err := api.Authz.Principal(ctx, claims.TenantID, claims.UserID)
+	if err != nil {
+		return UploadSessionCommit500JSONResponse{Debuginfo: "unauthorized"}, nil
+	}
 	fileId, err := api.FSOps.CreateFile(ctx, fsops.CreateFileParams{
-		TenantID:  claims.TenantID,
+		Actor:     uploader,
 		ParentID:  claims.ParentFolderID,
 		Name:      claims.Filename,
 		Size:      claims.FileSize,
@@ -283,8 +302,12 @@ func (api *RestAPI) DownloadSessionInitialize(ctx context.Context, request Downl
 	}
 	fileID := request.Body.FileId
 
-	// 1. Fetch File Metadata from FSOps to verify permissions and get file info
-	fileNode, err := api.FSOps.GetFile(ctx, sessionInfo.TenantID, fileID)
+	// 1. Fetch File Metadata from FSOps, which verifies the user may download it
+	principal, err := api.Authz.Principal(ctx, sessionInfo.TenantID, sessionInfo.UserID)
+	if err != nil {
+		return DownloadSessionInitialize404JSONResponse{}, nil
+	}
+	fileNode, err := api.FSOps.GetFileForDownload(ctx, principal, fileID)
 	if err != nil {
 		// Log error internally, but return generic 404 to client
 		return DownloadSessionInitialize404JSONResponse{}, nil

@@ -15,11 +15,17 @@ func TestCapabilityBitsAreStable(t *testing.T) {
 		"LIST":     {CapList, 1},
 		"VIEW":     {CapView, 2},
 		"DOWNLOAD": {CapDownload, 4},
+		"COMMENT":  {CapComment, 8},
 		"CREATE":   {CapCreate, 256},
 		"EDIT":     {CapEdit, 512},
 		"DELETE":   {CapDelete, 1024},
+		"MOVE":     {CapMove, 2048},
+		"TRASH":    {CapTrash, 4096},
+		"MOVE_OUT": {CapMoveOut, 8192},
 		"SHARE":    {CapShare, 65536},
 		"MANAGE":   {CapManage, 131072},
+
+		"DELETE_DRIVE": {CapDeleteDrive, 262144},
 	}
 	for name, w := range want {
 		if uint64(w.got) != w.val {
@@ -80,6 +86,10 @@ func TestNormalizeAddsImpliedCapabilities(t *testing.T) {
 		{CapDownload, CapDownload | CapView | CapList},
 		{CapEdit, CapEdit | CapView | CapList},
 		{CapManage, CapManage | CapShare | CapView | CapList},
+		{CapComment, CapComment | CapView | CapList},
+		{CapMoveOut, CapMoveOut | CapMove | CapView | CapList},
+		{CapDelete, CapDelete | CapTrash | CapView | CapList},
+		{CapDeleteDrive, CapDeleteDrive | CapDelete | CapTrash | CapView | CapList},
 		{0, 0},
 	}
 	for _, c := range cases {

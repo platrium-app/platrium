@@ -2,19 +2,18 @@ package graphql
 
 import (
 	"context"
-	"fmt"
-	"platrium/internal/auth/session"
+	"platrium/internal/auth/actor"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 )
 
 // TODO: Too many helpers, organize this!
 func (r *Resolver) resolveItemPath(ctx context.Context, itemID string) ([]*Folder, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
-	folders, err := r.FSOps.GetItemPath(ctx, sess.TenantID, itemID)
+	folders, err := r.FSOps.GetItemPath(ctx, p, itemID)
 	if err != nil {
 		return nil, err
 	}

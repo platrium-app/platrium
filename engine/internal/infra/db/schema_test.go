@@ -216,3 +216,35 @@ func TestIDsAreCaseSensitive(t *testing.T) {
 		t.Fatalf("lookup by exact-case id: %+v %v", got, err)
 	}
 }
+
+// A drive is owned by a user or by its tenant, never both and never neither.
+func TestDriveOwnerMatchesOwnerType(t *testing.T) {
+	ctx := context.Background()
+	d := newTestDB(t)
+	f := seed(t, d, "acme")
+
+	create := func(ownerType string, owner *string) error {
+		c := d.Drive.Create().SetTenantID(f.tenant.ID).SetName("x").SetType("SHARED").SetOwnerType(ownerType)
+		if owner != nil {
+			c.SetOwnerID(*owner)
+		}
+		return c.Exec(ctx)
+	}
+	owner := f.user.ID
+
+	if err := create("USER", &owner); err != nil {
+		t.Errorf("user-owned: %v", err)
+	}
+	if err := create("TENANT", nil); err != nil {
+		t.Errorf("tenant-owned: %v", err)
+	}
+	if err := create("USER", nil); err == nil {
+		t.Error("a user-owned drive needs an owner")
+	}
+	if err := create("TENANT", &owner); err == nil {
+		t.Error("a tenant-owned drive has no owner user")
+	}
+	if err := create("ROBOT", nil); err == nil {
+		t.Error("unknown owner types are rejected")
+	}
+}

@@ -98,13 +98,17 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 			return fmt.Errorf("failed to load drives: %w", err)
 		}
 		for _, d := range drives {
-			owners[d.ID] = d.OwnerID
+			// Only user-owned drives have an implicit owner. A tenant-owned
+			// drive grants access through grants alone.
+			if d.OwnerID != nil {
+				owners[d.ID] = *d.OwnerID
+			}
 		}
 	}
 
 	pending := make([]string, 0, len(items))
 	for _, it := range items {
-		if !p.IsAnonymous() && owners[it.DriveID] == p.UserID {
+		if owner, ok := owners[it.DriveID]; ok && !p.IsAnonymous() && owner == p.UserID {
 			out[it.ID] = authz.AllCaps
 			continue
 		}

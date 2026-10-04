@@ -8,6 +8,7 @@ import (
 
 	"platrium/internal/auth"
 	"platrium/internal/auth/protocol/local"
+	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 	"platrium/internal/infra/db/dbtest"
@@ -21,7 +22,8 @@ func TestProvisionNewTenant(t *testing.T) {
 	tenants := identity.NewTenantStore(d)
 	users := identity.NewUserStore(d)
 	idps := auth.NewIdpStore(d)
-	fs := fsops.NewFSOps(d, nil)
+	az := sqlauthz.New(d)
+	fs := fsops.NewFSOps(d, nil, az)
 	to := orchestrator.NewTenantOrchestrator(d, tenants, idps, orchestrator.NewUserOrchestrator(users, fs), local.NewLocalUserStore(d))
 
 	tn, err := to.ProvisionNewTenant(ctx, "Home", "home", "admin@home.org", "pw-12345678", true)
@@ -44,7 +46,11 @@ func TestProvisionNewTenant(t *testing.T) {
 	if ok, err := local.NewLocalUserStore(d).VerifyPassword(ctx, user.ID, "pw-12345678"); err != nil || !ok {
 		t.Fatalf("the admin password must work immediately after provisioning: %v %v", ok, err)
 	}
-	drives, err := fs.GetUserDrives(ctx, tn.ID, user.ID)
+	principal, err := az.Principal(ctx, tn.ID, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drives, err := fs.GetUserDrives(ctx, principal)
 	if err != nil || len(drives) != 1 || drives[0].Type != fsops.DriveTypePrivate {
 		t.Fatalf("drives: %+v %v", drives, err)
 	}

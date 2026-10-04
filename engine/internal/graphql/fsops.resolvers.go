@@ -8,6 +8,7 @@ package graphql
 import (
 	"context"
 	"fmt"
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/session"
 	"platrium/internal/fsops"
 	"platrium/internal/notifications/events"
@@ -26,18 +27,18 @@ func (r *folderResolver) Path(ctx context.Context, obj *Folder) ([]*Folder, erro
 
 // CreateFolder is the resolver for the createFolder field.
 func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, name string) (*Folder, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	folder, err := r.FSOps.CreateFolder(ctx, sess.TenantID, parentID, name)
+	folder, err := r.FSOps.CreateFolder(ctx, p, parentID, name)
 	if err != nil {
 		return nil, err
 	}
 
 	res := mapFolderRecord(folder)
-	r.Broker.Publish(ctx, []string{sess.UserID}, events.DriveEvent{
+	r.Broker.Publish(ctx, []string{p.UserID}, events.DriveEvent{
 		EventType: events.EventUpdated,
 		ItemID:    res.ID,
 		ParentID:  res.ParentID,
@@ -49,18 +50,18 @@ func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, na
 
 // RenameItem is the resolver for the renameItem field.
 func (r *mutationResolver) RenameItem(ctx context.Context, id string, newName string) (DriveItem, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	item, err := r.FSOps.RenameItem(ctx, sess.TenantID, id, newName)
+	item, err := r.FSOps.RenameItem(ctx, p, id, newName)
 	if err != nil {
 		return nil, err
 	}
 
 	res := mapDriveItemRecord(item)
-	r.Broker.Publish(ctx, []string{sess.UserID}, events.DriveEvent{
+	r.Broker.Publish(ctx, []string{p.UserID}, events.DriveEvent{
 		EventType: events.EventUpdated,
 		ItemID:    id,
 		ParentID:  res.GetParentID(),
@@ -72,18 +73,18 @@ func (r *mutationResolver) RenameItem(ctx context.Context, id string, newName st
 
 // MoveItem is the resolver for the moveItem field.
 func (r *mutationResolver) MoveItem(ctx context.Context, id string, newParentID string) (DriveItem, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	item, err := r.FSOps.MoveItem(ctx, sess.TenantID, id, newParentID)
+	item, err := r.FSOps.MoveItem(ctx, p, id, newParentID)
 	if err != nil {
 		return nil, err
 	}
 
 	res := mapDriveItemRecord(item)
-	r.Broker.Publish(ctx, []string{sess.UserID}, events.DriveEvent{
+	r.Broker.Publish(ctx, []string{p.UserID}, events.DriveEvent{
 		EventType: events.EventUpdated,
 		ItemID:    id,
 		ParentID:  res.GetParentID(),
@@ -95,18 +96,18 @@ func (r *mutationResolver) MoveItem(ctx context.Context, id string, newParentID 
 
 // CopyFile is the resolver for the copyFile field.
 func (r *mutationResolver) CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*File, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	file, err := r.FSOps.CopyFile(ctx, sess.TenantID, fileID, newParentID, newName)
+	file, err := r.FSOps.CopyFile(ctx, p, fileID, newParentID, newName)
 	if err != nil {
 		return nil, err
 	}
 
 	res := mapFileRecord(file)
-	r.Broker.Publish(ctx, []string{sess.UserID}, events.DriveEvent{
+	r.Broker.Publish(ctx, []string{p.UserID}, events.DriveEvent{
 		EventType: events.EventUpdated,
 		ItemID:    res.ID,
 		ParentID:  &res.ParentID,
@@ -123,12 +124,12 @@ func (r *mutationResolver) DeleteItem(ctx context.Context, id string) (bool, err
 
 // Item is the resolver for the item field.
 func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	item, err := r.FSOps.GetItem(ctx, sess.TenantID, id)
+	item, err := r.FSOps.GetItem(ctx, p, id)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +139,9 @@ func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) 
 
 // FolderContents is the resolver for the folderContents field.
 func (r *queryResolver) FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
 	limit := 50
@@ -154,7 +155,7 @@ func (r *queryResolver) FolderContents(ctx context.Context, folderID string, fir
 	}
 
 	// We fetch limit + 1 to determine if there's a next page
-	items, err := r.FSOps.GetFolderContents(ctx, sess.TenantID, folderID, limit+1, afterCursor)
+	items, err := r.FSOps.GetFolderContents(ctx, p, folderID, limit+1, afterCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +179,7 @@ func (r *queryResolver) FolderContents(ctx context.Context, folderID string, fir
 		endCursor = &c
 	}
 
-	total, err := r.FSOps.GetFolderContentsTotalCount(ctx, sess.TenantID, folderID)
+	total, err := r.FSOps.GetFolderContentsTotalCount(ctx, p, folderID)
 	if err != nil {
 		return nil, err
 	}
@@ -195,12 +196,12 @@ func (r *queryResolver) FolderContents(ctx context.Context, folderID string, fir
 
 // Drives is the resolver for the drives field.
 func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized: missing session context")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	drives, err := r.FSOps.GetUserDrives(ctx, sess.TenantID, sess.UserID)
+	drives, err := r.FSOps.GetUserDrives(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -237,12 +238,12 @@ func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
 
 // GetChanges is the resolver for the getChanges field.
 func (r *queryResolver) GetChanges(ctx context.Context, folderID string, since time.Time) ([]*DriveItemEvent, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	changes, err := r.FSOps.GetFolderChanges(ctx, sess.TenantID, folderID, since)
+	changes, err := r.FSOps.GetFolderChanges(ctx, p, folderID, since)
 	if err != nil {
 		return nil, err
 	}

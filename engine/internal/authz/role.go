@@ -6,12 +6,14 @@ package authz
 type Role string
 
 const (
-	RoleViewer      Role = "VIEWER"      // list, view, download
-	RoleContributor Role = "CONTRIBUTOR" // + create
-	RoleEditor      Role = "EDITOR"      // + edit, delete
-	RoleManager     Role = "MANAGER"     // + share, manage
-	RoleOwner       Role = "OWNER"       // everything; implicit for the drive owner, not grantable
-	RoleCustom      Role = "CUSTOM"      // capabilities that match no built-in role
+	RoleViewer         Role = "VIEWER"          // list, view, download
+	RoleCommenter      Role = "COMMENTER"       // + comment
+	RoleContributor    Role = "CONTRIBUTOR"     // + create, edit
+	RoleContentManager Role = "CONTENT_MANAGER" // + move, trash
+	RoleEditor         Role = "EDITOR"          // + share (single-item sharing's "can edit")
+	RoleManager        Role = "MANAGER"         // + delete, move out, manage, delete the drive
+	RoleOwner          Role = "OWNER"           // everything; implicit for the drive owner, not grantable
+	RoleCustom         Role = "CUSTOM"          // capabilities that match no built-in role
 )
 
 type roleDef struct {
@@ -19,13 +21,48 @@ type roleDef struct {
 	caps Capability
 }
 
-// builtinRoles is ordered from least to most privileged.
-var builtinRoles = []roleDef{
-	{RoleViewer, Normalize(CapList | CapView | CapDownload)},
-	{RoleContributor, Normalize(CapList | CapView | CapDownload | CapCreate)},
-	{RoleEditor, Normalize(CapList | CapView | CapDownload | CapCreate | CapEdit | CapDelete)},
-	{RoleManager, Normalize(CapList | CapView | CapDownload | CapCreate | CapEdit | CapDelete | CapShare | CapManage)},
-	{RoleOwner, AllCaps},
+// builtinRoles is ordered from least to most privileged; each role includes
+// everything the one before it has.
+var builtinRoles = func() []roleDef {
+	viewer := CapList | CapView | CapDownload
+	commenter := viewer | CapComment
+	contributor := commenter | CapCreate | CapEdit
+	contentManager := contributor | CapMove | CapTrash
+	editor := contentManager | CapShare
+	manager := editor | CapDelete | CapMoveOut | CapManage | CapDeleteDrive
+	return []roleDef{
+		{RoleViewer, Normalize(viewer)},
+		{RoleCommenter, Normalize(commenter)},
+		{RoleContributor, Normalize(contributor)},
+		{RoleContentManager, Normalize(contentManager)},
+		{RoleEditor, Normalize(editor)},
+		{RoleManager, Normalize(manager)},
+		{RoleOwner, AllCaps},
+	}
+}()
+
+// RoleContext says what a role is being offered for. The capability registry
+// is shared; the context only filters which roles make sense to hand out.
+type RoleContext int
+
+const (
+	// ContextItemShare is sharing a single file or folder: Viewer, Commenter,
+	// Editor, and Manager.
+	ContextItemShare RoleContext = iota
+	// ContextDriveMember is adding a member to a shared drive: the full ladder
+	// of Viewer, Commenter, Contributor, Content Manager, and Manager.
+	ContextDriveMember
+)
+
+// RolesFor lists the roles to offer in a context, least privileged first.
+func RolesFor(c RoleContext) []Role {
+	switch c {
+	case ContextItemShare:
+		return []Role{RoleViewer, RoleCommenter, RoleEditor, RoleManager}
+	case ContextDriveMember:
+		return []Role{RoleViewer, RoleCommenter, RoleContributor, RoleContentManager, RoleManager}
+	}
+	return nil
 }
 
 // Caps returns the capabilities of a built-in role.
@@ -38,12 +75,15 @@ func (r Role) Caps() (Capability, bool) {
 	return 0, false
 }
 
-// Grantable reports whether the role may be assigned through a grant. Owner is
-// implicit and Custom is derived, so neither is.
+// Grantable reports whether the role may be assigned through a grant in some
+// context. Owner is implicit and Custom is derived, so neither is.
 func (r Role) Grantable() bool {
-	switch r {
-	case RoleViewer, RoleContributor, RoleEditor, RoleManager:
-		return true
+	for _, c := range []RoleContext{ContextItemShare, ContextDriveMember} {
+		for _, offered := range RolesFor(c) {
+			if offered == r {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -60,7 +100,7 @@ func ParseRole(s string) (Role, bool) {
 // Sets that match no built-in role are RoleCustom.
 func Describe(c Capability) (role Role, noDownload bool) {
 	for _, d := range builtinRoles {
-		if c == d.caps {
+		if d.role != RoleOwner && c == d.caps {
 			return d.role, false
 		}
 	}

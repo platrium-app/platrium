@@ -6,10 +6,12 @@ import "testing"
 // up in stored snapshots and in documentation.
 func TestBuiltinRoleCapabilities(t *testing.T) {
 	want := map[Role]uint64{
-		RoleViewer:      7,
-		RoleContributor: 263,
-		RoleEditor:      1799,
-		RoleManager:     198407,
+		RoleViewer:         7,
+		RoleCommenter:      15,
+		RoleContributor:    783,
+		RoleContentManager: 6927,
+		RoleEditor:         72463,
+		RoleManager:        474895,
 	}
 	for role, v := range want {
 		c, ok := role.Caps()
@@ -36,7 +38,7 @@ func TestRolesAreOrdered(t *testing.T) {
 }
 
 func TestGrantable(t *testing.T) {
-	for _, r := range []Role{RoleViewer, RoleContributor, RoleEditor, RoleManager} {
+	for _, r := range []Role{RoleViewer, RoleCommenter, RoleContributor, RoleContentManager, RoleEditor, RoleManager} {
 		if !r.Grantable() {
 			t.Errorf("%s must be grantable", r)
 		}
@@ -44,6 +46,58 @@ func TestGrantable(t *testing.T) {
 	for _, r := range []Role{RoleOwner, RoleCustom, "NOPE", ""} {
 		if r.Grantable() {
 			t.Errorf("%s must not be grantable", r)
+		}
+	}
+}
+
+func TestRolesForContext(t *testing.T) {
+	item := RolesFor(ContextItemShare)
+	drive := RolesFor(ContextDriveMember)
+	wantItem := []Role{RoleViewer, RoleCommenter, RoleEditor, RoleManager}
+	wantDrive := []Role{RoleViewer, RoleCommenter, RoleContributor, RoleContentManager, RoleManager}
+	if len(item) != len(wantItem) || len(drive) != len(wantDrive) {
+		t.Fatalf("item = %v, drive = %v", item, drive)
+	}
+	for i := range wantItem {
+		if item[i] != wantItem[i] {
+			t.Errorf("item roles = %v, want %v", item, wantItem)
+		}
+	}
+	for i := range wantDrive {
+		if drive[i] != wantDrive[i] {
+			t.Errorf("drive roles = %v, want %v", drive, wantDrive)
+		}
+	}
+	if RolesFor(RoleContext(99)) != nil {
+		t.Error("an unknown context offers nothing")
+	}
+}
+
+// The ladder encodes the shared-drive behaviors people expect.
+func TestRoleBehaviors(t *testing.T) {
+	has := func(r Role, c Capability) bool { caps, _ := r.Caps(); return caps.Has(c) }
+	cases := []struct {
+		role Role
+		can  []Capability
+		cant []Capability
+	}{
+		{RoleViewer, []Capability{CapList, CapView, CapDownload}, []Capability{CapComment, CapCreate, CapEdit}},
+		{RoleCommenter, []Capability{CapComment}, []Capability{CapCreate, CapEdit}},
+		{RoleContributor, []Capability{CapCreate, CapEdit}, []Capability{CapMove, CapTrash, CapDelete}},
+		{RoleContentManager, []Capability{CapMove, CapTrash}, []Capability{CapDelete, CapMoveOut, CapShare, CapManage}},
+		{RoleEditor, []Capability{CapMove, CapTrash, CapShare}, []Capability{CapDelete, CapMoveOut, CapManage}},
+		{RoleManager, []Capability{CapDelete, CapMoveOut, CapShare, CapManage, CapDeleteDrive}, nil},
+	}
+	for _, c := range cases {
+		for _, k := range c.can {
+			if !has(c.role, k) {
+				t.Errorf("%s must hold %s", c.role, k)
+			}
+		}
+		for _, k := range c.cant {
+			if has(c.role, k) {
+				t.Errorf("%s must not hold %s", c.role, k)
+			}
 		}
 	}
 }

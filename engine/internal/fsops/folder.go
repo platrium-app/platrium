@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"platrium/internal/authz"
 	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/driveitem"
 )
@@ -30,12 +31,16 @@ func folderFromEnt(i *ent.DriveItem) *Folder {
 	}
 }
 
-// CreateFolder creates a new folder and attaches it to the parent.
-func (f *FSOps) CreateFolder(ctx context.Context, tenantID string, parentID string, name string) (*Folder, error) {
+// CreateFolder creates a new folder and attaches it to the parent. Requires
+// CREATE on the parent.
+func (f *FSOps) CreateFolder(ctx context.Context, p authz.Principal, parentID string, name string) (*Folder, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: folder name cannot be empty", ErrInvalid)
 	}
-	// TODO: Stub permissions check (CheckPermissions)
+	if err := f.Require(ctx, p, parentID, authz.CapCreate); err != nil {
+		return nil, err
+	}
+	tenantID := p.TenantID
 
 	var folder *Folder
 	err := f.db.WithTx(ctx, func(tx *ent.Tx) error {
