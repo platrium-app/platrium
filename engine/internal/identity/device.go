@@ -3,8 +3,10 @@ package identity
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent/device"
 )
 
 // Device represents a user's registered physical device for push notifications, MDM, etc.
@@ -13,7 +15,7 @@ type Device struct {
 	UserID                    string            `json:"user_id"`
 	NotificationTransportType string            `json:"notification_transport_type"` // Maps to notifications.TransportType (e.g. "GRAPHQL", "APNS")
 	Metadata                  map[string]string `json:"metadata"`
-	CreatedAt                 int64             `json:"created_at"`
+	CreatedAt                 time.Time         `json:"created_at"`
 }
 
 // DeviceStore defines operations for managing user devices.
@@ -28,63 +30,46 @@ type RegisterDeviceReq struct {
 	Metadata                  map[string]string
 }
 
-// GraphDeviceStore manages Device nodes in the GraphDB.
-type GraphDeviceStore struct {
-	store graph.Graph
+// EntDeviceStore manages Device records.
+type EntDeviceStore struct {
+	db *db.DB
 }
 
-func NewGraphDeviceStore(store graph.Graph) *GraphDeviceStore {
-	return &GraphDeviceStore{store: store}
+var _ DeviceStore = (*EntDeviceStore)(nil)
+
+func NewEntDeviceStore(d *db.DB) *EntDeviceStore {
+	return &EntDeviceStore{db: d}
 }
 
-func (s *GraphDeviceStore) RegisterDevice(ctx context.Context, userID string, req RegisterDeviceReq) (*Device, error) {
+func (s *EntDeviceStore) RegisterDevice(ctx context.Context, userID string, req RegisterDeviceReq) (*Device, error) {
 	// TODO: implement
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (s *GraphDeviceStore) DeregisterDevice(ctx context.Context, deviceID string) error {
+func (s *EntDeviceStore) DeregisterDevice(ctx context.Context, deviceID string) error {
 	// TODO: implement
 	return fmt.Errorf("not implemented")
 }
 
 // GetDevicesForUser fetches all devices belonging to a specific user.
-func (s *GraphDeviceStore) GetDevicesForUser(ctx context.Context, userID string) ([]*Device, error) {
-	query := `
-		MATCH (d:Device)-[:BELONGS_TO]->(u:User {id: $userId})
-		RETURN 
-			d.id AS id, 
-			u.id AS userId, 
-			d.transportType AS notificationTransportType, 
-			d.metadata AS metadata, 
-			d.createdAt AS createdAt
-	`
-
-	params := map[string]interface{}{
-		"userId": userID,
-	}
-
-	var devices []*Device
-	err := s.store.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		for res.Next() {
-			var device Device
-			if err := res.Scan(&device); err != nil {
-				return fmt.Errorf("failed to scan device: %w", err)
-			}
-			devices = append(devices, &device)
-		}
-
-		return res.Err()
-	})
-
+func (s *EntDeviceStore) GetDevicesForUser(ctx context.Context, userID string) ([]*Device, error) {
+	rows, err := s.db.Device.Query().
+		Where(device.UserID(userID)).
+		Order(device.ByCreatedAt(), device.ByID()).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get devices for user: %w", err)
 	}
 
+	devices := make([]*Device, 0, len(rows))
+	for _, d := range rows {
+		devices = append(devices, &Device{
+			ID:                        d.ID,
+			UserID:                    d.UserID,
+			NotificationTransportType: d.TransportType,
+			Metadata:                  d.Metadata,
+			CreatedAt:                 d.CreatedAt,
+		})
+	}
 	return devices, nil
 }

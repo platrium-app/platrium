@@ -22,7 +22,7 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		}, nil
 	}
 
-	user, tenantId, err := a.UserStore.GetUserByExternalId(ctx, idp.ID, request.Body.IdpId)
+	user, tenantId, err := a.UserStore.GetUserByExternalId(ctx, idp.ID, request.Body.Email)
 	if err != nil {
 		msg := "Invalid credentials"
 		return AuthLocalUserLogin401JSONResponse{
@@ -47,7 +47,7 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		Email:    user.Email,
 	}
 
-	a.SessionManager.Put(ctx, "auth_session", sess)
+	a.SessionManager.Put(ctx, session.StoreKey, sess)
 	// Optionally renew the token for sliding expiration
 	a.SessionManager.RenewToken(ctx)
 

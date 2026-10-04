@@ -13,7 +13,6 @@ const (
 	NSManifest         Namespace = "mfst"
 	NSInstanceConfig   Namespace = "icfg"
 	NSChunkMetadata    Namespace = "chnk"
-	NSAuthLocal        Namespace = "auth:local"
 )
 
 // Key strictly enforces that every KV operation is Namespaced, completely

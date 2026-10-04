@@ -18,8 +18,8 @@ func (Drive) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
 
 func (Drive) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
-		field.String("owner_id").MaxLen(idLen).Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("owner_id").MaxLen(idLen).SchemaType(idType).Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
 		field.Enum("type").Values("PRIVATE", "SHARED").Immutable(),
 		field.Int64("storage_used").Default(0),
@@ -61,10 +61,10 @@ func (DriveItem) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}
 
 func (DriveItem) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
-		field.String("drive_id").MaxLen(idLen).Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("drive_id").MaxLen(idLen).SchemaType(idType).Immutable(),
 		// NULL only for a drive's root folder (whose ID equals the drive ID).
-		field.String("parent_id").MaxLen(idLen).Optional().Nillable(),
+		field.String("parent_id").MaxLen(idLen).SchemaType(idType).Optional().Nillable(),
 		field.Enum("kind").Values("FOLDER", "FILE").Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
 

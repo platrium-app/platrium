@@ -2,10 +2,20 @@ package fsops
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"slices"
 	"time"
 
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/driveitem"
+)
+
+// Item kinds, as stored in drive_items.kind.
+const (
+	KindFolder = "FOLDER"
+	KindFile   = "FILE"
 )
 
 type DriveItemRecord struct {
@@ -13,304 +23,202 @@ type DriveItemRecord struct {
 	TenantID  string    `json:"tenant_id"`
 	ParentID  *string   `json:"parent_id,omitempty"`
 	Name      string    `json:"name"`
-	Labels    []string  `json:"labels"`
+	Kind      string    `json:"kind"` // KindFolder or KindFile
 	Size      *int64    `json:"size,omitempty"`
 	MimeType  *string   `json:"mime_type,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// GetItem fetches a single item by ID, ensuring tenant isolation.
-func (f *FSOps) GetItem(ctx context.Context, tenantId, itemId string) (*DriveItemRecord, error) {
-	query := `
-		MATCH (n:Resource {id: $item_id, tenant_id: $tenant_id})
-		OPTIONAL MATCH (n)-[:CHILD_OF]->(p:Resource)
-		RETURN 
-			n.id AS id,
-			n.tenant_id AS tenant_id,
-			p.id AS parent_id,
-			n.name AS name,
-			labels(n) AS labels,
-			n.size AS size,
-			n.mime_type AS mime_type,
-			n.created_at AS created_at,
-			n.updated_at AS updated_at
-	`
-	params := map[string]interface{}{
-		"item_id":   itemId,
-		"tenant_id": tenantId,
+// IsFolder reports whether the item is a folder (including a drive root).
+func (r *DriveItemRecord) IsFolder() bool { return r.Kind == KindFolder }
+
+func recordFromEnt(i *ent.DriveItem) *DriveItemRecord {
+	return &DriveItemRecord{
+		ID:        i.ID,
+		TenantID:  i.TenantID,
+		ParentID:  i.ParentID,
+		Name:      i.Name,
+		Kind:      string(i.Kind),
+		Size:      i.Size,
+		MimeType:  i.MimeType,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: i.UpdatedAt,
 	}
-
-	var item DriveItemRecord
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if !res.Next() {
-			if err := res.Err(); err != nil {
-				return err
-			}
-			return fmt.Errorf("item not found or access denied")
-		}
-
-		if err := res.Scan(&item); err != nil {
-			return fmt.Errorf("failed to scan item: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &item, nil
 }
 
-// GetItemPath traverses up the graph to find all ancestors for breadcrumbs.
-func (f *FSOps) GetItemPath(ctx context.Context, tenantId, itemId string) ([]*Folder, error) {
-	query := `
-		MATCH path = shortestPath((child:Resource {id: $item_id, tenant_id: $tenant_id})-[:CHILD_OF*0..]->(root:Folder))
-		WHERE NOT (root)-[:CHILD_OF]->()
-		WITH nodes(path) AS pathNodes
-		
-		// Exclude the child itself from the path (it's the first node in pathNodes)
-		WITH pathNodes[1..] AS ancestorNodes
-		UNWIND ancestorNodes AS n
-		WITH n WHERE n:Folder
-		RETURN 
-			n.id AS id,
-			n.tenant_id AS tenant_id,
-			n.name AS name,
-			n.created_at AS created_at,
-			n.updated_at AS updated_at
-	`
-	params := map[string]interface{}{
-		"item_id":   itemId,
-		"tenant_id": tenantId,
+// GetItem fetches a single item by ID, ensuring tenant isolation.
+func (f *FSOps) GetItem(ctx context.Context, tenantId, itemId string) (*DriveItemRecord, error) {
+	i, err := f.db.DriveItem.Query().
+		Where(driveitem.ID(itemId), driveitem.TenantID(tenantId)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: item not found or access denied", ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to fetch item: %w", err)
 	}
+	return recordFromEnt(i), nil
+}
 
-	var folders []*Folder
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		for res.Next() {
-			var folder Folder
-			if err := res.Scan(&folder); err != nil {
-				return fmt.Errorf("failed to scan folder in path: %w", err)
-			}
-			folders = append(folders, &folder)
-		}
-
-		return res.Err()
-	})
-
+// GetItemPath returns the folders above an item, ordered root first, for breadcrumbs.
+// The item itself is not included.
+func (f *FSOps) GetItemPath(ctx context.Context, tenantId, itemId string) ([]*Folder, error) {
+	ids, err := f.ancestorIDs(ctx, f.db, tenantId, itemId)
 	if err != nil {
 		return nil, err
 	}
+	if len(ids) <= 1 {
+		return []*Folder{}, nil
+	}
+	ancestors := ids[1:] // drop the item itself; nearest parent first
 
-	// Reverse to order from Root -> Child
-	for i, j := 0, len(folders)-1; i < j; i, j = i+1, j-1 {
-		folders[i], folders[j] = folders[j], folders[i]
+	rows, err := f.db.DriveItem.Query().
+		Where(driveitem.IDIn(ancestors...), driveitem.TenantID(tenantId), driveitem.KindEQ(driveitem.KindFOLDER)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load path folders: %w", err)
+	}
+	byID := make(map[string]*ent.DriveItem, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
 	}
 
+	folders := make([]*Folder, 0, len(ancestors))
+	for _, id := range slices.Backward(ancestors) { // root first
+		if r, ok := byID[id]; ok {
+			folders = append(folders, folderFromEnt(r))
+		}
+	}
 	return folders, nil
 }
 
 // GetFolderContents fetches the direct children of a folder with cursor pagination.
 func (f *FSOps) GetFolderContents(ctx context.Context, tenantId, folderId string, limit int, after string) ([]*DriveItemRecord, error) {
-	query := `
-		MATCH (child:Resource)-[:CHILD_OF]->(parent:Folder {id: $folder_id, tenant_id: $tenant_id})
-		WHERE ($after = "" OR child.id > $after)
-		RETURN 
-			child.id AS id,
-			child.tenant_id AS tenant_id,
-			parent.id AS parent_id,
-			child.name AS name,
-			labels(child) AS labels,
-			child.size AS size,
-			child.mime_type AS mime_type,
-			child.created_at AS created_at,
-			child.updated_at AS updated_at
-		ORDER BY child.id ASC
-		LIMIT $limit
-	`
-	params := map[string]interface{}{
-		"folder_id": folderId,
-		"tenant_id": tenantId,
-		"after":     after,
-		"limit":     limit,
+	q := f.db.DriveItem.Query().
+		Where(driveitem.TenantID(tenantId), driveitem.ParentID(folderId))
+	if after != "" {
+		q = q.Where(driveitem.IDGT(after))
 	}
 
-	var items []*DriveItemRecord
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		for res.Next() {
-			var item DriveItemRecord
-			if err := res.Scan(&item); err != nil {
-				return err
-			}
-			items = append(items, &item)
-		}
-		return res.Err()
-	})
-
+	rows, err := q.Order(driveitem.ByID()).Limit(limit).All(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list folder contents: %w", err)
 	}
 
+	items := make([]*DriveItemRecord, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, recordFromEnt(r))
+	}
 	return items, nil
 }
 
 // GetFolderContentsTotalCount counts the total children of a folder.
 func (f *FSOps) GetFolderContentsTotalCount(ctx context.Context, tenantId, folderId string) (int, error) {
-	query := `
-		MATCH (child:Resource)-[:CHILD_OF]->(parent:Folder {id: $folder_id, tenant_id: $tenant_id})
-		RETURN count(child) AS total
-	`
-	params := map[string]interface{}{
-		"folder_id": folderId,
-		"tenant_id": tenantId,
-	}
-
-	var total int
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if res.Next() {
-			var result struct {
-				Total int `json:"total"`
-			}
-			if err := res.Scan(&result); err != nil {
-				return err
-			}
-			total = result.Total
-		}
-		return res.Err()
-	})
-
-	return total, err
+	return f.db.DriveItem.Query().
+		Where(driveitem.TenantID(tenantId), driveitem.ParentID(folderId)).
+		Count(ctx)
 }
 
 // RenameItem renames a file or folder.
 func (f *FSOps) RenameItem(ctx context.Context, tenantID string, itemID string, newName string) (*DriveItemRecord, error) {
 	if newName == "" {
-		return nil, fmt.Errorf("new name cannot be empty")
+		return nil, fmt.Errorf("%w: new name cannot be empty", ErrInvalid)
 	}
 
 	// TODO: Stub permissions check (CheckPermissions)
 
-	query := `
-		MATCH (n:Resource {id: $item_id, tenant_id: $tenant_id})
-		SET n.name = $new_name
-		RETURN n.id
-	`
-	params := map[string]interface{}{
-		"item_id":   itemID,
-		"tenant_id": tenantID,
-		"new_name":  newName,
-	}
-
-	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if !res.Next() {
-			return fmt.Errorf("item not found")
-		}
-		return nil
-	})
-
+	// updated_at is bumped by the schema on every update.
+	n, err := f.db.DriveItem.Update().
+		Where(driveitem.ID(itemID), driveitem.TenantID(tenantID)).
+		SetName(newName).
+		Save(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to rename item: %w", err)
+	}
+	if n == 0 {
+		return nil, fmt.Errorf("%w: item not found", ErrNotFound)
 	}
 
 	return f.GetItem(ctx, tenantID, itemID)
 }
 
-// MoveItem moves an item to a new parent folder.
+// MoveItem moves an item to a new parent folder within the same drive.
+//
+// Structural changes take a row lock on the item's drive, so two concurrent
+// moves can never combine into a cycle (A into B while B into A). The lock is
+// the one portable concurrency primitive across Postgres, MySQL and MariaDB;
+// SQLite serializes writers on its own.
 func (f *FSOps) MoveItem(ctx context.Context, tenantID string, itemID string, newParentID string) (*DriveItemRecord, error) {
 	// TODO: Stub permissions check (CheckPermissions)
 
 	if itemID == newParentID {
-		return nil, fmt.Errorf("Cannot move an item into itself")
+		return nil, fmt.Errorf("%w: cannot move an item into itself", ErrInvalid)
 	}
 
-	// Optimize cycle detection by short-circuiting. The moment Neo4j finds ANY path
-	// proving the destination is a descendant of the source, it stops searching.
-	query := `
-		MATCH (dest:Resource {id: $new_parent_id, tenant_id: $tenant_id})-[:CHILD_OF*0..]->(src:Resource {id: $item_id, tenant_id: $tenant_id})
-		RETURN true AS is_cycle LIMIT 1
-	`
-	params := map[string]interface{}{
-		"item_id":       itemID,
-		"new_parent_id": newParentID,
-		"tenant_id":     tenantID,
-	}
-
-	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		// 1. Check for cycles
-		res, err := tx.Query(ctx, query, params)
+	// READ COMMITTED so that reads after the lock see other moves' committed
+	// work; MySQL/MariaDB's default REPEATABLE READ would keep serving the
+	// snapshot taken by the first read and let two moves form a cycle.
+	err := f.db.WithTxOpts(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted}, func(tx *ent.Tx) error {
+		item, err := tx.DriveItem.Query().
+			Where(driveitem.ID(itemID), driveitem.TenantID(tenantID)).
+			Only(ctx)
 		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: item not found", ErrNotFound)
+			}
 			return err
 		}
 
-		var isCycle bool
-		if res.Next() {
-			isCycle = true
+		lock := tx.Drive.Query().Where(drive.ID(item.DriveID), drive.TenantID(tenantID))
+		if f.db.RowLocks() {
+			lock = lock.ForUpdate()
 		}
-		res.Close()
-
-		if isCycle {
-			return fmt.Errorf("Cannot move a folder into itself or its own subfolder")
+		if _, err := lock.Only(ctx); err != nil {
+			return fmt.Errorf("failed to lock drive: %w", err)
 		}
 
-		// 2. Perform Move
-		moveQuery := `
-			MATCH (item:Resource {id: $item_id, tenant_id: $tenant_id})-[oldRel:CHILD_OF]->(oldParent:Resource)
-			MATCH (newParent:Resource {id: $new_parent_id, tenant_id: $tenant_id})
-			DELETE oldRel
-			CREATE (item)-[:CHILD_OF]->(newParent)
-			RETURN item.id
-		`
-		moveParams := map[string]interface{}{
-			"item_id":       itemID,
-			"new_parent_id": newParentID,
-			"tenant_id":     tenantID,
+		// Re-read under the lock: a concurrent move may have changed what we saw.
+		item, err = tx.DriveItem.Query().
+			Where(driveitem.ID(itemID), driveitem.TenantID(tenantID)).
+			Only(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: item not found", ErrNotFound)
+			}
+			return err
+		}
+		if item.ParentID == nil {
+			return fmt.Errorf("%w: a drive root cannot be moved", ErrInvalid)
 		}
 
-		moveRes, err := tx.Query(ctx, moveQuery, moveParams)
+		dest, err := tx.DriveItem.Query().
+			Where(driveitem.ID(newParentID), driveitem.TenantID(tenantID)).
+			Only(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: new parent not found", ErrNotFound)
+			}
+			return err
+		}
+		if dest.Kind != driveitem.KindFOLDER {
+			return fmt.Errorf("%w: destination must be a folder", ErrInvalid)
+		}
+		if dest.DriveID != item.DriveID {
+			return fmt.Errorf("%w: moving between drives is not supported", ErrInvalid)
+		}
+
+		// Cycle check: the destination's ancestor chain must not contain the item.
+		chain, err := f.ancestorIDs(ctx, tx, tenantID, dest.ID)
 		if err != nil {
 			return err
 		}
-		defer moveRes.Close()
-
-		if !moveRes.Next() {
-			return fmt.Errorf("item or new parent not found")
+		if slices.Contains(chain, item.ID) {
+			return fmt.Errorf("%w: cannot move a folder into itself or its own subfolder", ErrInvalid)
 		}
 
-		return nil
+		return tx.DriveItem.UpdateOneID(item.ID).SetParentID(dest.ID).Exec(ctx)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -320,48 +228,17 @@ func (f *FSOps) MoveItem(ctx context.Context, tenantID string, itemID string, ne
 
 // GetFolderChanges returns all children of a folder that were created or updated after a certain time.
 func (f *FSOps) GetFolderChanges(ctx context.Context, tenantId, folderId string, since time.Time) ([]*DriveItemRecord, error) {
-	query := `
-		MATCH (child:Resource)-[:CHILD_OF]->(parent:Folder {id: $folder_id, tenant_id: $tenant_id})
-		WHERE child.updated_at > $since
-		RETURN 
-			child.id AS id,
-			child.tenant_id AS tenant_id,
-			parent.id AS parent_id,
-			child.name AS name,
-			labels(child) AS labels,
-			child.size AS size,
-			child.mime_type AS mime_type,
-			child.created_at AS created_at,
-			child.updated_at AS updated_at
-		ORDER BY child.updated_at ASC
-	`
-	params := map[string]interface{}{
-		"folder_id": folderId,
-		"tenant_id": tenantId,
-		"since":     since,
-	}
-
-	var items []*DriveItemRecord
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		for res.Next() {
-			var item DriveItemRecord
-			if err := res.Scan(&item); err != nil {
-				return err
-			}
-			items = append(items, &item)
-		}
-		return res.Err()
-	})
-
+	rows, err := f.db.DriveItem.Query().
+		Where(driveitem.TenantID(tenantId), driveitem.ParentID(folderId), driveitem.UpdatedAtGT(since.UTC())).
+		Order(driveitem.ByUpdatedAt(), driveitem.ByID()).
+		All(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list folder changes: %w", err)
 	}
 
+	items := make([]*DriveItemRecord, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, recordFromEnt(r))
+	}
 	return items, nil
 }

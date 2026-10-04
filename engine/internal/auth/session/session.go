@@ -17,6 +17,8 @@ type contextKey string
 
 const (
 	sessionContextKey contextKey = "auth_session"
+	// StoreKey is the key used to store the PlatriumSession struct in the SCS session backend.
+	StoreKey = "platrium_session_info"
 )
 
 // PlatriumSession holds user session state.

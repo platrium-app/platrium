@@ -6,9 +6,9 @@ import (
 )
 
 // AuthManager is the core domain service that processes successful logins.
-// It acts as the bridge between the HTTP flows and the GraphDB / Session layer.
+// It acts as the bridge between the HTTP flows and the database / Session layer.
 type AuthManager interface {
 	// HandleFederatedLogin takes the normalized claims, ensures the structural User node
-	// exists in the GraphDB, creates the session in BadgerDB, and sets the HTTP cookies.
+	// exists in the database, creates the session in BadgerDB, and sets the HTTP cookies.
 	HandleFederatedLogin(ctx context.Context, w http.ResponseWriter, handoff IdpAuthHandoff) error
 }

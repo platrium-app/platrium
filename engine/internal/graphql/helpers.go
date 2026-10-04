@@ -49,14 +49,7 @@ func mapFsopsFolders(fsopsFolders []*fsops.Folder) []*Folder {
 }
 
 func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
-	isFolder := false
-	for _, label := range item.Labels {
-		if label == "Folder" || label == "PrivateDrive" || label == "SharedDrive" {
-			isFolder = true
-		}
-	}
-
-	if isFolder {
+	if item.IsFolder() {
 		return &Folder{
 			ID:        item.ID,
 			ParentID:  item.ParentID,

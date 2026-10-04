@@ -2,138 +2,101 @@ package local
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"platrium/internal/infra/kvstore"
-
 	"golang.org/x/crypto/bcrypt"
+
+	"platrium/internal/identity"
+	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/idpprovider"
+	"platrium/internal/infra/db/ent/localcredential"
+	"platrium/internal/infra/db/ent/user"
 )
 
-type LocalIdentityRecord struct {
-	PasswordHash      string   `json:"passwordHash"`
-	TOTPSecret        string   `json:"totpSecret,omitempty"`
-	BackupCodes       []string `json:"backupCodes,omitempty"`
-	PasswordChangedAt int64    `json:"passwordChangedAt"`
-}
-
-// LocalUserStore manages the storage and verification of passwords for "Local" users.
+// LocalUserStore manages the passwords (and, later, second factors) of users
+// authenticated by the built-in LOCAL identity provider.
 type LocalUserStore struct {
-	kv kvstore.KVStore
+	db *db.DB
 }
 
-func NewLocalUserStore(kv kvstore.KVStore) *LocalUserStore {
-	return &LocalUserStore{kv: kv}
+func NewLocalUserStore(d *db.DB) *LocalUserStore {
+	return &LocalUserStore{db: d}
 }
 
-// CreateTemporaryUser creates a new local identity record with a strict TTL.
-// This is strictly used for onboarding and dual-write flows.
-func (s *LocalUserStore) CreateTemporaryUser(ctx context.Context, userID, rawPassword string, ttl time.Duration) error {
+// HashPassword hashes a plaintext password with bcrypt. It is deliberately
+// separate from the write methods: hashing takes ~100ms, so callers hash
+// before opening a transaction instead of holding a connection while it runs.
+func HashPassword(rawPassword string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(rawPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hash), nil
+}
+
+// CreateTx stores a password hash for a user within the provided transaction.
+// The user must belong to tenantID and be bound to a LOCAL identity provider.
+func (s *LocalUserStore) CreateTx(ctx context.Context, tx *ent.Tx, tenantID, userID, passwordHash string) error {
+	// Tenant isolation, and only LOCAL-IdP users may hold a local credential.
+	ok, err := tx.User.Query().
+		Where(user.ID(userID), user.TenantID(tenantID), user.HasIdpWith(idpprovider.TypeEQ(idpprovider.TypeLOCAL))).
+		Exist(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to look up user: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("%w: local user not found in tenant", identity.ErrNotFound)
 	}
 
-	record := LocalIdentityRecord{
-		PasswordHash:      string(hash),
-		PasswordChangedAt: time.Now().Unix(),
+	if err := tx.LocalCredential.Create().
+		SetTenantID(tenantID).
+		SetUserID(userID).
+		SetPasswordHash(passwordHash).
+		Exec(ctx); err != nil {
+		if ent.IsConstraintError(err) {
+			return fmt.Errorf("%w: user already has a local credential: %v", identity.ErrConflict, err)
+		}
+		return fmt.Errorf("failed to create local credential: %w", err)
 	}
+	return nil
+}
 
-	data, err := json.Marshal(record)
+// SetPassword handles password resets. It preserves existing 2FA settings.
+func (s *LocalUserStore) SetPassword(ctx context.Context, userID, rawPassword string) error {
+	hash, err := HashPassword(rawPassword)
 	if err != nil {
 		return err
 	}
 
-	key := kvstore.Key{Namespace: kvstore.NSAuthLocal, ID: userID}
-
-	return s.kv.WriteTx(ctx, func(tx kvstore.Tx) error {
-		opts := []kvstore.SetOption{}
-		if ttl > 0 {
-			opts = append(opts, kvstore.WithTTL(ttl))
-		}
-		return tx.Set(key, data, opts...)
-	})
+	n, err := s.db.LocalCredential.Update().
+		Where(localcredential.UserID(userID)).
+		SetPasswordHash(hash).
+		SetPasswordChangedAt(time.Now().UTC()).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to set password: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: local credential", identity.ErrNotFound)
+	}
+	return nil
 }
 
-// CreateUser creates a permanent local identity record.
-// This is typically used when an admin directly invites a user.
-func (s *LocalUserStore) CreateUser(ctx context.Context, userID, rawPassword string) error {
-	return s.CreateTemporaryUser(ctx, userID, rawPassword, 0)
-}
-
-// FinalizeTemporaryUser removes the TTL from a pre-provisioned user record, making it permanent.
-func (s *LocalUserStore) FinalizeTemporaryUser(ctx context.Context, userID string) error {
-	key := kvstore.Key{Namespace: kvstore.NSAuthLocal, ID: userID}
-
-	return s.kv.WriteTx(ctx, func(tx kvstore.Tx) error {
-		val, err := tx.Get(key)
-		if err != nil {
-			return err
-		}
-		// Write the exact same data back, but without any TTL options!
-		return tx.Set(key, val)
-	})
-}
-
-// SetPassword handles password resets. It preserves existing 2FA/TOTP settings.
-func (s *LocalUserStore) SetPassword(ctx context.Context, userID, rawPassword string) error {
-	key := kvstore.Key{Namespace: kvstore.NSAuthLocal, ID: userID}
-
-	return s.kv.WriteTx(ctx, func(tx kvstore.Tx) error {
-		val, err := tx.Get(key)
-		if err != nil {
-			return fmt.Errorf("user record not found: %w", err)
-		}
-
-		var record LocalIdentityRecord
-		if err := json.Unmarshal(val, &record); err != nil {
-			return err
-		}
-
-		hash, err := bcrypt.GenerateFromPassword([]byte(rawPassword), bcrypt.DefaultCost)
-		if err != nil {
-			return err
-		}
-
-		record.PasswordHash = string(hash)
-		record.PasswordChangedAt = time.Now().Unix()
-
-		data, err := json.Marshal(record)
-		if err != nil {
-			return err
-		}
-
-		return tx.Set(key, data)
-	})
-}
-
-// VerifyPassword checks if a plaintext password matches the hash in the KV Store.
+// VerifyPassword checks a plaintext password against the stored hash. A wrong
+// password returns (false, nil); a missing credential returns an ErrNotFound.
 func (s *LocalUserStore) VerifyPassword(ctx context.Context, userID, rawPassword string) (bool, error) {
-	key := kvstore.Key{Namespace: kvstore.NSAuthLocal, ID: userID}
-
-	var data []byte
-	err := s.kv.ReadTx(ctx, func(tx kvstore.Tx) error {
-		val, err := tx.Get(key)
-		if err != nil {
-			return err
+	cred, err := s.db.LocalCredential.Query().Where(localcredential.UserID(userID)).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return false, fmt.Errorf("%w: local credential", identity.ErrNotFound)
 		}
-		data = val
-		return nil
-	})
-	if err != nil {
-		return false, err // e.g., kvstore.ErrKeyNotFound
+		return false, fmt.Errorf("failed to load local credential: %w", err)
 	}
 
-	var record LocalIdentityRecord
-	if err := json.Unmarshal(data, &record); err != nil {
-		return false, fmt.Errorf("corrupt local identity record: %w", err)
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(record.PasswordHash), []byte(rawPassword))
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(rawPassword)); err != nil {
 		return false, nil // Invalid password
 	}
-
 	return true, nil
 }

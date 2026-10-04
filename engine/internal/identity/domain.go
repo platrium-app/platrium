@@ -3,7 +3,12 @@ package identity
 import (
 	"context"
 	"fmt"
-	"platrium/internal/infra/graph"
+	"strings"
+
+	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/domain"
+	"platrium/internal/infra/db/ent/tenant"
 )
 
 // Domain represents a verified or unverified email domain belonging to a Tenant.
@@ -12,81 +17,72 @@ type Domain struct {
 	IsVerified bool   `json:"isVerified"` // Soft block flag
 }
 
-// DomainStore manages Domain nodes in the GraphDB.
+// DomainStore manages Domain records.
 type DomainStore struct {
-	store graph.Graph
+	db *db.DB
 }
 
-func NewDomainStore(store graph.Graph) *DomainStore {
-	return &DomainStore{store: store}
+func NewDomainStore(d *db.DB) *DomainStore {
+	return &DomainStore{db: d}
 }
 
-// AddDomainToTenant links a new Domain node to the Tenant.
+// normalizeDomain lowercases a domain name; names are stored lowercase.
+func normalizeDomain(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// AddDomainToTenant claims a new Domain for the Tenant.
 // It ensures that the domain name is globally unique across all tenants.
 func (r *DomainStore) AddDomainToTenant(ctx context.Context, tenantID, domainName string) error {
-	query := `
-		// 1. Check if domain already exists anywhere
-		OPTIONAL MATCH (existingDomain:Domain {name: $domainName})
-		WITH existingDomain
-		WHERE existingDomain IS NULL
+	name := normalizeDomain(domainName)
+	if name == "" {
+		return fmt.Errorf("domain name cannot be empty")
+	}
 
-		// 2. Create the Domain and link it to the Tenant
-		MATCH (t:Tenant {id: $tenantID})
-		CREATE (d:Domain {name: $domainName, isVerified: false})
-		CREATE (t)-[:OWNS_DOMAIN]->(d)
-		RETURN d.name
-	`
-	return r.store.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, map[string]interface{}{
-			"tenantID":   tenantID,
-			"domainName": domainName,
-		})
-		if err != nil {
-			return err
+	_, err := r.db.Domain.Create().SetTenantID(tenantID).SetName(name).Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return fmt.Errorf("%w: domain %s is already in use or tenant not found: %v", ErrConflict, name, err)
 		}
-		defer res.Close()
-
-		if !res.Next() {
-			return fmt.Errorf("domain %s is already in use by another tenant", domainName)
-		}
-
-		return nil
-	})
+		return fmt.Errorf("failed to add domain: %w", err)
+	}
+	return nil
 }
 
-// RemoveDomainFromTenant unlinks and deletes a domain if the organization stops using it.
+// RemoveDomainFromTenant deletes a domain if the organization stops using it.
 // It enforces the rule that a Tenant must always have at least one Domain.
 func (r *DomainStore) RemoveDomainFromTenant(ctx context.Context, tenantID, domainName string) error {
-	query := `
-		// 1. Count how many domains the tenant has
-		MATCH (t:Tenant {id: $tenantID})-[:OWNS_DOMAIN]->(d:Domain)
-		WITH t, count(d) AS domainCount
-		
-		// 2. Abort if this is their only domain (must have >1 to safely delete one)
-		WHERE domainCount > 1
-		
-		// 3. Find the specific domain and delete it
-		MATCH (t)-[:OWNS_DOMAIN]->(target:Domain {name: $domainName})
-		DETACH DELETE target
-		
-		// 4. Return something so the Go driver knows the WHERE clause passed
-		RETURN target.name
-	`
-	return r.store.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, map[string]interface{}{
-			"tenantID":   tenantID,
-			"domainName": domainName,
-		})
+	name := normalizeDomain(domainName)
+
+	return r.db.WithTx(ctx, func(tx *ent.Tx) error {
+		// Serialize concurrent removals for this tenant so the "at least one
+		// domain" rule cannot be raced past.
+		lock := tx.Tenant.Query().Where(tenant.ID(tenantID))
+		if r.db.RowLocks() {
+			lock = lock.ForUpdate()
+		}
+		if _, err := lock.Only(ctx); err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("tenant not found")
+			}
+			return err
+		}
+
+		count, err := tx.Domain.Query().Where(domain.TenantID(tenantID)).Count(ctx)
 		if err != nil {
 			return err
 		}
-		defer res.Close()
-
-		// If the query returns 0 rows, it means the `WHERE domainCount > 1` clause blocked it!
-		if !res.Next() {
-			return fmt.Errorf("cannot delete domain '%s': a tenant must have at least one domain", domainName)
+		if count <= 1 {
+			return fmt.Errorf("cannot delete domain '%s': a tenant must have at least one domain", name)
 		}
 
+		n, err := tx.Domain.Delete().Where(domain.TenantID(tenantID), domain.Name(name)).Exec(ctx)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("domain '%s' not found for tenant", name)
+		}
 		return nil
 	})
 }

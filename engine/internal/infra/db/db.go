@@ -38,7 +38,8 @@ type Config struct {
 // DB wraps the ent client and the underlying pool.
 type DB struct {
 	*ent.Client
-	sqlDB *sql.DB
+	sqlDB   *sql.DB
+	dialect string
 }
 
 // NewFromEnv parses the environment and opens the configured database.
@@ -78,7 +79,7 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 	}
 
 	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialectName, sqlDB)))
-	d := &DB{Client: client, sqlDB: sqlDB}
+	d := &DB{Client: client, sqlDB: sqlDB, dialect: dialectName}
 
 	if cfg.AutoMigrate {
 		if err := client.Schema.Create(ctx); err != nil {
@@ -128,11 +129,23 @@ func (d *DB) Close() error {
 // on error or panic. Pass tx.Client() to stores so the same code runs inside
 // or outside a transaction.
 func (d *DB) WithTx(ctx context.Context, fn func(tx *ent.Tx) error) error {
-	return d.runTx(ctx, fn)
+	return d.runTx(ctx, nil, fn)
 }
 
-func (d *DB) runTx(ctx context.Context, fn func(tx *ent.Tx) error) (err error) {
-	tx, err := d.Tx(ctx)
+// WithTxOpts is WithTx with explicit transaction options. Use
+// sql.LevelReadCommitted for transactions that take a row lock and then must
+// observe other transactions' committed work: under MySQL/MariaDB's default
+// REPEATABLE READ, reads after the lock would still see the pre-lock snapshot.
+// SQLite ignores the requested isolation (it serializes writers).
+func (d *DB) WithTxOpts(ctx context.Context, opts *sql.TxOptions, fn func(tx *ent.Tx) error) error {
+	if opts != nil && d.dialect == dialect.SQLite {
+		opts = nil
+	}
+	return d.runTx(ctx, opts, fn)
+}
+
+func (d *DB) runTx(ctx context.Context, opts *sql.TxOptions, fn func(tx *ent.Tx) error) (err error) {
+	tx, err := d.BeginTx(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -149,4 +162,69 @@ func (d *DB) runTx(ctx context.Context, fn func(tx *ent.Tx) error) (err error) {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Reset empties the given tables, ignoring foreign keys. It exists for test
+// harnesses that share one real database between tests and must never be
+// called outside tests.
+func (d *DB) Reset(ctx context.Context, tables []string) error {
+	conn, err := d.sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	switch d.dialect {
+	case dialect.Postgres:
+		quoted := make([]string, len(tables))
+		for i, t := range tables {
+			quoted[i] = `"` + t + `"`
+		}
+		_, err = conn.ExecContext(ctx, "TRUNCATE "+strings.Join(quoted, ", ")+" CASCADE")
+		return err
+	case dialect.MySQL:
+		if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); err != nil {
+			return err
+		}
+		defer conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=1")
+		for _, t := range tables {
+			if _, err := conn.ExecContext(ctx, "TRUNCATE TABLE `"+t+"`"); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("reset is not supported for dialect %s", d.dialect)
+	}
+}
+
+// RowLocks reports whether SELECT ... FOR UPDATE is available. SQLite has no
+// row locks, but it serializes writers, so skipping the lock there is safe.
+// Stores use it to take the one portable concurrency primitive (locking a
+// parent row) only where it exists:
+//
+//	q := tx.Tenant.Query().Where(...)
+//	if d.RowLocks() { q = q.ForUpdate() }
+func (d *DB) RowLocks() bool {
+	return d.dialect != dialect.SQLite
+}
+
+// Rebind rewrites '?' placeholders to the backend's native form ($1, $2, ...
+// on Postgres). Use it for the few raw SQL queries; ent's builders already
+// handle placeholders. Only use it on queries that contain no literal '?'.
+func (d *DB) Rebind(query string) string {
+	if d.dialect != dialect.Postgres {
+		return query
+	}
+	var b strings.Builder
+	n := 0
+	for _, r := range query {
+		if r == '?' {
+			n++
+			fmt.Fprintf(&b, "$%d", n)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

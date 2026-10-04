@@ -3,10 +3,15 @@ package auth
 import (
 	"context"
 	"fmt"
-	"platrium/internal/infra/graph"
+
+	"platrium/internal/identity"
+	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/idpprovider"
+	"platrium/internal/infra/db/ent/tenant"
 )
 
-// IdpProvider represents the structural definition of an Identity Provider in the Graph DB.
+// IdpProvider represents the structural definition of an Identity Provider.
 // It is agnostic to whether it is OIDC, SAML, or Local.
 type IdpProvider struct {
 	ID       string `json:"id"` // NanoID (e.g., "idp_google_1")
@@ -31,91 +36,69 @@ type IdpAuthHandoff struct {
 	JITGroupIDs   []string // TODO: See if needed Groups claimed in the token (if JIT is enabled)
 }
 
-// IdpStore manages IdpProvider nodes in the GraphDB.
-type IdpStore struct {
-	store graph.Graph
+func idpFromEnt(i *ent.IdpProvider) *IdpProvider {
+	return &IdpProvider{
+		ID:          i.ID,
+		TenantID:    i.TenantID,
+		Type:        string(i.Type),
+		Name:        i.Name,
+		ProtoConfig: i.ProtoConfig,
+	}
 }
 
-func NewIdpStore(store graph.Graph) *IdpStore {
-	return &IdpStore{store: store}
+// IdpStore manages IdpProvider records.
+type IdpStore struct {
+	db *db.DB
+}
+
+func NewIdpStore(d *db.DB) *IdpStore {
+	return &IdpStore{db: d}
+}
+
+// CreateLocalIdpTx creates the built-in LOCAL identity provider for a tenant
+// within the provided transaction.
+func (r *IdpStore) CreateLocalIdpTx(ctx context.Context, tx *ent.Tx, tenantID, idpID string) (*IdpProvider, error) {
+	create := tx.IdpProvider.Create().
+		SetTenantID(tenantID).
+		SetType(idpprovider.TypeLOCAL).
+		SetName("Platrium Authentication").
+		SetProtoConfig("{}")
+	if idpID != "" {
+		create.SetID(idpID)
+	}
+
+	i, err := create.Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create local idp: %w", err)
+	}
+	return idpFromEnt(i), nil
 }
 
 // GetIdpsForTenant looks up all configured IdPs for a specific tenant alias.
-// This is incredibly fast (O(1) or O(log N)) because we will put a database index on Tenant.alias.
 func (r *IdpStore) GetIdpsForTenant(ctx context.Context, alias string) ([]*IdpProvider, error) {
-	query := `
-		MATCH (t:Tenant {alias: $alias})-[:USES_IDP]->(i:IdpProvider)
-		RETURN 
-			i.id AS id,
-			t.id AS tenant_id,
-			i.type AS type,
-			i.name AS name,
-			i.configJSON AS proto_config
-	`
-
-	var idps []*IdpProvider
-	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, map[string]any{"alias": alias})
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		for res.Next() {
-			var idp IdpProvider
-			if err := res.Scan(&idp); err != nil {
-				return fmt.Errorf("failed to scan IdpProvider: %w", err)
-			}
-			idps = append(idps, &idp)
-		}
-
-		return res.Err()
-	})
-
+	rows, err := r.db.IdpProvider.Query().
+		Where(idpprovider.HasTenantWith(tenant.AliasEQ(identity.NormalizeAlias(alias)))).
+		Order(idpprovider.ByCreatedAt(), idpprovider.ByID()).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch idps by alias: %w", err)
 	}
 
+	idps := make([]*IdpProvider, 0, len(rows))
+	for _, i := range rows {
+		idps = append(idps, idpFromEnt(i))
+	}
 	return idps, nil
 }
 
 // GetIdpById fetches a specific IdP connection by its unique NanoID.
 func (r *IdpStore) GetIdpById(ctx context.Context, id string) (*IdpProvider, error) {
-	query := `
-		MATCH (t:Tenant)-[:USES_IDP]->(i:IdpProvider {id: $id})
-		RETURN 
-			i.id AS id,
-			t.id AS tenant_id,
-			i.type AS type,
-			i.name AS name,
-			i.configJSON AS proto_config
-	`
-
-	var idp IdpProvider
-	found := false
-	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, map[string]any{"id": id})
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if res.Next() {
-			if err := res.Scan(&idp); err != nil {
-				return fmt.Errorf("failed to scan IdpProvider: %w", err)
-			}
-			found = true
-		}
-		return res.Err()
-	})
-
+	i, err := r.db.IdpProvider.Get(ctx, id)
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("idp not found")
+		}
 		return nil, fmt.Errorf("failed to fetch idp by id: %w", err)
 	}
-
-	if !found {
-		return nil, fmt.Errorf("idp not found")
-	}
-
-	return &idp, nil
+	return idpFromEnt(i), nil
 }

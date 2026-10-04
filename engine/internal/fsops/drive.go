@@ -7,7 +7,9 @@ import (
 
 	nanoid "github.com/matoous/go-nanoid/v2"
 
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/user"
 )
 
 type DriveType string
@@ -24,11 +26,28 @@ type Drive struct {
 	OwnerID      string    `json:"owner_id"`
 	Type         DriveType `json:"type"` // "PRIVATE" or "SHARED"
 	StorageUsed  int64     `json:"storage_used"`
-	StorageQuota int64     `json:"storage_quota"`
+	StorageQuota int64     `json:"storage_quota"` // 0 means unlimited
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// CreateDriveParams encapsulates inputs for creating a new Drive node.
+func driveFromEnt(d *ent.Drive) *Drive {
+	var quota int64
+	if d.StorageQuota != nil {
+		quota = *d.StorageQuota
+	}
+	return &Drive{
+		ID:           d.ID,
+		Name:         d.Name,
+		TenantID:     d.TenantID,
+		OwnerID:      d.OwnerID,
+		Type:         DriveType(d.Type),
+		StorageUsed:  d.StorageUsed,
+		StorageQuota: quota,
+		CreatedAt:    d.CreatedAt,
+	}
+}
+
+// CreateDriveParams encapsulates inputs for creating a new Drive.
 type CreateDriveParams struct {
 	TenantID string
 	OwnerID  string
@@ -36,114 +55,79 @@ type CreateDriveParams struct {
 	Type     DriveType // "PRIVATE" or "SHARED"
 }
 
-// CreateDriveTx creates a root Drive node in Graph DB within a given transaction context.
-func (f *FSOps) CreateDriveTx(ctx context.Context, tx graph.Tx, params CreateDriveParams) (*Drive, error) {
-	driveId := nanoid.Must()
-	name := params.Name
-	if name == "" {
+// CreateDriveTx creates a drive and its root folder within a given transaction.
+// The root folder shares the drive's ID, so a drive ID can be used anywhere a
+// folder ID is accepted.
+func (f *FSOps) CreateDriveTx(ctx context.Context, tx *ent.Tx, params CreateDriveParams) (*Drive, error) {
+	if params.Name == "" {
 		return nil, fmt.Errorf("drive name cannot be empty")
 	}
-
-	driveType := params.Type
-	if driveType != DriveTypePrivate && driveType != DriveTypeShared {
+	if params.Type != DriveTypePrivate && params.Type != DriveTypeShared {
 		return nil, fmt.Errorf("invalid or missing drive type")
 	}
 
-	query := `
-		MATCH (u:User {id: $owner_id})
-		CREATE (d:Resource:Folder {
-			id: $drive_id,
-			name: $name,
-			tenant_id: $tenant_id,
-			owner_id: $owner_id,
-			drive_type: $drive_type,
-			created_at: datetime()
-		})
-		CREATE (u)-[:OWNS]->(d)
-		RETURN d.id AS id, d.name AS name, d.tenant_id AS tenant_id, d.owner_id AS owner_id, d.drive_type AS type, 0 AS storage_used, 0 AS storage_quota, d.created_at AS created_at
-	`
-	cypherParams := map[string]interface{}{
-		"tenant_id":  params.TenantID,
-		"owner_id":   params.OwnerID,
-		"drive_id":   driveId,
-		"name":       name,
-		"drive_type": driveType,
-	}
-
-	var drive Drive
-	res, err := tx.Query(ctx, query, cypherParams)
+	// Tenant isolation: the owner must exist in the drive's tenant.
+	owned, err := tx.User.Query().Where(user.ID(params.OwnerID), user.TenantID(params.TenantID)).Exist(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to look up drive owner: %w", err)
 	}
-	defer res.Close()
-
-	if !res.Next() {
-		return nil, fmt.Errorf("failed to return created drive or user not found")
+	if !owned {
+		return nil, fmt.Errorf("failed to create drive: owner not found in tenant")
 	}
 
-	if err := res.Scan(&drive); err != nil {
-		return nil, fmt.Errorf("failed to scan drive: %w", err)
-	}
-
-	return &drive, nil
-}
-
-// CreateDrive creates a root Drive node in Graph DB and links it to the owner user via [:OWNS].
-func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Drive, error) {
-	var drive *Drive
-	var txErr error
-	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		drive, txErr = f.CreateDriveTx(ctx, tx, params)
-		return txErr
-	})
-
+	driveID := nanoid.Must()
+	d, err := tx.Drive.Create().
+		SetID(driveID).
+		SetTenantID(params.TenantID).
+		SetOwnerID(params.OwnerID).
+		SetName(params.Name).
+		SetType(drive.Type(params.Type)).
+		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create drive: %w", err)
 	}
 
-	return drive, nil
-}
-
-// GetUserDrives fetches all accessible private and shared drives for a user.
-func (f *FSOps) GetUserDrives(ctx context.Context, tenantId, userId string) ([]*Drive, error) {
-	query := `
-		MATCH (t:Tenant {id: $tenantId})-[:HAS_USER]->(u:User {id: $userId})-[rel:OWNS|HAS_ACCESS]->(d:Resource {tenant_id: $tenantId})
-		RETURN 
-			d.id AS id,
-			coalesce(d.name, "My Drive") AS name,
-			d.tenant_id AS tenant_id,
-			coalesce(d.owner_id, $userId) AS owner_id,
-			CASE WHEN type(rel) = "OWNS" THEN "PRIVATE" ELSE "SHARED" END AS type,
-			coalesce(d.storage_used, 0) AS storage_used,
-			coalesce(d.storage_quota, 0) AS storage_quota,
-			d.created_at AS created_at
-	`
-	params := map[string]any{
-		"tenantId": tenantId,
-		"userId":   userId,
+	if _, err := tx.DriveItem.Create().
+		SetID(driveID).
+		SetTenantID(params.TenantID).
+		SetDriveID(driveID).
+		SetKind("FOLDER").
+		SetName(params.Name).
+		Save(ctx); err != nil {
+		return nil, fmt.Errorf("failed to create drive root folder: %w", err)
 	}
 
-	var drives []*Drive
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
+	return driveFromEnt(d), nil
+}
 
-		for res.Next() {
-			var drive Drive
-			if err := res.Scan(&drive); err != nil {
-				return fmt.Errorf("failed to scan drive: %w", err)
-			}
-			drives = append(drives, &drive)
-		}
-		return res.Err()
+// CreateDrive creates a drive and its root folder in its own transaction.
+func (f *FSOps) CreateDrive(ctx context.Context, params CreateDriveParams) (*Drive, error) {
+	var created *Drive
+	err := f.db.WithTx(ctx, func(tx *ent.Tx) error {
+		var err error
+		created, err = f.CreateDriveTx(ctx, tx, params)
+		return err
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create drive: %w", err)
+	}
+	return created, nil
+}
 
+// GetUserDrives fetches all drives owned by a user within a tenant.
+// TODO: include shared drives once drive access grants exist.
+func (f *FSOps) GetUserDrives(ctx context.Context, tenantId, userId string) ([]*Drive, error) {
+	rows, err := f.db.Drive.Query().
+		Where(drive.TenantID(tenantId), drive.OwnerID(userId)).
+		Order(drive.ByCreatedAt(), drive.ByID()).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user drives: %w", err)
 	}
 
+	drives := make([]*Drive, 0, len(rows))
+	for _, d := range rows {
+		drives = append(drives, driveFromEnt(d))
+	}
 	return drives, nil
 }

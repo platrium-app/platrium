@@ -241,7 +241,7 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 		hexHashes[i] = chunk.Hash
 	}
 
-	// 2. Commit file node and chunk manifest sequence to Graph DB / Manifest KV Store
+	// 2. Commit file node and chunk manifest sequence to database / Manifest KV Store
 	fileId, err := api.FSOps.CreateFile(ctx, fsops.CreateFileParams{
 		TenantID:  claims.TenantID,
 		ParentID:  claims.ParentFolderID,

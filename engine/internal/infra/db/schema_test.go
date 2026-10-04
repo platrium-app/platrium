@@ -29,7 +29,7 @@ func newTestDB(t *testing.T) *DB {
 }
 
 // tables lists every table, used to wipe a shared real database between tests.
-var tables = []string{"drive_items", "drives", "devices", "domains", "groups", "users", "idp_providers", "tenants"}
+var tables = []string{"drive_items", "drives", "devices", "domains", "groups", "local_credentials", "users", "idp_providers", "tenants"}
 
 func resetTables(t *testing.T, d *DB, driver string) {
 	t.Helper()
@@ -193,4 +193,26 @@ func TestConstraints(t *testing.T) {
 	// Foreign keys restrict, never silently orphan.
 	mustFail("delete parent with children", d.DriveItem.DeleteOneID(f.root.ID).Exec(ctx))
 	mustFail("delete tenant with users", d.Tenant.DeleteOneID(f.tenant.ID).Exec(ctx))
+}
+
+// IDs differing only by case must be distinct on every backend. MySQL and
+// MariaDB default to case-insensitive collations, which would reject the
+// second insert (or, worse, merge the two rows) without binary ID columns.
+func TestIDsAreCaseSensitive(t *testing.T) {
+	ctx := context.Background()
+	d := newTestDB(t)
+
+	for i, id := range []string{"aB", "Ab", "AB", "ab"} {
+		// Aliases must be lowercase and distinct; the IDs are what is under test.
+		if _, err := d.Tenant.Create().SetID(id).SetAlias(fmt.Sprintf("t%d", i)).SetName(id).Save(ctx); err != nil {
+			t.Fatalf("tenant id %q: %v", id, err)
+		}
+	}
+	if n, _ := d.Tenant.Query().Count(ctx); n != 4 {
+		t.Fatalf("expected 4 tenants, got %d", n)
+	}
+	got, err := d.Tenant.Get(ctx, "Ab")
+	if err != nil || got.ID != "Ab" {
+		t.Fatalf("lookup by exact-case id: %+v %v", got, err)
+	}
 }

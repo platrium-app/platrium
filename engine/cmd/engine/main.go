@@ -14,7 +14,7 @@ import (
 	"platrium/internal/fsops"
 	"platrium/internal/graphql"
 	"platrium/internal/identity"
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
 	"platrium/internal/notifications"
@@ -44,12 +44,12 @@ func main() {
 	defer kvStore.Close()
 	log.Println("kv store initialized successfully")
 
-	graphStore, err := graph.NewFromEnv()
+	database, err := db.NewFromEnv(context.Background())
 	if err != nil {
-		log.Fatalf("failed to initialize Graph store: %v", err)
+		log.Fatalf("failed to initialize database: %v", err)
 	}
-	defer graphStore.Close(context.Background())
-	log.Println("graph store initialized successfully")
+	defer database.Close()
+	log.Println("database initialized successfully")
 
 	// Initialize Chunk Store
 	chunkStore := fsops.NewChunkStore(kvStore)
@@ -68,19 +68,19 @@ func main() {
 	})
 
 	manifestRepo := fsops.NewManifestRepo(kvStore)
-	fsOps := fsops.NewFSOps(graphStore, manifestRepo)
+	fsOps := fsops.NewFSOps(database, manifestRepo)
 
 	// Setup Identity Domain
-	tenantStore := identity.NewTenantStore(graphStore)
-	userStore := identity.NewUserStore(graphStore)
+	tenantStore := identity.NewTenantStore(database)
+	userStore := identity.NewUserStore(database)
 
 	// Setup Auth Domain
-	idpStore := auth.NewIdpStore(graphStore)
-	localUserStore := local.NewLocalUserStore(kvStore)
+	idpStore := auth.NewIdpStore(database)
+	localUserStore := local.NewLocalUserStore(database)
 
 	// Setup Cross-Domain Orchestrators
 	userOrchestrator := orchestrator.NewUserOrchestrator(userStore, fsOps)
-	tenantOrchestrator := orchestrator.NewTenantOrchestrator(graphStore, tenantStore, idpStore, userOrchestrator, localUserStore)
+	tenantOrchestrator := orchestrator.NewTenantOrchestrator(database, tenantStore, idpStore, userOrchestrator, localUserStore)
 
 	// Setup Instance Config Store
 	instanceConfigStore := setup.NewInstanceConfigStore(kvStore)

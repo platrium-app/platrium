@@ -1,3 +1,5 @@
+pub mod auth_auth_me_response;
+pub use self::auth_auth_me_response::AuthAuthMeResponse;
 pub mod auth_login_request;
 pub use self::auth_login_request::AuthLoginRequest;
 pub mod auth_login_response;

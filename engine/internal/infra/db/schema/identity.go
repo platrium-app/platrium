@@ -17,7 +17,7 @@ func (IdpProvider) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin
 
 func (IdpProvider) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
 		field.Enum("type").Values("OIDC", "SAML", "LOCAL"),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
 		// Protocol-specific JSON configuration; may hold client secrets.
@@ -48,9 +48,9 @@ func (User) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
 
 func (User) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
-		field.String("idp_id").MaxLen(idLen).Immutable(),
-		field.String("external_id").MaxLen(nameLen).NotEmpty().Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("idp_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("external_id").MaxLen(nameLen).SchemaType(binaryType(nameLen)).NotEmpty().Immutable(),
 		field.String("email").MaxLen(emailLen),
 		field.String("display_name").MaxLen(nameLen),
 		// Free-form so new roles don't need a schema change. The permissions
@@ -69,6 +69,7 @@ func (User) Edges() []ent.Edge {
 			Annotations(entsql.OnDelete(entsql.Restrict)),
 		edge.To("devices", Device.Type),
 		edge.To("owned_drives", Drive.Type),
+		edge.To("credential", LocalCredential.Type).Unique(),
 	}
 }
 
@@ -87,9 +88,9 @@ func (Group) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
 
 func (Group) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
-		field.String("idp_id").MaxLen(idLen).Immutable(),
-		field.String("external_id").MaxLen(nameLen).NotEmpty().Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("idp_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("external_id").MaxLen(nameLen).SchemaType(binaryType(nameLen)).NotEmpty().Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
 	}
 }
@@ -117,7 +118,7 @@ func (Domain) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
 
 func (Domain) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
 		field.Bool("is_verified").Default(false),
 	}
@@ -153,8 +154,8 @@ func (Device) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
 
 func (Device) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("tenant_id").MaxLen(idLen).Immutable(),
-		field.String("user_id").MaxLen(idLen).Immutable(),
+		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
+		field.String("user_id").MaxLen(idLen).SchemaType(idType).Immutable(),
 		// Maps to notifications.TransportType (e.g. "GRAPHQL", "APNS").
 		field.String("transport_type").MaxLen(32).NotEmpty(),
 		// Opaque transport-specific data; never queried into.

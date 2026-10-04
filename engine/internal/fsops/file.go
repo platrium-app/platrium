@@ -4,20 +4,23 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"time"
 
 	nanoid "github.com/matoous/go-nanoid/v2"
 
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/driveitem"
 )
 
 // FSOps encapsulates the domain logic for Platrium file system operations.
 type FSOps struct {
-	graph        graph.Graph
+	db           *db.DB
 	manifestRepo *ManifestRepo
 }
 
-// File represents a file node in the graph database.
+// File represents a file in a drive's tree.
 type File struct {
 	ID           string    `json:"id"`
 	TenantID     string    `json:"tenant_id"`
@@ -39,12 +42,12 @@ type CreateFileParams struct {
 	HexHashes []string
 }
 
-func NewFSOps(g graph.Graph, m *ManifestRepo) *FSOps {
-	return &FSOps{graph: g, manifestRepo: m}
+func NewFSOps(d *db.DB, m *ManifestRepo) *FSOps {
+	return &FSOps{db: d, manifestRepo: m}
 }
 
 // processHashes decodes hex strings and executes the Hybrid Manifest strategy.
-// If <= 4 chunks, they are returned for inline Graph caching.
+// If <= 4 chunks, they are returned to be stored inline on the file row.
 // If > 4 chunks, they are paged out to the KVStore.
 func (f *FSOps) processHashes(ctx context.Context, fileId string, version string, hexHashes []string) ([]string, error) {
 	var binaryHashes [][]byte
@@ -71,158 +74,131 @@ func (f *FSOps) processHashes(ctx context.Context, fileId string, version string
 	return inlineChunks, nil
 }
 
-// CreateFile assigns a file into the resource graph, strictly verifying the parent
-// container exists and isn't a file, all within a single Neo4j transaction.
+// CreateFile adds a file under a parent folder, verifying inside one transaction
+// that the parent exists in the tenant and is a folder.
 func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string, error) {
 	fileId := nanoid.Must()
 	version := "1" // TODO: Change to NanoID or smth else, Initial creation is always v1
 
+	// TODO: a manifest written for a file whose insert then fails is orphaned in the KV store.
 	inlineChunks, err := f.processHashes(ctx, fileId, version, params.HexHashes)
 	if err != nil {
 		return "", err
 	}
-	cypher := `
-		MATCH (parent:Resource:Folder {id: $parent_id, tenant_id: $tenant_id})
 
-		MERGE (file:Resource {id: $file_id})
-		ON CREATE SET 
-			file:File,
-			file.name = $name, 
-			file.tenant_id = $tenant_id,
-			file.size = $size,
-			file.mime_type = $mime_type,
-			file.created_at = datetime(),
-			file.updated_at = datetime(),
-			file.inline_chunks = $inline_chunks
-		
-		MERGE (file)-[:CHILD_OF]->(parent)
-		RETURN file
-	`
-
-	cypherParams := map[string]any{
-		"tenant_id":     params.TenantID,
-		"parent_id":     params.ParentID,
-		"file_id":       fileId,
-		"name":          params.Name,
-		"size":          params.Size,
-		"mime_type":     params.MimeType,
-		"inline_chunks": inlineChunks,
-	}
-
-	err = f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, cypher, cypherParams)
+	err = f.db.WithTx(ctx, func(tx *ent.Tx) error {
+		parent, err := tx.DriveItem.Query().
+			Where(driveitem.ID(params.ParentID), driveitem.TenantID(params.TenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
+			Only(ctx)
 		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: invalid parent resource or permission denied", ErrNotFound)
+			}
 			return err
 		}
-		defer res.Close()
 
-		if !res.Next() {
-			if res.Err() != nil {
-				return res.Err()
-			}
-			// Safe failure: the parent lookup failed the type constraints or didn't exist.
-			return fmt.Errorf("invalid parent resource or permission denied")
+		create := tx.DriveItem.Create().
+			SetID(fileId).
+			SetTenantID(params.TenantID).
+			SetDriveID(parent.DriveID).
+			SetParentID(parent.ID).
+			SetKind(driveitem.KindFILE).
+			SetName(params.Name).
+			SetSize(params.Size).
+			SetMimeType(params.MimeType)
+		if inlineChunks != nil {
+			create.SetInlineChunks(inlineChunks)
 		}
-
+		if err := create.Exec(ctx); err != nil {
+			return fmt.Errorf("failed to create file: %w", err)
+		}
 		return nil
 	})
-
 	if err != nil {
 		return "", err
 	}
-
 	return fileId, nil
+}
+
+func fileFromEnt(i *ent.DriveItem) *File {
+	file := &File{
+		ID:           i.ID,
+		TenantID:     i.TenantID,
+		Name:         i.Name,
+		CreatedAt:    i.CreatedAt,
+		UpdatedAt:    i.UpdatedAt,
+		InlineChunks: i.InlineChunks,
+	}
+	if i.Size != nil {
+		file.Size = *i.Size
+	}
+	if i.MimeType != nil {
+		file.MimeType = *i.MimeType
+	}
+	return file
 }
 
 // GetFile retrieves the full file metadata, ensuring tenant isolation.
 func (f *FSOps) GetFile(ctx context.Context, tenantId, fileId string) (*File, error) {
-	query := `
-		MATCH (file:File {id: $file_id, tenant_id: $tenant_id})
-		RETURN 
-			file.id AS id,
-			file.tenant_id AS tenant_id,
-			file.name AS name,
-			file.size AS size,
-			file.mime_type AS mime_type,
-			file.created_at AS created_at,
-			file.updated_at AS updated_at,
-			file.inline_chunks AS inline_chunks
-	`
-	params := map[string]interface{}{
-		"file_id":   fileId,
-		"tenant_id": tenantId,
-	}
-
-	var file File
-	err := f.graph.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if !res.Next() {
-			return fmt.Errorf("file not found or access denied")
-		}
-
-		if err := res.Scan(&file); err != nil {
-			return fmt.Errorf("failed to scan file: %w", err)
-		}
-
-		return nil
-	})
-
+	i, err := f.db.DriveItem.Query().
+		Where(driveitem.ID(fileId), driveitem.TenantID(tenantId), driveitem.KindEQ(driveitem.KindFILE)).
+		Only(ctx)
 	if err != nil {
-		return nil, err
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: file not found or access denied", ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to fetch file: %w", err)
 	}
-
-	return &file, nil
+	return fileFromEnt(i), nil
 }
 
 // CopyFile copies a file to a new parent folder.
 func (f *FSOps) CopyFile(ctx context.Context, tenantID string, fileID string, newParentID string, newName string) (*File, error) {
 	// TODO: Stub permissions check (CheckPermissions)
 
-	newID := nanoid.Must()
-	query := `
-		MATCH (src:Resource:File {id: $file_id, tenant_id: $tenant_id})
-		MATCH (dest:Resource {id: $new_parent_id, tenant_id: $tenant_id})
-		
-		CREATE (new:Resource:File)
-		SET new = src, 
-		    new.id = $new_id, 
-		    new.name = CASE WHEN $new_name = "" THEN src.name ELSE $new_name END, 
-		    new.created_at = datetime(), 
-		    new.updated_at = datetime()
-		    
-		CREATE (new)-[:CHILD_OF]->(dest)
-		RETURN new.id AS id
-	`
-
-	params := map[string]interface{}{
-		"file_id":       fileID,
-		"new_parent_id": newParentID,
-		"tenant_id":     tenantID,
-		"new_id":        newID,
-		"new_name":      newName,
-	}
-
-	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
+	var copied *ent.DriveItem
+	err := f.db.WithTx(ctx, func(tx *ent.Tx) error {
+		src, err := tx.DriveItem.Query().
+			Where(driveitem.ID(fileID), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFILE)).
+			Only(ctx)
 		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: source file not found", ErrNotFound)
+			}
 			return err
 		}
-		defer res.Close()
-
-		if !res.Next() {
-			if err := res.Err(); err != nil {
-				return err
+		dest, err := tx.DriveItem.Query().
+			Where(driveitem.ID(newParentID), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
+			Only(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: destination folder not found", ErrNotFound)
 			}
-			return fmt.Errorf("source file or destination folder not found")
+			return err
+		}
+
+		name := newName
+		if name == "" {
+			name = src.Name
+		}
+
+		create := tx.DriveItem.Create().
+			SetTenantID(tenantID).
+			SetDriveID(dest.DriveID).
+			SetParentID(dest.ID).
+			SetKind(driveitem.KindFILE).
+			SetName(name).
+			SetNillableSize(src.Size).
+			SetNillableMimeType(src.MimeType)
+		if src.InlineChunks != nil {
+			create.SetInlineChunks(slices.Clone(src.InlineChunks))
+		}
+		copied, err = create.Save(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to copy file: %w", err)
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -230,5 +206,5 @@ func (f *FSOps) CopyFile(ctx context.Context, tenantID string, fileID string, ne
 	// TODO: If the file was > 4 chunks, we must also duplicate the KVStore manifest
 	// pointing to the new file_id. For now, this perfectly copies inline_chunks!
 
-	return f.GetFile(ctx, tenantID, newID)
+	return fileFromEnt(copied), nil
 }

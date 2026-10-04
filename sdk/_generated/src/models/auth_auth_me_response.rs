@@ -12,21 +12,21 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AuthLoginRequest {
-    #[serde(rename = "idp_id")]
-    pub idp_id: String,
+pub struct AuthAuthMeResponse {
+    #[serde(rename = "user_id")]
+    pub user_id: String,
+    #[serde(rename = "tenant_id")]
+    pub tenant_id: String,
     #[serde(rename = "email")]
     pub email: String,
-    #[serde(rename = "password", skip_serializing_if = "Option::is_none")]
-    pub password: Option<String>,
 }
 
-impl AuthLoginRequest {
-    pub fn new(idp_id: String, email: String) -> AuthLoginRequest {
-        AuthLoginRequest {
-            idp_id,
+impl AuthAuthMeResponse {
+    pub fn new(user_id: String, tenant_id: String, email: String) -> AuthAuthMeResponse {
+        AuthAuthMeResponse {
+            user_id,
+            tenant_id,
             email,
-            password: None,
         }
     }
 }

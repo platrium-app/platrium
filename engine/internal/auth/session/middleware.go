@@ -6,7 +6,6 @@ import (
 	"github.com/alexedwards/scs/v2"
 )
 
-const defaultSessionStoreKey = "default_sessioninfo"
 
 // Middleware returns an HTTP middleware that extracts the PlatriumSession struct from SCS
 // and injects it into the request context.
@@ -17,7 +16,7 @@ func Middleware(sm *scs.SessionManager) func(http.Handler) http.Handler {
 			ctx := r.Context()
 
 			var sess *PlatriumSession
-			if val := sm.Get(ctx, defaultSessionStoreKey); val != nil {
+			if val := sm.Get(ctx, StoreKey); val != nil {
 				if s, ok := val.(*PlatriumSession); ok {
 					sess = s
 				}
@@ -35,5 +34,5 @@ func Middleware(sm *scs.SessionManager) func(http.Handler) http.Handler {
 
 // PutSession saves a PlatriumSession object directly into the active SCS session.
 func PutSession(sm *scs.SessionManager, r *http.Request, sess *PlatriumSession) {
-	sm.Put(r.Context(), defaultSessionStoreKey, sess)
+	sm.Put(r.Context(), StoreKey, sess)
 }

@@ -13,7 +13,7 @@ const EECompanyAliasLogin = import.meta.env.VITE_EDITION === 'EE'
   : null
 
 const EETenantLogin = import.meta.env.VITE_EDITION === 'EE'
-  ? lazy(() => import('../ee/pages/EETenantLogin'))
+  ? lazy(() => import('../ee/components/auth/EnterpriseTenantLogin'))
   : null
 
 function AuthLoading() {
