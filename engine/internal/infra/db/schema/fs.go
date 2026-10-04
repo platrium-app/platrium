@@ -67,6 +67,9 @@ func (DriveItem) Fields() []ent.Field {
 		field.String("parent_id").MaxLen(idLen).SchemaType(idType).Optional().Nillable(),
 		field.Enum("kind").Values("FOLDER", "FILE").Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
+		// When false, grants on ancestors stop applying here: the item is
+		// restricted to its own grants and the owner.
+		field.Bool("inherit_perms").Default(true),
 
 		// File-only columns; NULL for folders (enforced by a CHECK).
 		field.Int64("size").Optional().Nillable(),
