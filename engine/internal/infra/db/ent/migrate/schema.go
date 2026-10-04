@@ -3,27 +3,345 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
 
 var (
+	// DevicesColumns holds the columns for the "devices" table.
+	DevicesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+		{Name: "transport_type", Type: field.TypeString, Size: 32},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "user_id", Type: field.TypeString, Size: 64},
+	}
+	// DevicesTable holds the schema information for the "devices" table.
+	DevicesTable = &schema.Table{
+		Name:       "devices",
+		Columns:    DevicesColumns,
+		PrimaryKey: []*schema.Column{DevicesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "devices_users_devices",
+				Columns:    []*schema.Column{DevicesColumns[6]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "device_tenant_id_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{DevicesColumns[3], DevicesColumns[6]},
+			},
+		},
+	}
+	// DomainsColumns holds the columns for the "domains" table.
+	DomainsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "name", Type: field.TypeString, Size: 255},
+		{Name: "is_verified", Type: field.TypeBool, Default: false},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+	}
+	// DomainsTable holds the schema information for the "domains" table.
+	DomainsTable = &schema.Table{
+		Name:       "domains",
+		Columns:    DomainsColumns,
+		PrimaryKey: []*schema.Column{DomainsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "domains_tenants_domains",
+				Columns:    []*schema.Column{DomainsColumns[5]},
+				RefColumns: []*schema.Column{TenantsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "domain_name",
+				Unique:  true,
+				Columns: []*schema.Column{DomainsColumns[3]},
+			},
+			{
+				Name:    "domain_tenant_id",
+				Unique:  false,
+				Columns: []*schema.Column{DomainsColumns[5]},
+			},
+		},
+	}
+	// DrivesColumns holds the columns for the "drives" table.
+	DrivesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "name", Type: field.TypeString, Size: 255},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"PRIVATE", "SHARED"}},
+		{Name: "storage_used", Type: field.TypeInt64, Default: 0},
+		{Name: "storage_quota", Type: field.TypeInt64, Nullable: true},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+		{Name: "owner_id", Type: field.TypeString, Size: 64},
+	}
+	// DrivesTable holds the schema information for the "drives" table.
+	DrivesTable = &schema.Table{
+		Name:       "drives",
+		Columns:    DrivesColumns,
+		PrimaryKey: []*schema.Column{DrivesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "drives_tenants_drives",
+				Columns:    []*schema.Column{DrivesColumns[7]},
+				RefColumns: []*schema.Column{TenantsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "drives_users_owned_drives",
+				Columns:    []*schema.Column{DrivesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "drive_tenant_id_owner_id",
+				Unique:  false,
+				Columns: []*schema.Column{DrivesColumns[7], DrivesColumns[8]},
+			},
+		},
+	}
+	// DriveItemsColumns holds the columns for the "drive_items" table.
+	DriveItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+		{Name: "kind", Type: field.TypeEnum, Enums: []string{"FOLDER", "FILE"}},
+		{Name: "name", Type: field.TypeString, Size: 255},
+		{Name: "size", Type: field.TypeInt64, Nullable: true},
+		{Name: "mime_type", Type: field.TypeString, Nullable: true, Size: 255},
+		{Name: "inline_chunks", Type: field.TypeJSON, Nullable: true},
+		{Name: "drive_id", Type: field.TypeString, Size: 64},
+		{Name: "parent_id", Type: field.TypeString, Nullable: true, Size: 64},
+	}
+	// DriveItemsTable holds the schema information for the "drive_items" table.
+	DriveItemsTable = &schema.Table{
+		Name:       "drive_items",
+		Columns:    DriveItemsColumns,
+		PrimaryKey: []*schema.Column{DriveItemsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "drive_items_drives_items",
+				Columns:    []*schema.Column{DriveItemsColumns[9]},
+				RefColumns: []*schema.Column{DrivesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "drive_items_drive_items_children",
+				Columns:    []*schema.Column{DriveItemsColumns[10]},
+				RefColumns: []*schema.Column{DriveItemsColumns[0]},
+				OnDelete:   schema.Restrict,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "driveitem_tenant_id_parent_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{DriveItemsColumns[3], DriveItemsColumns[10], DriveItemsColumns[0]},
+			},
+			{
+				Name:    "driveitem_tenant_id_parent_id_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{DriveItemsColumns[3], DriveItemsColumns[10], DriveItemsColumns[2]},
+			},
+			{
+				Name:    "driveitem_drive_id",
+				Unique:  false,
+				Columns: []*schema.Column{DriveItemsColumns[9]},
+			},
+		},
+	}
+	// GroupsColumns holds the columns for the "groups" table.
+	GroupsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "external_id", Type: field.TypeString, Size: 255},
+		{Name: "name", Type: field.TypeString, Size: 255},
+		{Name: "idp_id", Type: field.TypeString, Size: 64},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+	}
+	// GroupsTable holds the schema information for the "groups" table.
+	GroupsTable = &schema.Table{
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "groups_idp_providers_groups",
+				Columns:    []*schema.Column{GroupsColumns[5]},
+				RefColumns: []*schema.Column{IdpProvidersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "groups_tenants_groups",
+				Columns:    []*schema.Column{GroupsColumns[6]},
+				RefColumns: []*schema.Column{TenantsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "group_idp_id_external_id",
+				Unique:  true,
+				Columns: []*schema.Column{GroupsColumns[5], GroupsColumns[3]},
+			},
+		},
+	}
+	// IdpProvidersColumns holds the columns for the "idp_providers" table.
+	IdpProvidersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"OIDC", "SAML", "LOCAL"}},
+		{Name: "name", Type: field.TypeString, Size: 255},
+		{Name: "proto_config", Type: field.TypeString, Size: 2147483647, Default: "{}"},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+	}
+	// IdpProvidersTable holds the schema information for the "idp_providers" table.
+	IdpProvidersTable = &schema.Table{
+		Name:       "idp_providers",
+		Columns:    IdpProvidersColumns,
+		PrimaryKey: []*schema.Column{IdpProvidersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "idp_providers_tenants_idp_providers",
+				Columns:    []*schema.Column{IdpProvidersColumns[6]},
+				RefColumns: []*schema.Column{TenantsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idpprovider_tenant_id",
+				Unique:  false,
+				Columns: []*schema.Column{IdpProvidersColumns[6]},
+			},
+		},
+	}
 	// TenantsColumns holds the columns for the "tenants" table.
 	TenantsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "alias", Type: field.TypeString, Size: 255},
 		{Name: "name", Type: field.TypeString, Size: 255},
+		{Name: "native_slot", Type: field.TypeInt, Unique: true, Nullable: true},
 	}
 	// TenantsTable holds the schema information for the "tenants" table.
 	TenantsTable = &schema.Table{
 		Name:       "tenants",
 		Columns:    TenantsColumns,
 		PrimaryKey: []*schema.Column{TenantsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "tenant_alias",
+				Unique:  true,
+				Columns: []*schema.Column{TenantsColumns[3]},
+			},
+		},
+	}
+	// UsersColumns holds the columns for the "users" table.
+	UsersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"mysql": "datetime(6)"}},
+		{Name: "external_id", Type: field.TypeString, Size: 255},
+		{Name: "email", Type: field.TypeString, Size: 255},
+		{Name: "display_name", Type: field.TypeString, Size: 255},
+		{Name: "role", Type: field.TypeString, Size: 32, Default: "MEMBER"},
+		{Name: "idp_id", Type: field.TypeString, Size: 64},
+		{Name: "tenant_id", Type: field.TypeString, Size: 64},
+	}
+	// UsersTable holds the schema information for the "users" table.
+	UsersTable = &schema.Table{
+		Name:       "users",
+		Columns:    UsersColumns,
+		PrimaryKey: []*schema.Column{UsersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "users_idp_providers_users",
+				Columns:    []*schema.Column{UsersColumns[7]},
+				RefColumns: []*schema.Column{IdpProvidersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "users_tenants_users",
+				Columns:    []*schema.Column{UsersColumns[8]},
+				RefColumns: []*schema.Column{TenantsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "user_idp_id_external_id",
+				Unique:  true,
+				Columns: []*schema.Column{UsersColumns[7], UsersColumns[3]},
+			},
+			{
+				Name:    "user_tenant_id_email",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[8], UsersColumns[4]},
+			},
+		},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		DevicesTable,
+		DomainsTable,
+		DrivesTable,
+		DriveItemsTable,
+		GroupsTable,
+		IdpProvidersTable,
 		TenantsTable,
+		UsersTable,
 	}
 )
 
 func init() {
+	DevicesTable.ForeignKeys[0].RefTable = UsersTable
+	DomainsTable.ForeignKeys[0].RefTable = TenantsTable
+	DomainsTable.Annotation = &entsql.Annotation{}
+	DomainsTable.Annotation.Checks = map[string]string{
+		"domain_name_lowercase": "name = LOWER(name)",
+	}
+	DrivesTable.ForeignKeys[0].RefTable = TenantsTable
+	DrivesTable.ForeignKeys[1].RefTable = UsersTable
+	DrivesTable.Annotation = &entsql.Annotation{}
+	DrivesTable.Annotation.Checks = map[string]string{
+		"drive_storage_quota_nonneg": "storage_quota IS NULL OR storage_quota >= 0",
+		"drive_storage_used_nonneg":  "storage_used >= 0",
+	}
+	DriveItemsTable.ForeignKeys[0].RefTable = DrivesTable
+	DriveItemsTable.ForeignKeys[1].RefTable = DriveItemsTable
+	DriveItemsTable.Annotation = &entsql.Annotation{}
+	DriveItemsTable.Annotation.Checks = map[string]string{
+		"drive_item_file_columns": "kind = 'FILE' OR (size IS NULL AND mime_type IS NULL AND inline_chunks IS NULL)",
+		"drive_item_root":         "parent_id IS NOT NULL OR id = drive_id",
+		"drive_item_size_nonneg":  "size IS NULL OR size >= 0",
+	}
+	GroupsTable.ForeignKeys[0].RefTable = IdpProvidersTable
+	GroupsTable.ForeignKeys[1].RefTable = TenantsTable
+	IdpProvidersTable.ForeignKeys[0].RefTable = TenantsTable
+	TenantsTable.Annotation = &entsql.Annotation{}
+	TenantsTable.Annotation.Checks = map[string]string{
+		"tenant_alias_lowercase": "alias = LOWER(alias)",
+		"tenant_native_slot":     "native_slot IS NULL OR native_slot = 1",
+	}
+	UsersTable.ForeignKeys[0].RefTable = IdpProvidersTable
+	UsersTable.ForeignKeys[1].RefTable = TenantsTable
 }

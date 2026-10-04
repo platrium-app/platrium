@@ -6,5 +6,26 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// Device is the predicate function for device builders.
+type Device func(*sql.Selector)
+
+// Domain is the predicate function for domain builders.
+type Domain func(*sql.Selector)
+
+// Drive is the predicate function for drive builders.
+type Drive func(*sql.Selector)
+
+// DriveItem is the predicate function for driveitem builders.
+type DriveItem func(*sql.Selector)
+
+// Group is the predicate function for group builders.
+type Group func(*sql.Selector)
+
+// IdpProvider is the predicate function for idpprovider builders.
+type IdpProvider func(*sql.Selector)
+
 // Tenant is the predicate function for tenant builders.
 type Tenant func(*sql.Selector)
+
+// User is the predicate function for user builders.
+type User func(*sql.Selector)

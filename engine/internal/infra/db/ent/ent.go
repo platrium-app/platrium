@@ -6,7 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"platrium/internal/infra/db/ent/device"
+	"platrium/internal/infra/db/ent/domain"
+	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/driveitem"
+	"platrium/internal/infra/db/ent/group"
+	"platrium/internal/infra/db/ent/idpprovider"
 	"platrium/internal/infra/db/ent/tenant"
+	"platrium/internal/infra/db/ent/user"
 	"reflect"
 	"sync"
 
@@ -73,7 +80,14 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			tenant.Table: tenant.ValidColumn,
+			device.Table:      device.ValidColumn,
+			domain.Table:      domain.ValidColumn,
+			drive.Table:       drive.ValidColumn,
+			driveitem.Table:   driveitem.ValidColumn,
+			group.Table:       group.ValidColumn,
+			idpprovider.Table: idpprovider.ValidColumn,
+			tenant.Table:      tenant.ValidColumn,
+			user.Table:        user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

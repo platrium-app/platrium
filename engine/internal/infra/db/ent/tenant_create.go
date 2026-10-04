@@ -6,7 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"platrium/internal/infra/db/ent/domain"
+	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/group"
+	"platrium/internal/infra/db/ent/idpprovider"
 	"platrium/internal/infra/db/ent/tenant"
+	"platrium/internal/infra/db/ent/user"
+	"time"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
@@ -22,9 +28,57 @@ type TenantCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *TenantCreate) SetCreatedAt(v time.Time) *TenantCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *TenantCreate) SetNillableCreatedAt(v *time.Time) *TenantCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_c *TenantCreate) SetUpdatedAt(v time.Time) *TenantCreate {
+	_c.mutation.SetUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
+func (_c *TenantCreate) SetNillableUpdatedAt(v *time.Time) *TenantCreate {
+	if v != nil {
+		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
+// SetAlias sets the "alias" field.
+func (_c *TenantCreate) SetAlias(v string) *TenantCreate {
+	_c.mutation.SetAlias(v)
+	return _c
+}
+
 // SetName sets the "name" field.
 func (_c *TenantCreate) SetName(v string) *TenantCreate {
 	_c.mutation.SetName(v)
+	return _c
+}
+
+// SetNativeSlot sets the "native_slot" field.
+func (_c *TenantCreate) SetNativeSlot(v int) *TenantCreate {
+	_c.mutation.SetNativeSlot(v)
+	return _c
+}
+
+// SetNillableNativeSlot sets the "native_slot" field if the given value is not nil.
+func (_c *TenantCreate) SetNillableNativeSlot(v *int) *TenantCreate {
+	if v != nil {
+		_c.SetNativeSlot(*v)
+	}
 	return _c
 }
 
@@ -34,6 +88,89 @@ func (_c *TenantCreate) SetID(v string) *TenantCreate {
 	return _c
 }
 
+// SetNillableID sets the "id" field if the given value is not nil.
+func (_c *TenantCreate) SetNillableID(v *string) *TenantCreate {
+	if v != nil {
+		_c.SetID(*v)
+	}
+	return _c
+}
+
+// AddUserIDs adds the "users" edge to the User entity by IDs.
+func (_c *TenantCreate) AddUserIDs(ids ...string) *TenantCreate {
+	_c.mutation.AddUserIDs(ids...)
+	return _c
+}
+
+// AddUsers adds the "users" edges to the User entity.
+func (_c *TenantCreate) AddUsers(v ...*User) *TenantCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddUserIDs(ids...)
+}
+
+// AddGroupIDs adds the "groups" edge to the Group entity by IDs.
+func (_c *TenantCreate) AddGroupIDs(ids ...string) *TenantCreate {
+	_c.mutation.AddGroupIDs(ids...)
+	return _c
+}
+
+// AddGroups adds the "groups" edges to the Group entity.
+func (_c *TenantCreate) AddGroups(v ...*Group) *TenantCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddGroupIDs(ids...)
+}
+
+// AddDomainIDs adds the "domains" edge to the Domain entity by IDs.
+func (_c *TenantCreate) AddDomainIDs(ids ...string) *TenantCreate {
+	_c.mutation.AddDomainIDs(ids...)
+	return _c
+}
+
+// AddDomains adds the "domains" edges to the Domain entity.
+func (_c *TenantCreate) AddDomains(v ...*Domain) *TenantCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddDomainIDs(ids...)
+}
+
+// AddIdpProviderIDs adds the "idp_providers" edge to the IdpProvider entity by IDs.
+func (_c *TenantCreate) AddIdpProviderIDs(ids ...string) *TenantCreate {
+	_c.mutation.AddIdpProviderIDs(ids...)
+	return _c
+}
+
+// AddIdpProviders adds the "idp_providers" edges to the IdpProvider entity.
+func (_c *TenantCreate) AddIdpProviders(v ...*IdpProvider) *TenantCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddIdpProviderIDs(ids...)
+}
+
+// AddDrifeIDs adds the "drives" edge to the Drive entity by IDs.
+func (_c *TenantCreate) AddDrifeIDs(ids ...string) *TenantCreate {
+	_c.mutation.AddDrifeIDs(ids...)
+	return _c
+}
+
+// AddDrives adds the "drives" edges to the Drive entity.
+func (_c *TenantCreate) AddDrives(v ...*Drive) *TenantCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddDrifeIDs(ids...)
+}
+
 // Mutation returns the TenantMutation object of the builder.
 func (_c *TenantCreate) Mutation() *TenantMutation {
 	return _c.mutation
@@ -41,6 +178,7 @@ func (_c *TenantCreate) Mutation() *TenantMutation {
 
 // Save creates the Tenant in the database.
 func (_c *TenantCreate) Save(ctx context.Context) (*Tenant, error) {
+	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -66,8 +204,38 @@ func (_c *TenantCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_c *TenantCreate) defaults() {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		v := tenant.DefaultCreatedAt()
+		_c.mutation.SetCreatedAt(v)
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		v := tenant.DefaultUpdatedAt()
+		_c.mutation.SetUpdatedAt(v)
+	}
+	if _, ok := _c.mutation.ID(); !ok {
+		v := tenant.DefaultID()
+		_c.mutation.SetID(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_c *TenantCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Tenant.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Tenant.updated_at"`)}
+	}
+	if _, ok := _c.mutation.Alias(); !ok {
+		return &ValidationError{Name: "alias", err: errors.New(`ent: missing required field "Tenant.alias"`)}
+	}
+	if v, ok := _c.mutation.Alias(); ok {
+		if err := tenant.AliasValidator(v); err != nil {
+			return &ValidationError{Name: "alias", err: fmt.Errorf(`ent: validator failed for field "Tenant.alias": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "Tenant.name"`)}
 	}
@@ -117,9 +285,105 @@ func (_c *TenantCreate) createSpec() (*Tenant, *sqlgraph.CreateSpec) {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(tenant.FieldCreatedAt, field.TypeTime, value)
+		_node.CreatedAt = value
+	}
+	if value, ok := _c.mutation.UpdatedAt(); ok {
+		_spec.SetField(tenant.FieldUpdatedAt, field.TypeTime, value)
+		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.Alias(); ok {
+		_spec.SetField(tenant.FieldAlias, field.TypeString, value)
+		_node.Alias = value
+	}
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(tenant.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.NativeSlot(); ok {
+		_spec.SetField(tenant.FieldNativeSlot, field.TypeInt, value)
+		_node.NativeSlot = &value
+	}
+	if nodes := _c.mutation.UsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.GroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.DomainsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.IdpProvidersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.DrivesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }
@@ -128,7 +392,7 @@ func (_c *TenantCreate) createSpec() (*Tenant, *sqlgraph.CreateSpec) {
 // of the `INSERT` statement. For example:
 //
 //	client.Tenant.Create().
-//		SetName(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -137,7 +401,7 @@ func (_c *TenantCreate) createSpec() (*Tenant, *sqlgraph.CreateSpec) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.TenantUpsert) {
-//			SetName(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *TenantCreate) OnConflict(opts ...sql.ConflictOption) *TenantUpsertOne {
@@ -173,6 +437,30 @@ type (
 	}
 )
 
+// SetUpdatedAt sets the "updated_at" field.
+func (u *TenantUpsert) SetUpdatedAt(v time.Time) *TenantUpsert {
+	u.Set(tenant.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *TenantUpsert) UpdateUpdatedAt() *TenantUpsert {
+	u.SetExcluded(tenant.FieldUpdatedAt)
+	return u
+}
+
+// SetAlias sets the "alias" field.
+func (u *TenantUpsert) SetAlias(v string) *TenantUpsert {
+	u.Set(tenant.FieldAlias, v)
+	return u
+}
+
+// UpdateAlias sets the "alias" field to the value that was provided on create.
+func (u *TenantUpsert) UpdateAlias() *TenantUpsert {
+	u.SetExcluded(tenant.FieldAlias)
+	return u
+}
+
 // SetName sets the "name" field.
 func (u *TenantUpsert) SetName(v string) *TenantUpsert {
 	u.Set(tenant.FieldName, v)
@@ -182,6 +470,30 @@ func (u *TenantUpsert) SetName(v string) *TenantUpsert {
 // UpdateName sets the "name" field to the value that was provided on create.
 func (u *TenantUpsert) UpdateName() *TenantUpsert {
 	u.SetExcluded(tenant.FieldName)
+	return u
+}
+
+// SetNativeSlot sets the "native_slot" field.
+func (u *TenantUpsert) SetNativeSlot(v int) *TenantUpsert {
+	u.Set(tenant.FieldNativeSlot, v)
+	return u
+}
+
+// UpdateNativeSlot sets the "native_slot" field to the value that was provided on create.
+func (u *TenantUpsert) UpdateNativeSlot() *TenantUpsert {
+	u.SetExcluded(tenant.FieldNativeSlot)
+	return u
+}
+
+// AddNativeSlot adds v to the "native_slot" field.
+func (u *TenantUpsert) AddNativeSlot(v int) *TenantUpsert {
+	u.Add(tenant.FieldNativeSlot, v)
+	return u
+}
+
+// ClearNativeSlot clears the value of the "native_slot" field.
+func (u *TenantUpsert) ClearNativeSlot() *TenantUpsert {
+	u.SetNull(tenant.FieldNativeSlot)
 	return u
 }
 
@@ -201,6 +513,9 @@ func (u *TenantUpsertOne) UpdateNewValues() *TenantUpsertOne {
 	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(tenant.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(tenant.FieldCreatedAt)
 		}
 	}))
 	return u
@@ -233,6 +548,34 @@ func (u *TenantUpsertOne) Update(set func(*TenantUpsert)) *TenantUpsertOne {
 	return u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (u *TenantUpsertOne) SetUpdatedAt(v time.Time) *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *TenantUpsertOne) UpdateUpdatedAt() *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// SetAlias sets the "alias" field.
+func (u *TenantUpsertOne) SetAlias(v string) *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.SetAlias(v)
+	})
+}
+
+// UpdateAlias sets the "alias" field to the value that was provided on create.
+func (u *TenantUpsertOne) UpdateAlias() *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.UpdateAlias()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *TenantUpsertOne) SetName(v string) *TenantUpsertOne {
 	return u.Update(func(s *TenantUpsert) {
@@ -244,6 +587,34 @@ func (u *TenantUpsertOne) SetName(v string) *TenantUpsertOne {
 func (u *TenantUpsertOne) UpdateName() *TenantUpsertOne {
 	return u.Update(func(s *TenantUpsert) {
 		s.UpdateName()
+	})
+}
+
+// SetNativeSlot sets the "native_slot" field.
+func (u *TenantUpsertOne) SetNativeSlot(v int) *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.SetNativeSlot(v)
+	})
+}
+
+// AddNativeSlot adds v to the "native_slot" field.
+func (u *TenantUpsertOne) AddNativeSlot(v int) *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.AddNativeSlot(v)
+	})
+}
+
+// UpdateNativeSlot sets the "native_slot" field to the value that was provided on create.
+func (u *TenantUpsertOne) UpdateNativeSlot() *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.UpdateNativeSlot()
+	})
+}
+
+// ClearNativeSlot clears the value of the "native_slot" field.
+func (u *TenantUpsertOne) ClearNativeSlot() *TenantUpsertOne {
+	return u.Update(func(s *TenantUpsert) {
+		s.ClearNativeSlot()
 	})
 }
 
@@ -304,6 +675,7 @@ func (_c *TenantCreateBulk) Save(ctx context.Context) ([]*Tenant, error) {
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*TenantMutation)
 				if !ok {
@@ -382,7 +754,7 @@ func (_c *TenantCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.TenantUpsert) {
-//			SetName(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *TenantCreateBulk) OnConflict(opts ...sql.ConflictOption) *TenantUpsertBulk {
@@ -429,6 +801,9 @@ func (u *TenantUpsertBulk) UpdateNewValues() *TenantUpsertBulk {
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(tenant.FieldID)
 			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(tenant.FieldCreatedAt)
+			}
 		}
 	}))
 	return u
@@ -461,6 +836,34 @@ func (u *TenantUpsertBulk) Update(set func(*TenantUpsert)) *TenantUpsertBulk {
 	return u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (u *TenantUpsertBulk) SetUpdatedAt(v time.Time) *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *TenantUpsertBulk) UpdateUpdatedAt() *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// SetAlias sets the "alias" field.
+func (u *TenantUpsertBulk) SetAlias(v string) *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.SetAlias(v)
+	})
+}
+
+// UpdateAlias sets the "alias" field to the value that was provided on create.
+func (u *TenantUpsertBulk) UpdateAlias() *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.UpdateAlias()
+	})
+}
+
 // SetName sets the "name" field.
 func (u *TenantUpsertBulk) SetName(v string) *TenantUpsertBulk {
 	return u.Update(func(s *TenantUpsert) {
@@ -472,6 +875,34 @@ func (u *TenantUpsertBulk) SetName(v string) *TenantUpsertBulk {
 func (u *TenantUpsertBulk) UpdateName() *TenantUpsertBulk {
 	return u.Update(func(s *TenantUpsert) {
 		s.UpdateName()
+	})
+}
+
+// SetNativeSlot sets the "native_slot" field.
+func (u *TenantUpsertBulk) SetNativeSlot(v int) *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.SetNativeSlot(v)
+	})
+}
+
+// AddNativeSlot adds v to the "native_slot" field.
+func (u *TenantUpsertBulk) AddNativeSlot(v int) *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.AddNativeSlot(v)
+	})
+}
+
+// UpdateNativeSlot sets the "native_slot" field to the value that was provided on create.
+func (u *TenantUpsertBulk) UpdateNativeSlot() *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.UpdateNativeSlot()
+	})
+}
+
+// ClearNativeSlot clears the value of the "native_slot" field.
+func (u *TenantUpsertBulk) ClearNativeSlot() *TenantUpsertBulk {
+	return u.Update(func(s *TenantUpsert) {
+		s.ClearNativeSlot()
 	})
 }
 

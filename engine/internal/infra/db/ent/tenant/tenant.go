@@ -3,7 +3,10 @@
 package tenant
 
 import (
+	"time"
+
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -11,16 +14,73 @@ const (
 	Label = "tenant"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldCreatedAt holds the string denoting the created_at field in the database.
+	FieldCreatedAt = "created_at"
+	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
+	FieldUpdatedAt = "updated_at"
+	// FieldAlias holds the string denoting the alias field in the database.
+	FieldAlias = "alias"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
+	// FieldNativeSlot holds the string denoting the native_slot field in the database.
+	FieldNativeSlot = "native_slot"
+	// EdgeUsers holds the string denoting the users edge name in mutations.
+	EdgeUsers = "users"
+	// EdgeGroups holds the string denoting the groups edge name in mutations.
+	EdgeGroups = "groups"
+	// EdgeDomains holds the string denoting the domains edge name in mutations.
+	EdgeDomains = "domains"
+	// EdgeIdpProviders holds the string denoting the idp_providers edge name in mutations.
+	EdgeIdpProviders = "idp_providers"
+	// EdgeDrives holds the string denoting the drives edge name in mutations.
+	EdgeDrives = "drives"
 	// Table holds the table name of the tenant in the database.
 	Table = "tenants"
+	// UsersTable is the table that holds the users relation/edge.
+	UsersTable = "users"
+	// UsersInverseTable is the table name for the User entity.
+	// It exists in this package in order to avoid circular dependency with the "user" package.
+	UsersInverseTable = "users"
+	// UsersColumn is the table column denoting the users relation/edge.
+	UsersColumn = "tenant_id"
+	// GroupsTable is the table that holds the groups relation/edge.
+	GroupsTable = "groups"
+	// GroupsInverseTable is the table name for the Group entity.
+	// It exists in this package in order to avoid circular dependency with the "group" package.
+	GroupsInverseTable = "groups"
+	// GroupsColumn is the table column denoting the groups relation/edge.
+	GroupsColumn = "tenant_id"
+	// DomainsTable is the table that holds the domains relation/edge.
+	DomainsTable = "domains"
+	// DomainsInverseTable is the table name for the Domain entity.
+	// It exists in this package in order to avoid circular dependency with the "domain" package.
+	DomainsInverseTable = "domains"
+	// DomainsColumn is the table column denoting the domains relation/edge.
+	DomainsColumn = "tenant_id"
+	// IdpProvidersTable is the table that holds the idp_providers relation/edge.
+	IdpProvidersTable = "idp_providers"
+	// IdpProvidersInverseTable is the table name for the IdpProvider entity.
+	// It exists in this package in order to avoid circular dependency with the "idpprovider" package.
+	IdpProvidersInverseTable = "idp_providers"
+	// IdpProvidersColumn is the table column denoting the idp_providers relation/edge.
+	IdpProvidersColumn = "tenant_id"
+	// DrivesTable is the table that holds the drives relation/edge.
+	DrivesTable = "drives"
+	// DrivesInverseTable is the table name for the Drive entity.
+	// It exists in this package in order to avoid circular dependency with the "drive" package.
+	DrivesInverseTable = "drives"
+	// DrivesColumn is the table column denoting the drives relation/edge.
+	DrivesColumn = "tenant_id"
 )
 
 // Columns holds all SQL columns for tenant fields.
 var Columns = []string{
 	FieldID,
+	FieldCreatedAt,
+	FieldUpdatedAt,
+	FieldAlias,
 	FieldName,
+	FieldNativeSlot,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -34,8 +94,18 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
+	DefaultCreatedAt func() time.Time
+	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
+	DefaultUpdatedAt func() time.Time
+	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
+	UpdateDefaultUpdatedAt func() time.Time
+	// AliasValidator is a validator for the "alias" field. It is called by the builders before save.
+	AliasValidator func(string) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// DefaultID holds the default value on creation for the "id" field.
+	DefaultID func() string
 	// IDValidator is a validator for the "id" field. It is called by the builders before save.
 	IDValidator func(string) error
 )
@@ -48,7 +118,132 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
+// ByCreatedAt orders the results by the created_at field.
+func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
+}
+
+// ByUpdatedAt orders the results by the updated_at field.
+func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByAlias orders the results by the alias field.
+func ByAlias(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAlias, opts...).ToFunc()
+}
+
 // ByName orders the results by the name field.
 func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
+}
+
+// ByNativeSlot orders the results by the native_slot field.
+func ByNativeSlot(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNativeSlot, opts...).ToFunc()
+}
+
+// ByUsersCount orders the results by users count.
+func ByUsersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newUsersStep(), opts...)
+	}
+}
+
+// ByUsers orders the results by users terms.
+func ByUsers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUsersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByGroupsCount orders the results by groups count.
+func ByGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupsStep(), opts...)
+	}
+}
+
+// ByGroups orders the results by groups terms.
+func ByGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByDomainsCount orders the results by domains count.
+func ByDomainsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newDomainsStep(), opts...)
+	}
+}
+
+// ByDomains orders the results by domains terms.
+func ByDomains(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newDomainsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByIdpProvidersCount orders the results by idp_providers count.
+func ByIdpProvidersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newIdpProvidersStep(), opts...)
+	}
+}
+
+// ByIdpProviders orders the results by idp_providers terms.
+func ByIdpProviders(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newIdpProvidersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByDrivesCount orders the results by drives count.
+func ByDrivesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newDrivesStep(), opts...)
+	}
+}
+
+// ByDrives orders the results by drives terms.
+func ByDrives(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newDrivesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newUsersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UsersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, UsersTable, UsersColumn),
+	)
+}
+func newGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GroupsTable, GroupsColumn),
+	)
+}
+func newDomainsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(DomainsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, DomainsTable, DomainsColumn),
+	)
+}
+func newIdpProvidersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(IdpProvidersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, IdpProvidersTable, IdpProvidersColumn),
+	)
+}
+func newDrivesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(DrivesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, DrivesTable, DrivesColumn),
+	)
 }

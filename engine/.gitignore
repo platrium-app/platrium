@@ -3,7 +3,11 @@ bin/
 *.exe
 *.dll
 data/
+
+# Generated Files
 ui/dist/
+ent/
+
 
 # OS Files
 .DS_Store

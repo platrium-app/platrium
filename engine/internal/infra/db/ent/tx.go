@@ -14,8 +14,22 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// Device is the client for interacting with the Device builders.
+	Device *DeviceClient
+	// Domain is the client for interacting with the Domain builders.
+	Domain *DomainClient
+	// Drive is the client for interacting with the Drive builders.
+	Drive *DriveClient
+	// DriveItem is the client for interacting with the DriveItem builders.
+	DriveItem *DriveItemClient
+	// Group is the client for interacting with the Group builders.
+	Group *GroupClient
+	// IdpProvider is the client for interacting with the IdpProvider builders.
+	IdpProvider *IdpProviderClient
 	// Tenant is the client for interacting with the Tenant builders.
 	Tenant *TenantClient
+	// User is the client for interacting with the User builders.
+	User *UserClient
 
 	// lazily loaded.
 	client     *Client
@@ -147,7 +161,14 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.Device = NewDeviceClient(tx.config)
+	tx.Domain = NewDomainClient(tx.config)
+	tx.Drive = NewDriveClient(tx.config)
+	tx.DriveItem = NewDriveItemClient(tx.config)
+	tx.Group = NewGroupClient(tx.config)
+	tx.IdpProvider = NewIdpProviderClient(tx.config)
 	tx.Tenant = NewTenantClient(tx.config)
+	tx.User = NewUserClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -157,7 +178,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Tenant.QueryXXX(), the query will be executed
+// applies a query, for example: Device.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

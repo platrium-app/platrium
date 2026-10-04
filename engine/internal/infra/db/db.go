@@ -19,6 +19,7 @@ import (
 	_ "modernc.org/sqlite"             // registers "sqlite"
 
 	"platrium/internal/infra/db/ent"
+	_ "platrium/internal/infra/db/ent/runtime" // schema defaults and hooks
 )
 
 type Config struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"platrium/internal/infra/db/ent/tenant"
 	"strings"
+	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -16,9 +17,82 @@ type Tenant struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
+	// CreatedAt holds the value of the "created_at" field.
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	// UpdatedAt holds the value of the "updated_at" field.
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Alias holds the value of the "alias" field.
+	Alias string `json:"alias,omitempty"`
 	// Name holds the value of the "name" field.
-	Name         string `json:"name,omitempty"`
+	Name string `json:"name,omitempty"`
+	// NativeSlot holds the value of the "native_slot" field.
+	NativeSlot *int `json:"native_slot,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the TenantQuery when eager-loading is set.
+	Edges        TenantEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// TenantEdges holds the relations/edges for other nodes in the graph.
+type TenantEdges struct {
+	// Users holds the value of the users edge.
+	Users []*User `json:"users,omitempty"`
+	// Groups holds the value of the groups edge.
+	Groups []*Group `json:"groups,omitempty"`
+	// Domains holds the value of the domains edge.
+	Domains []*Domain `json:"domains,omitempty"`
+	// IdpProviders holds the value of the idp_providers edge.
+	IdpProviders []*IdpProvider `json:"idp_providers,omitempty"`
+	// Drives holds the value of the drives edge.
+	Drives []*Drive `json:"drives,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [5]bool
+}
+
+// UsersOrErr returns the Users value or an error if the edge
+// was not loaded in eager-loading.
+func (e TenantEdges) UsersOrErr() ([]*User, error) {
+	if e.loadedTypes[0] {
+		return e.Users, nil
+	}
+	return nil, &NotLoadedError{edge: "users"}
+}
+
+// GroupsOrErr returns the Groups value or an error if the edge
+// was not loaded in eager-loading.
+func (e TenantEdges) GroupsOrErr() ([]*Group, error) {
+	if e.loadedTypes[1] {
+		return e.Groups, nil
+	}
+	return nil, &NotLoadedError{edge: "groups"}
+}
+
+// DomainsOrErr returns the Domains value or an error if the edge
+// was not loaded in eager-loading.
+func (e TenantEdges) DomainsOrErr() ([]*Domain, error) {
+	if e.loadedTypes[2] {
+		return e.Domains, nil
+	}
+	return nil, &NotLoadedError{edge: "domains"}
+}
+
+// IdpProvidersOrErr returns the IdpProviders value or an error if the edge
+// was not loaded in eager-loading.
+func (e TenantEdges) IdpProvidersOrErr() ([]*IdpProvider, error) {
+	if e.loadedTypes[3] {
+		return e.IdpProviders, nil
+	}
+	return nil, &NotLoadedError{edge: "idp_providers"}
+}
+
+// DrivesOrErr returns the Drives value or an error if the edge
+// was not loaded in eager-loading.
+func (e TenantEdges) DrivesOrErr() ([]*Drive, error) {
+	if e.loadedTypes[4] {
+		return e.Drives, nil
+	}
+	return nil, &NotLoadedError{edge: "drives"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -26,8 +100,12 @@ func (*Tenant) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tenant.FieldID, tenant.FieldName:
+		case tenant.FieldNativeSlot:
+			values[i] = new(sql.NullInt64)
+		case tenant.FieldID, tenant.FieldAlias, tenant.FieldName:
 			values[i] = new(sql.NullString)
+		case tenant.FieldCreatedAt, tenant.FieldUpdatedAt:
+			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -49,11 +127,36 @@ func (_m *Tenant) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ID = value.String
 			}
+		case tenant.FieldCreatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
+			} else if value.Valid {
+				_m.CreatedAt = value.Time
+			}
+		case tenant.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
+			} else if value.Valid {
+				_m.UpdatedAt = value.Time
+			}
+		case tenant.FieldAlias:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field alias", values[i])
+			} else if value.Valid {
+				_m.Alias = value.String
+			}
 		case tenant.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				_m.Name = value.String
+			}
+		case tenant.FieldNativeSlot:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field native_slot", values[i])
+			} else if value.Valid {
+				_m.NativeSlot = new(int)
+				*_m.NativeSlot = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -66,6 +169,31 @@ func (_m *Tenant) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Tenant) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
+}
+
+// QueryUsers queries the "users" edge of the Tenant entity.
+func (_m *Tenant) QueryUsers() *UserQuery {
+	return NewTenantClient(_m.config).QueryUsers(_m)
+}
+
+// QueryGroups queries the "groups" edge of the Tenant entity.
+func (_m *Tenant) QueryGroups() *GroupQuery {
+	return NewTenantClient(_m.config).QueryGroups(_m)
+}
+
+// QueryDomains queries the "domains" edge of the Tenant entity.
+func (_m *Tenant) QueryDomains() *DomainQuery {
+	return NewTenantClient(_m.config).QueryDomains(_m)
+}
+
+// QueryIdpProviders queries the "idp_providers" edge of the Tenant entity.
+func (_m *Tenant) QueryIdpProviders() *IdpProviderQuery {
+	return NewTenantClient(_m.config).QueryIdpProviders(_m)
+}
+
+// QueryDrives queries the "drives" edge of the Tenant entity.
+func (_m *Tenant) QueryDrives() *DriveQuery {
+	return NewTenantClient(_m.config).QueryDrives(_m)
 }
 
 // Update returns a builder for updating this Tenant.
@@ -91,8 +219,22 @@ func (_m *Tenant) String() string {
 	var builder strings.Builder
 	builder.WriteString("Tenant(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("created_at=")
+	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("updated_at=")
+	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("alias=")
+	builder.WriteString(_m.Alias)
+	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
+	builder.WriteString(", ")
+	if v := _m.NativeSlot; v != nil {
+		builder.WriteString("native_slot=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

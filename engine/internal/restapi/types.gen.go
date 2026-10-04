@@ -12,9 +12,9 @@ type AuthAuthMeResponse struct {
 
 // AuthLoginRequest defines model for Auth.LoginRequest.
 type AuthLoginRequest struct {
+	Email    string  `json:"email"`
 	IdpId    string  `json:"idp_id"`
 	Password *string `json:"password,omitempty"`
-	Username string  `json:"username"`
 }
 
 // AuthLoginResponse defines model for Auth.LoginResponse.

@@ -6,8 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"platrium/internal/infra/db/ent/domain"
+	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/group"
+	"platrium/internal/infra/db/ent/idpprovider"
 	"platrium/internal/infra/db/ent/predicate"
 	"platrium/internal/infra/db/ent/tenant"
+	"platrium/internal/infra/db/ent/user"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -27,6 +33,26 @@ func (_u *TenantUpdate) Where(ps ...predicate.Tenant) *TenantUpdate {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *TenantUpdate) SetUpdatedAt(v time.Time) *TenantUpdate {
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetAlias sets the "alias" field.
+func (_u *TenantUpdate) SetAlias(v string) *TenantUpdate {
+	_u.mutation.SetAlias(v)
+	return _u
+}
+
+// SetNillableAlias sets the "alias" field if the given value is not nil.
+func (_u *TenantUpdate) SetNillableAlias(v *string) *TenantUpdate {
+	if v != nil {
+		_u.SetAlias(*v)
+	}
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *TenantUpdate) SetName(v string) *TenantUpdate {
 	_u.mutation.SetName(v)
@@ -41,13 +67,221 @@ func (_u *TenantUpdate) SetNillableName(v *string) *TenantUpdate {
 	return _u
 }
 
+// SetNativeSlot sets the "native_slot" field.
+func (_u *TenantUpdate) SetNativeSlot(v int) *TenantUpdate {
+	_u.mutation.ResetNativeSlot()
+	_u.mutation.SetNativeSlot(v)
+	return _u
+}
+
+// SetNillableNativeSlot sets the "native_slot" field if the given value is not nil.
+func (_u *TenantUpdate) SetNillableNativeSlot(v *int) *TenantUpdate {
+	if v != nil {
+		_u.SetNativeSlot(*v)
+	}
+	return _u
+}
+
+// AddNativeSlot adds value to the "native_slot" field.
+func (_u *TenantUpdate) AddNativeSlot(v int) *TenantUpdate {
+	_u.mutation.AddNativeSlot(v)
+	return _u
+}
+
+// ClearNativeSlot clears the value of the "native_slot" field.
+func (_u *TenantUpdate) ClearNativeSlot() *TenantUpdate {
+	_u.mutation.ClearNativeSlot()
+	return _u
+}
+
+// AddUserIDs adds the "users" edge to the User entity by IDs.
+func (_u *TenantUpdate) AddUserIDs(ids ...string) *TenantUpdate {
+	_u.mutation.AddUserIDs(ids...)
+	return _u
+}
+
+// AddUsers adds the "users" edges to the User entity.
+func (_u *TenantUpdate) AddUsers(v ...*User) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUserIDs(ids...)
+}
+
+// AddGroupIDs adds the "groups" edge to the Group entity by IDs.
+func (_u *TenantUpdate) AddGroupIDs(ids ...string) *TenantUpdate {
+	_u.mutation.AddGroupIDs(ids...)
+	return _u
+}
+
+// AddGroups adds the "groups" edges to the Group entity.
+func (_u *TenantUpdate) AddGroups(v ...*Group) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupIDs(ids...)
+}
+
+// AddDomainIDs adds the "domains" edge to the Domain entity by IDs.
+func (_u *TenantUpdate) AddDomainIDs(ids ...string) *TenantUpdate {
+	_u.mutation.AddDomainIDs(ids...)
+	return _u
+}
+
+// AddDomains adds the "domains" edges to the Domain entity.
+func (_u *TenantUpdate) AddDomains(v ...*Domain) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddDomainIDs(ids...)
+}
+
+// AddIdpProviderIDs adds the "idp_providers" edge to the IdpProvider entity by IDs.
+func (_u *TenantUpdate) AddIdpProviderIDs(ids ...string) *TenantUpdate {
+	_u.mutation.AddIdpProviderIDs(ids...)
+	return _u
+}
+
+// AddIdpProviders adds the "idp_providers" edges to the IdpProvider entity.
+func (_u *TenantUpdate) AddIdpProviders(v ...*IdpProvider) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddIdpProviderIDs(ids...)
+}
+
+// AddDrifeIDs adds the "drives" edge to the Drive entity by IDs.
+func (_u *TenantUpdate) AddDrifeIDs(ids ...string) *TenantUpdate {
+	_u.mutation.AddDrifeIDs(ids...)
+	return _u
+}
+
+// AddDrives adds the "drives" edges to the Drive entity.
+func (_u *TenantUpdate) AddDrives(v ...*Drive) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddDrifeIDs(ids...)
+}
+
 // Mutation returns the TenantMutation object of the builder.
 func (_u *TenantUpdate) Mutation() *TenantMutation {
 	return _u.mutation
 }
 
+// ClearUsers clears all "users" edges to the User entity.
+func (_u *TenantUpdate) ClearUsers() *TenantUpdate {
+	_u.mutation.ClearUsers()
+	return _u
+}
+
+// RemoveUserIDs removes the "users" edge to User entities by IDs.
+func (_u *TenantUpdate) RemoveUserIDs(ids ...string) *TenantUpdate {
+	_u.mutation.RemoveUserIDs(ids...)
+	return _u
+}
+
+// RemoveUsers removes "users" edges to User entities.
+func (_u *TenantUpdate) RemoveUsers(v ...*User) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUserIDs(ids...)
+}
+
+// ClearGroups clears all "groups" edges to the Group entity.
+func (_u *TenantUpdate) ClearGroups() *TenantUpdate {
+	_u.mutation.ClearGroups()
+	return _u
+}
+
+// RemoveGroupIDs removes the "groups" edge to Group entities by IDs.
+func (_u *TenantUpdate) RemoveGroupIDs(ids ...string) *TenantUpdate {
+	_u.mutation.RemoveGroupIDs(ids...)
+	return _u
+}
+
+// RemoveGroups removes "groups" edges to Group entities.
+func (_u *TenantUpdate) RemoveGroups(v ...*Group) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupIDs(ids...)
+}
+
+// ClearDomains clears all "domains" edges to the Domain entity.
+func (_u *TenantUpdate) ClearDomains() *TenantUpdate {
+	_u.mutation.ClearDomains()
+	return _u
+}
+
+// RemoveDomainIDs removes the "domains" edge to Domain entities by IDs.
+func (_u *TenantUpdate) RemoveDomainIDs(ids ...string) *TenantUpdate {
+	_u.mutation.RemoveDomainIDs(ids...)
+	return _u
+}
+
+// RemoveDomains removes "domains" edges to Domain entities.
+func (_u *TenantUpdate) RemoveDomains(v ...*Domain) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveDomainIDs(ids...)
+}
+
+// ClearIdpProviders clears all "idp_providers" edges to the IdpProvider entity.
+func (_u *TenantUpdate) ClearIdpProviders() *TenantUpdate {
+	_u.mutation.ClearIdpProviders()
+	return _u
+}
+
+// RemoveIdpProviderIDs removes the "idp_providers" edge to IdpProvider entities by IDs.
+func (_u *TenantUpdate) RemoveIdpProviderIDs(ids ...string) *TenantUpdate {
+	_u.mutation.RemoveIdpProviderIDs(ids...)
+	return _u
+}
+
+// RemoveIdpProviders removes "idp_providers" edges to IdpProvider entities.
+func (_u *TenantUpdate) RemoveIdpProviders(v ...*IdpProvider) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveIdpProviderIDs(ids...)
+}
+
+// ClearDrives clears all "drives" edges to the Drive entity.
+func (_u *TenantUpdate) ClearDrives() *TenantUpdate {
+	_u.mutation.ClearDrives()
+	return _u
+}
+
+// RemoveDrifeIDs removes the "drives" edge to Drive entities by IDs.
+func (_u *TenantUpdate) RemoveDrifeIDs(ids ...string) *TenantUpdate {
+	_u.mutation.RemoveDrifeIDs(ids...)
+	return _u
+}
+
+// RemoveDrives removes "drives" edges to Drive entities.
+func (_u *TenantUpdate) RemoveDrives(v ...*Drive) *TenantUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveDrifeIDs(ids...)
+}
+
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *TenantUpdate) Save(ctx context.Context) (int, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -73,8 +307,21 @@ func (_u *TenantUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_u *TenantUpdate) defaults() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		v := tenant.UpdateDefaultUpdatedAt()
+		_u.mutation.SetUpdatedAt(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_u *TenantUpdate) check() error {
+	if v, ok := _u.mutation.Alias(); ok {
+		if err := tenant.AliasValidator(v); err != nil {
+			return &ValidationError{Name: "alias", err: fmt.Errorf(`ent: validator failed for field "Tenant.alias": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := tenant.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Tenant.name": %w`, err)}
@@ -95,8 +342,248 @@ func (_u *TenantUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(tenant.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.Alias(); ok {
+		_spec.SetField(tenant.FieldAlias, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(tenant.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NativeSlot(); ok {
+		_spec.SetField(tenant.FieldNativeSlot, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedNativeSlot(); ok {
+		_spec.AddField(tenant.FieldNativeSlot, field.TypeInt, value)
+	}
+	if _u.mutation.NativeSlotCleared() {
+		_spec.ClearField(tenant.FieldNativeSlot, field.TypeInt)
+	}
+	if _u.mutation.UsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUsersIDs(); len(nodes) > 0 && !_u.mutation.UsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupsIDs(); len(nodes) > 0 && !_u.mutation.GroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.DomainsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedDomainsIDs(); len(nodes) > 0 && !_u.mutation.DomainsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.DomainsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.IdpProvidersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedIdpProvidersIDs(); len(nodes) > 0 && !_u.mutation.IdpProvidersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.IdpProvidersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.DrivesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedDrivesIDs(); len(nodes) > 0 && !_u.mutation.DrivesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.DrivesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -118,6 +605,26 @@ type TenantUpdateOne struct {
 	mutation *TenantMutation
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *TenantUpdateOne) SetUpdatedAt(v time.Time) *TenantUpdateOne {
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetAlias sets the "alias" field.
+func (_u *TenantUpdateOne) SetAlias(v string) *TenantUpdateOne {
+	_u.mutation.SetAlias(v)
+	return _u
+}
+
+// SetNillableAlias sets the "alias" field if the given value is not nil.
+func (_u *TenantUpdateOne) SetNillableAlias(v *string) *TenantUpdateOne {
+	if v != nil {
+		_u.SetAlias(*v)
+	}
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *TenantUpdateOne) SetName(v string) *TenantUpdateOne {
 	_u.mutation.SetName(v)
@@ -132,9 +639,216 @@ func (_u *TenantUpdateOne) SetNillableName(v *string) *TenantUpdateOne {
 	return _u
 }
 
+// SetNativeSlot sets the "native_slot" field.
+func (_u *TenantUpdateOne) SetNativeSlot(v int) *TenantUpdateOne {
+	_u.mutation.ResetNativeSlot()
+	_u.mutation.SetNativeSlot(v)
+	return _u
+}
+
+// SetNillableNativeSlot sets the "native_slot" field if the given value is not nil.
+func (_u *TenantUpdateOne) SetNillableNativeSlot(v *int) *TenantUpdateOne {
+	if v != nil {
+		_u.SetNativeSlot(*v)
+	}
+	return _u
+}
+
+// AddNativeSlot adds value to the "native_slot" field.
+func (_u *TenantUpdateOne) AddNativeSlot(v int) *TenantUpdateOne {
+	_u.mutation.AddNativeSlot(v)
+	return _u
+}
+
+// ClearNativeSlot clears the value of the "native_slot" field.
+func (_u *TenantUpdateOne) ClearNativeSlot() *TenantUpdateOne {
+	_u.mutation.ClearNativeSlot()
+	return _u
+}
+
+// AddUserIDs adds the "users" edge to the User entity by IDs.
+func (_u *TenantUpdateOne) AddUserIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.AddUserIDs(ids...)
+	return _u
+}
+
+// AddUsers adds the "users" edges to the User entity.
+func (_u *TenantUpdateOne) AddUsers(v ...*User) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUserIDs(ids...)
+}
+
+// AddGroupIDs adds the "groups" edge to the Group entity by IDs.
+func (_u *TenantUpdateOne) AddGroupIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.AddGroupIDs(ids...)
+	return _u
+}
+
+// AddGroups adds the "groups" edges to the Group entity.
+func (_u *TenantUpdateOne) AddGroups(v ...*Group) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupIDs(ids...)
+}
+
+// AddDomainIDs adds the "domains" edge to the Domain entity by IDs.
+func (_u *TenantUpdateOne) AddDomainIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.AddDomainIDs(ids...)
+	return _u
+}
+
+// AddDomains adds the "domains" edges to the Domain entity.
+func (_u *TenantUpdateOne) AddDomains(v ...*Domain) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddDomainIDs(ids...)
+}
+
+// AddIdpProviderIDs adds the "idp_providers" edge to the IdpProvider entity by IDs.
+func (_u *TenantUpdateOne) AddIdpProviderIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.AddIdpProviderIDs(ids...)
+	return _u
+}
+
+// AddIdpProviders adds the "idp_providers" edges to the IdpProvider entity.
+func (_u *TenantUpdateOne) AddIdpProviders(v ...*IdpProvider) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddIdpProviderIDs(ids...)
+}
+
+// AddDrifeIDs adds the "drives" edge to the Drive entity by IDs.
+func (_u *TenantUpdateOne) AddDrifeIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.AddDrifeIDs(ids...)
+	return _u
+}
+
+// AddDrives adds the "drives" edges to the Drive entity.
+func (_u *TenantUpdateOne) AddDrives(v ...*Drive) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddDrifeIDs(ids...)
+}
+
 // Mutation returns the TenantMutation object of the builder.
 func (_u *TenantUpdateOne) Mutation() *TenantMutation {
 	return _u.mutation
+}
+
+// ClearUsers clears all "users" edges to the User entity.
+func (_u *TenantUpdateOne) ClearUsers() *TenantUpdateOne {
+	_u.mutation.ClearUsers()
+	return _u
+}
+
+// RemoveUserIDs removes the "users" edge to User entities by IDs.
+func (_u *TenantUpdateOne) RemoveUserIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.RemoveUserIDs(ids...)
+	return _u
+}
+
+// RemoveUsers removes "users" edges to User entities.
+func (_u *TenantUpdateOne) RemoveUsers(v ...*User) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUserIDs(ids...)
+}
+
+// ClearGroups clears all "groups" edges to the Group entity.
+func (_u *TenantUpdateOne) ClearGroups() *TenantUpdateOne {
+	_u.mutation.ClearGroups()
+	return _u
+}
+
+// RemoveGroupIDs removes the "groups" edge to Group entities by IDs.
+func (_u *TenantUpdateOne) RemoveGroupIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.RemoveGroupIDs(ids...)
+	return _u
+}
+
+// RemoveGroups removes "groups" edges to Group entities.
+func (_u *TenantUpdateOne) RemoveGroups(v ...*Group) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupIDs(ids...)
+}
+
+// ClearDomains clears all "domains" edges to the Domain entity.
+func (_u *TenantUpdateOne) ClearDomains() *TenantUpdateOne {
+	_u.mutation.ClearDomains()
+	return _u
+}
+
+// RemoveDomainIDs removes the "domains" edge to Domain entities by IDs.
+func (_u *TenantUpdateOne) RemoveDomainIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.RemoveDomainIDs(ids...)
+	return _u
+}
+
+// RemoveDomains removes "domains" edges to Domain entities.
+func (_u *TenantUpdateOne) RemoveDomains(v ...*Domain) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveDomainIDs(ids...)
+}
+
+// ClearIdpProviders clears all "idp_providers" edges to the IdpProvider entity.
+func (_u *TenantUpdateOne) ClearIdpProviders() *TenantUpdateOne {
+	_u.mutation.ClearIdpProviders()
+	return _u
+}
+
+// RemoveIdpProviderIDs removes the "idp_providers" edge to IdpProvider entities by IDs.
+func (_u *TenantUpdateOne) RemoveIdpProviderIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.RemoveIdpProviderIDs(ids...)
+	return _u
+}
+
+// RemoveIdpProviders removes "idp_providers" edges to IdpProvider entities.
+func (_u *TenantUpdateOne) RemoveIdpProviders(v ...*IdpProvider) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveIdpProviderIDs(ids...)
+}
+
+// ClearDrives clears all "drives" edges to the Drive entity.
+func (_u *TenantUpdateOne) ClearDrives() *TenantUpdateOne {
+	_u.mutation.ClearDrives()
+	return _u
+}
+
+// RemoveDrifeIDs removes the "drives" edge to Drive entities by IDs.
+func (_u *TenantUpdateOne) RemoveDrifeIDs(ids ...string) *TenantUpdateOne {
+	_u.mutation.RemoveDrifeIDs(ids...)
+	return _u
+}
+
+// RemoveDrives removes "drives" edges to Drive entities.
+func (_u *TenantUpdateOne) RemoveDrives(v ...*Drive) *TenantUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveDrifeIDs(ids...)
 }
 
 // Where appends a list predicates to the TenantUpdate builder.
@@ -152,6 +866,7 @@ func (_u *TenantUpdateOne) Select(field string, fields ...string) *TenantUpdateO
 
 // Save executes the query and returns the updated Tenant entity.
 func (_u *TenantUpdateOne) Save(ctx context.Context) (*Tenant, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -177,8 +892,21 @@ func (_u *TenantUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_u *TenantUpdateOne) defaults() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		v := tenant.UpdateDefaultUpdatedAt()
+		_u.mutation.SetUpdatedAt(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_u *TenantUpdateOne) check() error {
+	if v, ok := _u.mutation.Alias(); ok {
+		if err := tenant.AliasValidator(v); err != nil {
+			return &ValidationError{Name: "alias", err: fmt.Errorf(`ent: validator failed for field "Tenant.alias": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := tenant.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Tenant.name": %w`, err)}
@@ -216,8 +944,248 @@ func (_u *TenantUpdateOne) sqlSave(ctx context.Context) (_node *Tenant, err erro
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(tenant.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.Alias(); ok {
+		_spec.SetField(tenant.FieldAlias, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(tenant.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NativeSlot(); ok {
+		_spec.SetField(tenant.FieldNativeSlot, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedNativeSlot(); ok {
+		_spec.AddField(tenant.FieldNativeSlot, field.TypeInt, value)
+	}
+	if _u.mutation.NativeSlotCleared() {
+		_spec.ClearField(tenant.FieldNativeSlot, field.TypeInt)
+	}
+	if _u.mutation.UsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUsersIDs(); len(nodes) > 0 && !_u.mutation.UsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.UsersTable,
+			Columns: []string{tenant.UsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupsIDs(); len(nodes) > 0 && !_u.mutation.GroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.GroupsTable,
+			Columns: []string{tenant.GroupsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.DomainsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedDomainsIDs(); len(nodes) > 0 && !_u.mutation.DomainsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.DomainsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DomainsTable,
+			Columns: []string{tenant.DomainsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(domain.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.IdpProvidersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedIdpProvidersIDs(); len(nodes) > 0 && !_u.mutation.IdpProvidersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.IdpProvidersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.IdpProvidersTable,
+			Columns: []string{tenant.IdpProvidersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(idpprovider.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.DrivesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedDrivesIDs(); len(nodes) > 0 && !_u.mutation.DrivesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.DrivesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   tenant.DrivesTable,
+			Columns: []string{tenant.DrivesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(drive.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Tenant{config: _u.config}
 	_spec.Assign = _node.assignValues

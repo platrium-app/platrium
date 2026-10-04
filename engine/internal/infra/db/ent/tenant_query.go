@@ -4,10 +4,16 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
+	"platrium/internal/infra/db/ent/domain"
+	"platrium/internal/infra/db/ent/drive"
+	"platrium/internal/infra/db/ent/group"
+	"platrium/internal/infra/db/ent/idpprovider"
 	"platrium/internal/infra/db/ent/predicate"
 	"platrium/internal/infra/db/ent/tenant"
+	"platrium/internal/infra/db/ent/user"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
@@ -19,11 +25,16 @@ import (
 // TenantQuery is the builder for querying Tenant entities.
 type TenantQuery struct {
 	config
-	ctx        *QueryContext
-	order      []tenant.OrderOption
-	inters     []Interceptor
-	predicates []predicate.Tenant
-	modifiers  []func(*sql.Selector)
+	ctx              *QueryContext
+	order            []tenant.OrderOption
+	inters           []Interceptor
+	predicates       []predicate.Tenant
+	withUsers        *UserQuery
+	withGroups       *GroupQuery
+	withDomains      *DomainQuery
+	withIdpProviders *IdpProviderQuery
+	withDrives       *DriveQuery
+	modifiers        []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -58,6 +69,116 @@ func (_q *TenantQuery) Unique(unique bool) *TenantQuery {
 func (_q *TenantQuery) Order(o ...tenant.OrderOption) *TenantQuery {
 	_q.order = append(_q.order, o...)
 	return _q
+}
+
+// QueryUsers chains the current query on the "users" edge.
+func (_q *TenantQuery) QueryUsers() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(tenant.Table, tenant.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, tenant.UsersTable, tenant.UsersColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGroups chains the current query on the "groups" edge.
+func (_q *TenantQuery) QueryGroups() *GroupQuery {
+	query := (&GroupClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(tenant.Table, tenant.FieldID, selector),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, tenant.GroupsTable, tenant.GroupsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryDomains chains the current query on the "domains" edge.
+func (_q *TenantQuery) QueryDomains() *DomainQuery {
+	query := (&DomainClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(tenant.Table, tenant.FieldID, selector),
+			sqlgraph.To(domain.Table, domain.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, tenant.DomainsTable, tenant.DomainsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryIdpProviders chains the current query on the "idp_providers" edge.
+func (_q *TenantQuery) QueryIdpProviders() *IdpProviderQuery {
+	query := (&IdpProviderClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(tenant.Table, tenant.FieldID, selector),
+			sqlgraph.To(idpprovider.Table, idpprovider.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, tenant.IdpProvidersTable, tenant.IdpProvidersColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryDrives chains the current query on the "drives" edge.
+func (_q *TenantQuery) QueryDrives() *DriveQuery {
+	query := (&DriveClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(tenant.Table, tenant.FieldID, selector),
+			sqlgraph.To(drive.Table, drive.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, tenant.DrivesTable, tenant.DrivesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Tenant entity from the query.
@@ -247,15 +368,75 @@ func (_q *TenantQuery) Clone() *TenantQuery {
 		return nil
 	}
 	return &TenantQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]tenant.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.Tenant{}, _q.predicates...),
+		config:           _q.config,
+		ctx:              _q.ctx.Clone(),
+		order:            append([]tenant.OrderOption{}, _q.order...),
+		inters:           append([]Interceptor{}, _q.inters...),
+		predicates:       append([]predicate.Tenant{}, _q.predicates...),
+		withUsers:        _q.withUsers.Clone(),
+		withGroups:       _q.withGroups.Clone(),
+		withDomains:      _q.withDomains.Clone(),
+		withIdpProviders: _q.withIdpProviders.Clone(),
+		withDrives:       _q.withDrives.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
+}
+
+// WithUsers tells the query-builder to eager-load the nodes that are connected to
+// the "users" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TenantQuery) WithUsers(opts ...func(*UserQuery)) *TenantQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withUsers = query
+	return _q
+}
+
+// WithGroups tells the query-builder to eager-load the nodes that are connected to
+// the "groups" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TenantQuery) WithGroups(opts ...func(*GroupQuery)) *TenantQuery {
+	query := (&GroupClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withGroups = query
+	return _q
+}
+
+// WithDomains tells the query-builder to eager-load the nodes that are connected to
+// the "domains" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TenantQuery) WithDomains(opts ...func(*DomainQuery)) *TenantQuery {
+	query := (&DomainClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withDomains = query
+	return _q
+}
+
+// WithIdpProviders tells the query-builder to eager-load the nodes that are connected to
+// the "idp_providers" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TenantQuery) WithIdpProviders(opts ...func(*IdpProviderQuery)) *TenantQuery {
+	query := (&IdpProviderClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withIdpProviders = query
+	return _q
+}
+
+// WithDrives tells the query-builder to eager-load the nodes that are connected to
+// the "drives" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TenantQuery) WithDrives(opts ...func(*DriveQuery)) *TenantQuery {
+	query := (&DriveClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withDrives = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -264,12 +445,12 @@ func (_q *TenantQuery) Clone() *TenantQuery {
 // Example:
 //
 //	var v []struct {
-//		Name string `json:"name,omitempty"`
+//		CreatedAt time.Time `json:"created_at,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Tenant.Query().
-//		GroupBy(tenant.FieldName).
+//		GroupBy(tenant.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *TenantQuery) GroupBy(field string, fields ...string) *TenantGroupBy {
@@ -287,11 +468,11 @@ func (_q *TenantQuery) GroupBy(field string, fields ...string) *TenantGroupBy {
 // Example:
 //
 //	var v []struct {
-//		Name string `json:"name,omitempty"`
+//		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
 //	client.Tenant.Query().
-//		Select(tenant.FieldName).
+//		Select(tenant.FieldCreatedAt).
 //		Scan(ctx, &v)
 func (_q *TenantQuery) Select(fields ...string) *TenantSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
@@ -334,8 +515,15 @@ func (_q *TenantQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *TenantQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Tenant, error) {
 	var (
-		nodes = []*Tenant{}
-		_spec = _q.querySpec()
+		nodes       = []*Tenant{}
+		_spec       = _q.querySpec()
+		loadedTypes = [5]bool{
+			_q.withUsers != nil,
+			_q.withGroups != nil,
+			_q.withDomains != nil,
+			_q.withIdpProviders != nil,
+			_q.withDrives != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Tenant).scanValues(nil, columns)
@@ -343,6 +531,7 @@ func (_q *TenantQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Tenan
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Tenant{config: _q.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	if len(_q.modifiers) > 0 {
@@ -357,7 +546,193 @@ func (_q *TenantQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Tenan
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := _q.withUsers; query != nil {
+		if err := _q.loadUsers(ctx, query, nodes,
+			func(n *Tenant) { n.Edges.Users = []*User{} },
+			func(n *Tenant, e *User) { n.Edges.Users = append(n.Edges.Users, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withGroups; query != nil {
+		if err := _q.loadGroups(ctx, query, nodes,
+			func(n *Tenant) { n.Edges.Groups = []*Group{} },
+			func(n *Tenant, e *Group) { n.Edges.Groups = append(n.Edges.Groups, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withDomains; query != nil {
+		if err := _q.loadDomains(ctx, query, nodes,
+			func(n *Tenant) { n.Edges.Domains = []*Domain{} },
+			func(n *Tenant, e *Domain) { n.Edges.Domains = append(n.Edges.Domains, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withIdpProviders; query != nil {
+		if err := _q.loadIdpProviders(ctx, query, nodes,
+			func(n *Tenant) { n.Edges.IdpProviders = []*IdpProvider{} },
+			func(n *Tenant, e *IdpProvider) { n.Edges.IdpProviders = append(n.Edges.IdpProviders, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withDrives; query != nil {
+		if err := _q.loadDrives(ctx, query, nodes,
+			func(n *Tenant) { n.Edges.Drives = []*Drive{} },
+			func(n *Tenant, e *Drive) { n.Edges.Drives = append(n.Edges.Drives, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (_q *TenantQuery) loadUsers(ctx context.Context, query *UserQuery, nodes []*Tenant, init func(*Tenant), assign func(*Tenant, *User)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Tenant)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(user.FieldTenantID)
+	}
+	query.Where(predicate.User(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(tenant.UsersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TenantID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "tenant_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TenantQuery) loadGroups(ctx context.Context, query *GroupQuery, nodes []*Tenant, init func(*Tenant), assign func(*Tenant, *Group)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Tenant)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(group.FieldTenantID)
+	}
+	query.Where(predicate.Group(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(tenant.GroupsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TenantID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "tenant_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TenantQuery) loadDomains(ctx context.Context, query *DomainQuery, nodes []*Tenant, init func(*Tenant), assign func(*Tenant, *Domain)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Tenant)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(domain.FieldTenantID)
+	}
+	query.Where(predicate.Domain(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(tenant.DomainsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TenantID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "tenant_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TenantQuery) loadIdpProviders(ctx context.Context, query *IdpProviderQuery, nodes []*Tenant, init func(*Tenant), assign func(*Tenant, *IdpProvider)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Tenant)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(idpprovider.FieldTenantID)
+	}
+	query.Where(predicate.IdpProvider(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(tenant.IdpProvidersColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TenantID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "tenant_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TenantQuery) loadDrives(ctx context.Context, query *DriveQuery, nodes []*Tenant, init func(*Tenant), assign func(*Tenant, *Drive)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Tenant)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(drive.FieldTenantID)
+	}
+	query.Where(predicate.Drive(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(tenant.DrivesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.TenantID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "tenant_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (_q *TenantQuery) sqlCount(ctx context.Context) (int, error) {

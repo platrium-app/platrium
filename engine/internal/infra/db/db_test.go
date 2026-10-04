@@ -19,34 +19,26 @@ func testConfig() Config {
 }
 
 func TestOpenAndMigrate(t *testing.T) {
-	d, err := Open(context.Background(), testConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
+	d := newTestDB(t)
 
-	if _, err := d.Tenant.Create().SetID("t1").SetName("acme").Save(context.Background()); err != nil {
+	if _, err := d.Tenant.Create().SetID("t1").SetAlias("acme").SetName("acme").Save(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWithTxCommitAndRollback(t *testing.T) {
 	ctx := context.Background()
-	d, err := Open(ctx, testConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
+	d := newTestDB(t)
 
 	if err := d.WithTx(ctx, func(tx *ent.Tx) error {
-		return tx.Tenant.Create().SetID("commit").SetName("c").Exec(ctx)
+		return tx.Tenant.Create().SetID("commit").SetAlias("commit").SetName("c").Exec(ctx)
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	boom := errors.New("boom")
-	err = d.WithTx(ctx, func(tx *ent.Tx) error {
-		if err := tx.Tenant.Create().SetID("rollback").SetName("r").Exec(ctx); err != nil {
+	err := d.WithTx(ctx, func(tx *ent.Tx) error {
+		if err := tx.Tenant.Create().SetID("rollback").SetAlias("rollback").SetName("r").Exec(ctx); err != nil {
 			return err
 		}
 		return boom
