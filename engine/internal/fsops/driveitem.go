@@ -33,13 +33,17 @@ type DriveItemRecord struct {
 	MimeType  *string   `json:"mime_type,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Caps is what the calling principal may do with the item, so clients can
+	// show or hide actions without guessing. Zero when not computed.
+	Caps authz.Capability `json:"-"`
 }
 
 // IsFolder reports whether the item is a folder (including a drive root).
 func (r *DriveItemRecord) IsFolder() bool { return r.Kind == KindFolder }
 
-func recordFromEnt(i *ent.DriveItem) *DriveItemRecord {
+func recordFromEnt(i *ent.DriveItem, caps authz.Capability) *DriveItemRecord {
 	return &DriveItemRecord{
+		Caps:      caps,
 		ID:        i.ID,
 		TenantID:  i.TenantID,
 		ParentID:  i.ParentID,
@@ -52,13 +56,15 @@ func recordFromEnt(i *ent.DriveItem) *DriveItemRecord {
 	}
 }
 
-// GetItem fetches a single item by ID. Requires VIEW.
+// GetItem fetches a single item by ID. Requires VIEW. Anonymous callers may
+// read items that are shared publicly.
 func (f *FSOps) GetItem(ctx context.Context, p authz.Principal, itemId string) (*DriveItemRecord, error) {
-	if err := f.Require(ctx, p, itemId, authz.CapView); err != nil {
+	tenantID, caps, err := f.readAccess(ctx, p, itemId, authz.CapView)
+	if err != nil {
 		return nil, err
 	}
 	i, err := f.db.DriveItem.Query().
-		Where(driveitem.ID(itemId), driveitem.TenantID(p.TenantID)).
+		Where(driveitem.ID(itemId), driveitem.TenantID(tenantID)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -66,7 +72,40 @@ func (f *FSOps) GetItem(ctx context.Context, p authz.Principal, itemId string) (
 		}
 		return nil, fmt.Errorf("failed to fetch item: %w", err)
 	}
-	return recordFromEnt(i), nil
+	return recordFromEnt(i, caps), nil
+}
+
+// GetItems fetches several items in one round trip, skipping any the actor
+// cannot see (LIST). The result follows the order of ids. Signed-in callers only.
+func (f *FSOps) GetItems(ctx context.Context, p authz.Principal, ids []string) ([]*DriveItemRecord, error) {
+	if err := requireActor(p); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	caps, err := f.authz.CapsMany(ctx, p, ids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := f.db.DriveItem.Query().
+		Where(driveitem.IDIn(ids...), driveitem.TenantID(p.TenantID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch items: %w", err)
+	}
+	byID := make(map[string]*ent.DriveItem, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+
+	out := make([]*DriveItemRecord, 0, len(ids))
+	for _, id := range ids {
+		if r, ok := byID[id]; ok && caps[id] != 0 && caps[id].Has(authz.CapList) {
+			out = append(out, recordFromEnt(r, caps[id]))
+		}
+	}
+	return out, nil
 }
 
 // GetItemPath returns the folders above an item, root first, for breadcrumbs.
@@ -76,10 +115,11 @@ func (f *FSOps) GetItem(ctx context.Context, p authz.Principal, itemId string) (
 // names of the folders above it, so the path starts at the topmost ancestor in
 // the unbroken run of visible ones above the item.
 func (f *FSOps) GetItemPath(ctx context.Context, p authz.Principal, itemId string) ([]*Folder, error) {
-	if err := f.Require(ctx, p, itemId, authz.CapList); err != nil {
+	tenantID, _, err := f.readAccess(ctx, p, itemId, authz.CapList)
+	if err != nil {
 		return nil, err
 	}
-	ids, err := f.ancestorIDs(ctx, f.db, p.TenantID, itemId)
+	ids, err := f.ancestorIDs(ctx, f.db, tenantID, itemId)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +144,7 @@ func (f *FSOps) GetItemPath(ctx context.Context, p authz.Principal, itemId strin
 	}
 
 	rows, err := f.db.DriveItem.Query().
-		Where(driveitem.IDIn(visible...), driveitem.TenantID(p.TenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
+		Where(driveitem.IDIn(visible...), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load path folders: %w", err)
@@ -117,44 +157,42 @@ func (f *FSOps) GetItemPath(ctx context.Context, p authz.Principal, itemId strin
 	folders := make([]*Folder, 0, len(visible))
 	for _, id := range slices.Backward(visible) { // root first
 		if r, ok := byID[id]; ok {
-			folders = append(folders, folderFromEnt(r))
+			folders = append(folders, folderFromEnt(r, caps[id]))
 		}
 	}
 	return folders, nil
 }
 
-// listable keeps the children p may see. Children that inherit are covered by
-// the check on their folder, because a child's capabilities always include its
-// folder's. Only children that opted out of inheritance need their own check.
-func (f *FSOps) listable(ctx context.Context, p authz.Principal, rows []*ent.DriveItem) ([]*ent.DriveItem, error) {
-	var restricted []string
-	for _, r := range rows {
-		if !r.InheritPerms {
-			restricted = append(restricted, r.ID)
-		}
+// listable keeps the children p may see and returns the capabilities p holds
+// on each of them. One batched check covers the whole page.
+func (f *FSOps) listable(ctx context.Context, p authz.Principal, rows []*ent.DriveItem) ([]*ent.DriveItem, map[string]authz.Capability, error) {
+	if len(rows) == 0 {
+		return nil, nil, nil
 	}
-	var caps map[string]authz.Capability
-	if len(restricted) > 0 {
-		var err error
-		if caps, err = f.authz.CapsMany(ctx, p, restricted); err != nil {
-			return nil, err
-		}
+	ids := make([]string, len(rows))
+	for i, r := range rows {
+		ids[i] = r.ID
+	}
+	caps, err := f.authz.CapsMany(ctx, p, ids)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	out := make([]*ent.DriveItem, 0, len(rows))
 	for _, r := range rows {
-		if r.InheritPerms || caps[r.ID].Has(authz.CapList) && caps[r.ID] != 0 {
+		if caps[r.ID] != 0 && caps[r.ID].Has(authz.CapList) {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return out, caps, nil
 }
 
 // GetFolderContents lists the direct children of a folder with cursor
 // pagination. Requires LIST on the folder; children restricted from it are
 // left out, and pages are still filled to the requested size.
 func (f *FSOps) GetFolderContents(ctx context.Context, p authz.Principal, folderId string, limit int, after string) ([]*DriveItemRecord, error) {
-	if err := f.Require(ctx, p, folderId, authz.CapList); err != nil {
+	tenantID, _, err := f.readAccess(ctx, p, folderId, authz.CapList)
+	if err != nil {
 		return nil, err
 	}
 
@@ -163,7 +201,7 @@ func (f *FSOps) GetFolderContents(ctx context.Context, p authz.Principal, folder
 	cursor := after
 	for len(items) < limit {
 		q := f.db.DriveItem.Query().
-			Where(driveitem.TenantID(p.TenantID), driveitem.ParentID(folderId))
+			Where(driveitem.TenantID(tenantID), driveitem.ParentID(folderId))
 		if cursor != "" {
 			q = q.Where(driveitem.IDGT(cursor))
 		}
@@ -175,7 +213,7 @@ func (f *FSOps) GetFolderContents(ctx context.Context, p authz.Principal, folder
 			break
 		}
 
-		visible, err := f.listable(ctx, p, rows)
+		visible, caps, err := f.listable(ctx, p, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -183,7 +221,7 @@ func (f *FSOps) GetFolderContents(ctx context.Context, p authz.Principal, folder
 			if len(items) == limit {
 				break
 			}
-			items = append(items, recordFromEnt(r))
+			items = append(items, recordFromEnt(r, caps[r.ID]))
 		}
 		cursor = rows[len(rows)-1].ID
 		if len(rows) < batch {
@@ -197,23 +235,24 @@ func (f *FSOps) GetFolderContents(ctx context.Context, p authz.Principal, folder
 // see. Requires LIST on the folder. Inheriting children are counted in one
 // query; only the usually few restricted ones are checked individually.
 func (f *FSOps) GetFolderContentsTotalCount(ctx context.Context, p authz.Principal, folderId string) (int, error) {
-	if err := f.Require(ctx, p, folderId, authz.CapList); err != nil {
+	tenantID, _, err := f.readAccess(ctx, p, folderId, authz.CapList)
+	if err != nil {
 		return 0, err
 	}
 
 	inheriting, err := f.db.DriveItem.Query().
-		Where(driveitem.TenantID(p.TenantID), driveitem.ParentID(folderId), driveitem.InheritPerms(true)).
+		Where(driveitem.TenantID(tenantID), driveitem.ParentID(folderId), driveitem.InheritPerms(true)).
 		Count(ctx)
 	if err != nil {
 		return 0, err
 	}
 	restricted, err := f.db.DriveItem.Query().
-		Where(driveitem.TenantID(p.TenantID), driveitem.ParentID(folderId), driveitem.InheritPerms(false)).
+		Where(driveitem.TenantID(tenantID), driveitem.ParentID(folderId), driveitem.InheritPerms(false)).
 		All(ctx)
 	if err != nil {
 		return 0, err
 	}
-	visible, err := f.listable(ctx, p, restricted)
+	visible, _, err := f.listable(ctx, p, restricted)
 	if err != nil {
 		return 0, err
 	}
@@ -354,14 +393,14 @@ func (f *FSOps) GetFolderChanges(ctx context.Context, p authz.Principal, folderI
 	if err != nil {
 		return nil, fmt.Errorf("failed to list folder changes: %w", err)
 	}
-	visible, err := f.listable(ctx, p, rows)
+	visible, caps, err := f.listable(ctx, p, rows)
 	if err != nil {
 		return nil, err
 	}
 
 	items := make([]*DriveItemRecord, 0, len(visible))
 	for _, r := range visible {
-		items = append(items, recordFromEnt(r))
+		items = append(items, recordFromEnt(r, caps[r.ID]))
 	}
 	return items, nil
 }

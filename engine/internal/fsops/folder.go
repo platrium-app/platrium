@@ -18,10 +18,13 @@ type Folder struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Caps is what the calling principal may do with the folder.
+	Caps authz.Capability `json:"-"`
 }
 
-func folderFromEnt(i *ent.DriveItem) *Folder {
+func folderFromEnt(i *ent.DriveItem, caps authz.Capability) *Folder {
 	return &Folder{
+		Caps:      caps,
 		ID:        i.ID,
 		TenantID:  i.TenantID,
 		ParentID:  i.ParentID,
@@ -37,13 +40,14 @@ func (f *FSOps) CreateFolder(ctx context.Context, p authz.Principal, parentID st
 	if name == "" {
 		return nil, fmt.Errorf("%w: folder name cannot be empty", ErrInvalid)
 	}
-	if err := f.Require(ctx, p, parentID, authz.CapCreate); err != nil {
+	parentCaps, err := f.requireCaps(ctx, p, parentID, authz.CapCreate)
+	if err != nil {
 		return nil, err
 	}
 	tenantID := p.TenantID
 
 	var folder *Folder
-	err := f.db.WithTx(ctx, func(tx *ent.Tx) error {
+	err = f.db.WithTx(ctx, func(tx *ent.Tx) error {
 		parent, err := tx.DriveItem.Query().
 			Where(driveitem.ID(parentID), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
 			Only(ctx)
@@ -64,7 +68,7 @@ func (f *FSOps) CreateFolder(ctx context.Context, p authz.Principal, parentID st
 		if err != nil {
 			return fmt.Errorf("failed to create folder: %w", err)
 		}
-		folder = folderFromEnt(created)
+		folder = folderFromEnt(created, parentCaps) // a new folder inherits exactly its parent's access
 		return nil
 	})
 	if err != nil {

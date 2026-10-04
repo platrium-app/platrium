@@ -17,8 +17,24 @@ type DriveItem interface {
 	GetName() string
 	GetType() DriveItemType
 	GetPath() []*Folder
+	// What the signed-in user (or an anonymous visitor) may do with this item.
+	GetMyCapabilities() []string
 	GetCreatedAt() time.Time
 	GetUpdatedAt() time.Time
+}
+
+type AccessGrant struct {
+	ID          string `json:"id"`
+	SubjectType string `json:"subjectType"`
+	SubjectID   string `json:"subjectId"`
+	// A display name for the subject, such as a person's name or a group's name.
+	SubjectName string `json:"subjectName"`
+	Role        string `json:"role"`
+	// True when the role is granted without the ability to download.
+	NoDownload   bool       `json:"noDownload"`
+	Capabilities []string   `json:"capabilities"`
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
 }
 
 type DriveItemConnection struct {
@@ -46,17 +62,18 @@ type DriveMetadata struct {
 }
 
 type File struct {
-	ID        string         `json:"id"`
-	ParentID  string         `json:"parentId"`
-	Name      string         `json:"name"`
-	Type      DriveItemType  `json:"type"`
-	Size      int64          `json:"size"`
-	MimeType  string         `json:"mimeType"`
-	Version   int            `json:"version"`
-	Versions  []*FileVersion `json:"versions,omitempty"`
-	Path      []*Folder      `json:"path"`
-	CreatedAt time.Time      `json:"createdAt"`
-	UpdatedAt time.Time      `json:"updatedAt"`
+	ID             string         `json:"id"`
+	ParentID       string         `json:"parentId"`
+	Name           string         `json:"name"`
+	Type           DriveItemType  `json:"type"`
+	Size           int64          `json:"size"`
+	MimeType       string         `json:"mimeType"`
+	Version        int            `json:"version"`
+	Versions       []*FileVersion `json:"versions,omitempty"`
+	Path           []*Folder      `json:"path"`
+	MyCapabilities []string       `json:"myCapabilities"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
 func (File) IsDriveItem()                {}
@@ -74,6 +91,18 @@ func (this File) GetPath() []*Folder {
 	}
 	return interfaceSlice
 }
+
+// What the signed-in user (or an anonymous visitor) may do with this item.
+func (this File) GetMyCapabilities() []string {
+	if this.MyCapabilities == nil {
+		return nil
+	}
+	interfaceSlice := make([]string, 0, len(this.MyCapabilities))
+	for _, concrete := range this.MyCapabilities {
+		interfaceSlice = append(interfaceSlice, concrete)
+	}
+	return interfaceSlice
+}
 func (this File) GetCreatedAt() time.Time { return this.CreatedAt }
 func (this File) GetUpdatedAt() time.Time { return this.UpdatedAt }
 
@@ -84,14 +113,15 @@ type FileVersion struct {
 }
 
 type Folder struct {
-	ID            string         `json:"id"`
-	ParentID      *string        `json:"parentId,omitempty"`
-	Name          string         `json:"name"`
-	Type          DriveItemType  `json:"type"`
-	DriveMetadata *DriveMetadata `json:"driveMetadata,omitempty"`
-	Path          []*Folder      `json:"path"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UpdatedAt     time.Time      `json:"updatedAt"`
+	ID             string         `json:"id"`
+	ParentID       *string        `json:"parentId,omitempty"`
+	Name           string         `json:"name"`
+	Type           DriveItemType  `json:"type"`
+	DriveMetadata  *DriveMetadata `json:"driveMetadata,omitempty"`
+	Path           []*Folder      `json:"path"`
+	MyCapabilities []string       `json:"myCapabilities"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
 func (Folder) IsDriveItem()                {}
@@ -109,13 +139,51 @@ func (this Folder) GetPath() []*Folder {
 	}
 	return interfaceSlice
 }
+
+// What the signed-in user (or an anonymous visitor) may do with this item.
+func (this Folder) GetMyCapabilities() []string {
+	if this.MyCapabilities == nil {
+		return nil
+	}
+	interfaceSlice := make([]string, 0, len(this.MyCapabilities))
+	for _, concrete := range this.MyCapabilities {
+		interfaceSlice = append(interfaceSlice, concrete)
+	}
+	return interfaceSlice
+}
 func (this Folder) GetCreatedAt() time.Time { return this.CreatedAt }
 func (this Folder) GetUpdatedAt() time.Time { return this.UpdatedAt }
+
+// Who else can open an item beyond the people and groups added by name.
+type GeneralAccess struct {
+	Level      string     `json:"level"`
+	Role       *string    `json:"role,omitempty"`
+	NoDownload bool       `json:"noDownload"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+}
+
+type GeneralAccessInput struct {
+	ItemID string `json:"itemId"`
+	Level  string `json:"level"`
+	// Required unless the level is RESTRICTED.
+	Role       *string    `json:"role,omitempty"`
+	NoDownload *bool      `json:"noDownload,omitempty"`
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+}
 
 type IdpProvider struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Type string `json:"type"`
+}
+
+type ItemAccess struct {
+	ItemID string `json:"itemId"`
+	// False when the item is restricted from the access of its parent folders.
+	InheritsPermissions bool           `json:"inheritsPermissions"`
+	GeneralAccess       *GeneralAccess `json:"generalAccess"`
+	// People and groups added by name. General access is reported separately.
+	Grants []*AccessGrant `json:"grants"`
 }
 
 type Mutation struct {
@@ -133,6 +201,31 @@ type ServerInfo struct {
 	Version       string `json:"version"`
 	Edition       string `json:"edition"`
 	IsMultiTenant bool   `json:"isMultiTenant"`
+}
+
+type ShareInput struct {
+	ItemID      string     `json:"itemId"`
+	SubjectType string     `json:"subjectType"`
+	SubjectID   string     `json:"subjectId"`
+	Role        string     `json:"role"`
+	NoDownload  *bool      `json:"noDownload,omitempty"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
+}
+
+type SharedItem struct {
+	Item         DriveItem `json:"item"`
+	Role         string    `json:"role"`
+	Capabilities []string  `json:"capabilities"`
+}
+
+type SharedItemConnection struct {
+	Edges    []*SharedItemEdge `json:"edges"`
+	PageInfo *PageInfo         `json:"pageInfo"`
+}
+
+type SharedItemEdge struct {
+	Cursor string      `json:"cursor"`
+	Node   *SharedItem `json:"node"`
 }
 
 type Subscription struct {

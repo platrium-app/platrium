@@ -32,6 +32,8 @@ type File struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	InlineChunks []string  `json:"inline_chunks,omitempty"`
+	// Caps is what the calling principal may do with the file.
+	Caps authz.Capability `json:"-"`
 }
 
 // CreateFileParams encapsulates the input fields required to create a new File node.
@@ -127,8 +129,9 @@ func (f *FSOps) CreateFile(ctx context.Context, params CreateFileParams) (string
 	return fileId, nil
 }
 
-func fileFromEnt(i *ent.DriveItem) *File {
+func fileFromEnt(i *ent.DriveItem, caps authz.Capability) *File {
 	file := &File{
+		Caps:         caps,
 		ID:           i.ID,
 		TenantID:     i.TenantID,
 		Name:         i.Name,
@@ -145,23 +148,26 @@ func fileFromEnt(i *ent.DriveItem) *File {
 	return file
 }
 
-// GetFile retrieves file metadata. Requires VIEW.
+// GetFile retrieves file metadata. Requires VIEW. Anonymous callers may read
+// publicly shared files.
 func (f *FSOps) GetFile(ctx context.Context, p authz.Principal, fileId string) (*File, error) {
 	return f.getFile(ctx, p, fileId, authz.CapView)
 }
 
 // GetFileForDownload retrieves a file and the chunk list needed to download
-// it. Requires DOWNLOAD, which a view-only share does not carry.
+// it. Requires DOWNLOAD, which a view-only share does not carry. Anonymous
+// callers may download publicly shared files.
 func (f *FSOps) GetFileForDownload(ctx context.Context, p authz.Principal, fileId string) (*File, error) {
 	return f.getFile(ctx, p, fileId, authz.CapDownload)
 }
 
 func (f *FSOps) getFile(ctx context.Context, p authz.Principal, fileId string, need authz.Capability) (*File, error) {
-	if err := f.Require(ctx, p, fileId, need); err != nil {
+	tenantID, caps, err := f.readAccess(ctx, p, fileId, need)
+	if err != nil {
 		return nil, err
 	}
 	i, err := f.db.DriveItem.Query().
-		Where(driveitem.ID(fileId), driveitem.TenantID(p.TenantID), driveitem.KindEQ(driveitem.KindFILE)).
+		Where(driveitem.ID(fileId), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFILE)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -169,7 +175,7 @@ func (f *FSOps) getFile(ctx context.Context, p authz.Principal, fileId string, n
 		}
 		return nil, fmt.Errorf("failed to fetch file: %w", err)
 	}
-	return fileFromEnt(i), nil
+	return fileFromEnt(i, caps), nil
 }
 
 // CopyFile copies a file to a new parent folder. Requires DOWNLOAD on the
@@ -239,5 +245,5 @@ func (f *FSOps) CopyFile(ctx context.Context, p authz.Principal, fileID string, 
 	// TODO: If the file was > 4 chunks, we must also duplicate the KVStore manifest
 	// pointing to the new file_id. For now, this perfectly copies inline_chunks!
 
-	return fileFromEnt(copied), nil
+	return fileFromEnt(copied, caps[newParentID]), nil
 }

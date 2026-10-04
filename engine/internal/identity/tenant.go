@@ -91,6 +91,18 @@ func (r *TenantStore) DescribeConflict(ctx context.Context, alias string, isNati
 	return "tenant already exists"
 }
 
+// GetTenant returns a tenant by ID.
+func (r *TenantStore) GetTenant(ctx context.Context, id string) (*Tenant, error) {
+	t, err := r.db.Tenant.Get(ctx, id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: tenant", ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to fetch tenant: %w", err)
+	}
+	return tenantFromEnt(t), nil
+}
+
 // HasNativeTenant reports whether the native (cluster) tenant exists.
 func (r *TenantStore) HasNativeTenant(ctx context.Context) (bool, error) {
 	return r.db.Tenant.Query().Where(tenant.NativeSlotNotNil()).Exist(ctx)

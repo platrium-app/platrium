@@ -26,6 +26,10 @@ func (Tenant) Fields() []ent.Field {
 		// portable "at most one native tenant" constraint without partial
 		// indexes. Use IsNative() semantics (native_slot != nil) in stores.
 		field.Int("native_slot").Optional().Nillable().Unique(),
+		// Whether items may be shared with "anyone with the link". Checked when
+		// such a grant is created and again whenever it is evaluated, so turning
+		// it off ends existing public access at once.
+		field.Bool("allow_public_sharing").Default(true),
 	}
 }
 

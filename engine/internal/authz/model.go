@@ -76,3 +76,56 @@ const (
 	MemberUser  MemberType = "USER"
 	MemberGroup MemberType = "GROUP"
 )
+
+// GeneralAccessLevel is the "who else can open this" setting of an item beyond
+// the people and groups added to it by name. It is stored as at most one grant:
+// a TENANT grant or a PUBLIC grant. The item's ID is the link, which is
+// unguessable (about 126 random bits), so nothing else is needed to share by link.
+type GeneralAccessLevel string
+
+const (
+	// AccessRestricted means only the people and groups added by name.
+	AccessRestricted GeneralAccessLevel = "RESTRICTED"
+	// AccessTenant means every member of the organization.
+	AccessTenant GeneralAccessLevel = "TENANT"
+	// AccessPublic means anyone who has the link, signed in or not.
+	AccessPublic GeneralAccessLevel = "PUBLIC"
+)
+
+// GeneralAccessInput sets an item's general access. Role is required unless
+// the level is AccessRestricted. Organization-wide access may use Viewer,
+// Commenter or Editor; public access may use Viewer or Commenter, because
+// anonymous visitors can never write.
+type GeneralAccessInput struct {
+	ItemID     string
+	Level      GeneralAccessLevel
+	Role       Role
+	NoDownload bool
+	ExpiresAt  *time.Time
+}
+
+// GeneralAccessOf reads an item's general access from its grants. It returns
+// the level and the grant behind it (nil when restricted).
+func GeneralAccessOf(grants []Grant) (GeneralAccessLevel, *Grant) {
+	var tenant *Grant
+	for i := range grants {
+		switch grants[i].Subject.Type {
+		case SubjectPublic:
+			return AccessPublic, &grants[i]
+		case SubjectTenant:
+			tenant = &grants[i]
+		}
+	}
+	if tenant != nil {
+		return AccessTenant, tenant
+	}
+	return AccessRestricted, nil
+}
+
+// ItemAccess is everything that decides who can open an item beyond its
+// ancestors: whether it inherits, and the grants placed on it directly.
+type ItemAccess struct {
+	ItemID              string
+	InheritsPermissions bool
+	Grants              []Grant
+}

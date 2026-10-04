@@ -43,9 +43,11 @@ type Drive struct {
 	StorageUsed  int64          `json:"storage_used"`
 	StorageQuota int64          `json:"storage_quota"` // 0 means unlimited
 	CreatedAt    time.Time      `json:"created_at"`
+	// Caps is what the calling principal may do with the drive.
+	Caps authz.Capability `json:"-"`
 }
 
-func driveFromEnt(d *ent.Drive) *Drive {
+func driveFromEnt(d *ent.Drive, caps authz.Capability) *Drive {
 	var quota int64
 	if d.StorageQuota != nil {
 		quota = *d.StorageQuota
@@ -55,6 +57,7 @@ func driveFromEnt(d *ent.Drive) *Drive {
 		owner = *d.OwnerID
 	}
 	return &Drive{
+		Caps:         caps,
 		ID:           d.ID,
 		Name:         d.Name,
 		TenantID:     d.TenantID,
@@ -137,7 +140,7 @@ func (f *FSOps) CreateDriveTx(ctx context.Context, tx *ent.Tx, params CreateDriv
 		return nil, fmt.Errorf("failed to create drive root folder: %w", err)
 	}
 
-	return driveFromEnt(d), nil
+	return driveFromEnt(d, authz.AllCaps), nil
 }
 
 // CreateDrive creates a drive and its root folder in its own transaction.
@@ -169,6 +172,10 @@ func (f *FSOps) GetUserDrives(ctx context.Context, p authz.Principal) ([]*Drive,
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user drives: %w", err)
 	}
+	driveCaps := make(map[string]authz.Capability, len(owned))
+	for _, d := range owned {
+		driveCaps[d.ID] = authz.AllCaps // the owner holds everything
+	}
 
 	tenantOwned, err := f.db.Drive.Query().
 		Where(drive.TenantID(p.TenantID), drive.OwnerType(string(DriveOwnedByTenant))).
@@ -188,6 +195,7 @@ func (f *FSOps) GetUserDrives(ctx context.Context, p authz.Principal) ([]*Drive,
 		for _, d := range tenantOwned {
 			if caps[d.ID] != 0 && caps[d.ID].Has(authz.CapList) {
 				owned = append(owned, d)
+				driveCaps[d.ID] = caps[d.ID]
 			}
 		}
 	}
@@ -200,7 +208,7 @@ func (f *FSOps) GetUserDrives(ctx context.Context, p authz.Principal) ([]*Drive,
 	})
 	drives := make([]*Drive, 0, len(owned))
 	for _, d := range owned {
-		drives = append(drives, driveFromEnt(d))
+		drives = append(drives, driveFromEnt(d, driveCaps[d.ID]))
 	}
 	return drives, nil
 }

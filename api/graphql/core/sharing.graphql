@@ -1,0 +1,91 @@
+# Sharing and access. Roles, capabilities and subject types are plain strings so
+# new ones can be added without breaking clients; clients must ignore values they
+# do not recognize.
+#
+#   subjectType: USER | GROUP | TENANT | PUBLIC
+#   role:        VIEWER | COMMENTER | CONTRIBUTOR | CONTENT_MANAGER | EDITOR | MANAGER | CUSTOM
+#   level:       RESTRICTED | TENANT | PUBLIC
+#   capability:  LIST | VIEW | DOWNLOAD | COMMENT | CREATE | EDIT | DELETE | MOVE |
+#                TRASH | MOVE_OUT | SHARE | MANAGE | DELETE_DRIVE
+
+type AccessGrant {
+  id: ID!
+  subjectType: String!
+  subjectId: String!
+  "A display name for the subject, such as a person's name or a group's name."
+  subjectName: String!
+  role: String!
+  "True when the role is granted without the ability to download."
+  noDownload: Boolean!
+  capabilities: [String!]!
+  expiresAt: DateTime
+  createdAt: DateTime!
+}
+
+"Who else can open an item beyond the people and groups added by name."
+type GeneralAccess {
+  level: String!
+  role: String
+  noDownload: Boolean!
+  expiresAt: DateTime
+}
+
+type ItemAccess {
+  itemId: ID!
+  "False when the item is restricted from the access of its parent folders."
+  inheritsPermissions: Boolean!
+  generalAccess: GeneralAccess!
+  "People and groups added by name. General access is reported separately."
+  grants: [AccessGrant!]!
+}
+
+type SharedItem {
+  item: DriveItem!
+  role: String!
+  capabilities: [String!]!
+}
+
+type SharedItemEdge {
+  cursor: String!
+  node: SharedItem!
+}
+
+type SharedItemConnection {
+  edges: [SharedItemEdge!]!
+  pageInfo: PageInfo!
+}
+
+input ShareInput {
+  itemId: ID!
+  subjectType: String!
+  subjectId: String!
+  role: String!
+  noDownload: Boolean
+  expiresAt: DateTime
+}
+
+input GeneralAccessInput {
+  itemId: ID!
+  level: String!
+  "Required unless the level is RESTRICTED."
+  role: String
+  noDownload: Boolean
+  expiresAt: DateTime
+}
+
+extend type Query {
+  "Who has access to an item. Requires permission to share it."
+  itemAccess(itemId: ID!): ItemAccess!
+  "Items shared directly with the signed-in user or their groups."
+  sharedWithMe(first: Int, after: String): SharedItemConnection!
+}
+
+extend type Mutation {
+  "Share an item with a user, group, the organization, or anyone with the link."
+  shareItem(input: ShareInput!): AccessGrant!
+  revokeAccess(grantId: ID!): Boolean!
+  "Set who else can open an item: restricted, the organization, or anyone with the link."
+  setGeneralAccess(input: GeneralAccessInput!): GeneralAccess!
+  "Stop or resume an item inheriting access from its parent folders."
+  setInheritance(itemId: ID!, inherit: Boolean!): Boolean!
+}

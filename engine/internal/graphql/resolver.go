@@ -22,6 +22,8 @@ type Resolver struct {
 	Authz       authz.Authorizer
 	Broker      *notifications.Broker
 	SubsManager SubscriptionManager
+	UserStore   *identity.UserStore
+	GroupStore  *identity.GroupStore
 	TenantStore *identity.TenantStore
 	IdpStore    *auth.IdpStore
 }

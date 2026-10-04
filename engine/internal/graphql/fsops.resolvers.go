@@ -124,7 +124,7 @@ func (r *mutationResolver) DeleteItem(ctx context.Context, id string) (bool, err
 
 // Item is the resolver for the item field.
 func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) 
 
 // FolderContents is the resolver for the folderContents field.
 func (r *queryResolver) FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
 	if err != nil {
 		return nil, err
 	}
@@ -228,8 +228,9 @@ func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
 				StorageUsed:  d.StorageUsed,
 				StorageQuota: quota,
 			},
-			CreatedAt: d.CreatedAt,
-			UpdatedAt: d.CreatedAt,
+			MyCapabilities: d.Caps.Verbs(),
+			CreatedAt:      d.CreatedAt,
+			UpdatedAt:      d.CreatedAt,
 		})
 	}
 

@@ -9,7 +9,7 @@ import (
 
 // TODO: Too many helpers, organize this!
 func (r *Resolver) resolveItemPath(ctx context.Context, itemID string) ([]*Folder, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
 	if err != nil {
 		return nil, err
 	}
@@ -28,6 +28,8 @@ func mapFolderRecord(f *fsops.Folder) *Folder {
 		Type:      DriveItemTypeFolder,
 		CreatedAt: f.CreatedAt,
 		UpdatedAt: f.UpdatedAt,
+
+		MyCapabilities: f.Caps.Verbs(),
 	}
 }
 
@@ -42,6 +44,8 @@ func mapFsopsFolders(fsopsFolders []*fsops.Folder) []*Folder {
 			Type:      folderType,
 			CreatedAt: f.CreatedAt,
 			UpdatedAt: f.UpdatedAt,
+
+			MyCapabilities: f.Caps.Verbs(),
 		})
 	}
 	return folders
@@ -56,6 +60,8 @@ func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
 			Type:      DriveItemTypeFolder,
 			CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt,
+
+			MyCapabilities: item.Caps.Verbs(),
 		}
 	} else {
 		var size int64
@@ -79,6 +85,8 @@ func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
 			MimeType:  mime,
 			CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt,
+
+			MyCapabilities: item.Caps.Verbs(),
 		}
 	}
 }
@@ -95,6 +103,8 @@ func mapFileRecord(file *fsops.File) *File {
 		MimeType:  file.MimeType,
 		CreatedAt: file.CreatedAt,
 		UpdatedAt: file.UpdatedAt,
+
+		MyCapabilities: file.Caps.Verbs(),
 	}
 }
 

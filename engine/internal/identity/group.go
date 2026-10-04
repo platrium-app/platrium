@@ -7,6 +7,7 @@ import (
 
 	"platrium/internal/infra/db"
 	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/group"
 	"platrium/internal/infra/db/ent/idpprovider"
 )
 
@@ -59,4 +60,28 @@ func (r *GroupStore) CreateGroupTx(ctx context.Context, tx *ent.Tx, tenantId, id
 		Name:       g.Name,
 		CreatedAt:  g.CreatedAt,
 	}, nil
+}
+
+// GetByIDs returns the groups with the given IDs that belong to the tenant,
+// keyed by ID. Unknown IDs, and IDs from other tenants, are simply absent.
+func (r *GroupStore) GetByIDs(ctx context.Context, tenantID string, ids []string) (map[string]*Group, error) {
+	out := make(map[string]*Group, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Group.Query().Where(group.IDIn(ids...), group.TenantID(tenantID)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch groups: %w", err)
+	}
+	for _, g := range rows {
+		out[g.ID] = &Group{
+			ID:         g.ID,
+			TenantID:   g.TenantID,
+			IdpID:      g.IdpID,
+			ExternalID: g.ExternalID,
+			Name:       g.Name,
+			CreatedAt:  g.CreatedAt,
+		}
+	}
+	return out, nil
 }

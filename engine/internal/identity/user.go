@@ -110,3 +110,20 @@ func (r *UserStore) GetUserByExternalId(ctx context.Context, idpId, externalId s
 	}
 	return userFromEnt(u), u.TenantID, nil
 }
+
+// GetByIDs returns the users with the given IDs that belong to the tenant, keyed
+// by ID. Unknown IDs, and IDs from other tenants, are simply absent.
+func (r *UserStore) GetByIDs(ctx context.Context, tenantID string, ids []string) (map[string]*User, error) {
+	out := make(map[string]*User, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.User.Query().Where(user.IDIn(ids...), user.TenantID(tenantID)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch users: %w", err)
+	}
+	for _, u := range rows {
+		out[u.ID] = userFromEnt(u)
+	}
+	return out, nil
+}

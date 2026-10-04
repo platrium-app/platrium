@@ -137,6 +137,15 @@ func (c Capability) String() string {
 	return strings.Join(parts, "|")
 }
 
+// Verbs lists the capabilities as strings, such as ["LIST", "VIEW"], for APIs.
+// Unrecognized bits appear as BIT(n) so newer capabilities are never hidden.
+func (c Capability) Verbs() []string {
+	if c == 0 {
+		return []string{}
+	}
+	return strings.Split(c.String(), "|")
+}
+
 // ParseCapabilities parses verbs separated by '|' or ','. It accepts the
 // output of String, case-insensitively. NONE and the empty string are 0.
 func ParseCapabilities(s string) (Capability, error) {

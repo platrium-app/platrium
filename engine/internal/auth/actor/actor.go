@@ -23,3 +23,13 @@ func Principal(ctx context.Context, az authz.Authorizer) (authz.Principal, error
 	}
 	return az.Principal(ctx, sess.TenantID, sess.UserID)
 }
+
+// PrincipalOrAnonymous is Principal for operations open to visitors who are not
+// signed in, such as opening a publicly shared item. Without a session the
+// caller is anonymous and can only see what is shared publicly.
+func PrincipalOrAnonymous(ctx context.Context, az authz.Authorizer) (authz.Principal, error) {
+	if _, ok := session.FromContext(ctx); !ok {
+		return authz.Anonymous(), nil
+	}
+	return Principal(ctx, az)
+}

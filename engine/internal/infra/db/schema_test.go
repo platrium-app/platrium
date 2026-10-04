@@ -29,7 +29,7 @@ func newTestDB(t *testing.T) *DB {
 }
 
 // tables lists every table, used to wipe a shared real database between tests.
-var tables = []string{"drive_items", "drives", "devices", "domains", "grants", "group_members", "group_closures", "share_links", "groups", "local_credentials", "users", "idp_providers", "tenants"}
+var tables = []string{"drive_items", "drives", "devices", "domains", "grants", "group_members", "group_closures", "groups", "local_credentials", "users", "idp_providers", "tenants"}
 
 func resetTables(t *testing.T, d *DB, driver string) {
 	t.Helper()

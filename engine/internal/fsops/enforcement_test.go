@@ -190,19 +190,35 @@ func TestRevocationIsImmediate(t *testing.T) {
 	}
 }
 
-func TestAnonymousAndUnsignedCallersAreRefused(t *testing.T) {
+// Anonymous callers can only read what is shared publicly. Everything else,
+// and every write, is refused.
+func TestAnonymousCallersCannotWriteOrSeePrivateItems(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	s := newScene(t, e)
 	for _, p := range []authz.Principal{authz.Anonymous(), {TenantID: s.w.tenantID}} {
-		_, e1 := e.fs.GetItem(ctx, p, s.docs)
-		_, e2 := e.fs.GetFolderContents(ctx, p, s.docs, 10, "")
-		_, e3 := e.fs.CreateFolder(ctx, p, s.docs, "x")
-		_, e4 := e.fs.GetUserDrives(ctx, p)
-		_, e5 := e.fs.MoveItem(ctx, p, s.file, s.sub)
-		for i, err := range []error{e1, e2, e3, e4, e5} {
+		_, r1 := e.fs.GetItem(ctx, p, s.docs)
+		_, r2 := e.fs.GetFolderContents(ctx, p, s.docs, 10, "")
+		_, r3 := e.fs.GetFile(ctx, p, s.file)
+		_, r4 := e.fs.GetFileForDownload(ctx, p, s.file)
+		_, r5 := e.fs.GetItemPath(ctx, p, s.file)
+		for i, err := range []error{r1, r2, r3, r4, r5} {
+			if !isNotFound(err) {
+				t.Errorf("read %d for %+v: got %v, want not found", i, p, err)
+			}
+		}
+
+		_, w1 := e.fs.CreateFolder(ctx, p, s.docs, "x")
+		_, w2 := e.fs.GetUserDrives(ctx, p)
+		_, w3 := e.fs.MoveItem(ctx, p, s.file, s.sub)
+		_, w4 := e.fs.RenameItem(ctx, p, s.file, "x")
+		_, w5 := e.fs.CopyFile(ctx, p, s.file, s.sub, "")
+		_, w6 := e.fs.CreateFile(ctx, fsops.CreateFileParams{Actor: p, ParentID: s.docs, Name: "x"})
+		_, w7 := e.fs.GetFolderChanges(ctx, p, s.docs, time.Now().Add(-time.Hour))
+		_, w8 := e.fs.GetItems(ctx, p, []string{s.docs})
+		for i, err := range []error{w1, w2, w3, w4, w5, w6, w7, w8} {
 			if !isForbidden(err) {
-				t.Errorf("op %d for %+v: got %v, want forbidden", i, p, err)
+				t.Errorf("write %d for %+v: got %v, want forbidden", i, p, err)
 			}
 		}
 	}

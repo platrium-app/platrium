@@ -214,3 +214,30 @@ func TestSetInheritance(t *testing.T) {
 		t.Errorf("idempotent: %v", err)
 	}
 }
+
+func TestItemAccess(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
+
+	access, err := e.az.ItemAccess(ctx, s.pa, s.docs)
+	if err != nil || access.ItemID != s.docs || !access.InheritsPermissions || len(access.Grants) != 1 {
+		t.Fatalf("access = %+v, %v", access, err)
+	}
+
+	if err := e.az.SetInheritance(ctx, s.pa, s.docs, false); err != nil {
+		t.Fatal(err)
+	}
+	access, _ = e.az.ItemAccess(ctx, s.pa, s.docs)
+	if access.InheritsPermissions {
+		t.Error("must report restricted")
+	}
+
+	if _, err := e.az.ItemAccess(ctx, s.pb, s.docs); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("a viewer cannot read the sharing list: %v", err)
+	}
+	if _, err := e.az.ItemAccess(ctx, s.pc, s.docs); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("an invisible item reads as missing: %v", err)
+	}
+}

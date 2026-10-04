@@ -124,6 +124,7 @@ func (a *Authorizer) validateSubject(ctx context.Context, tx *ent.Tx, tenantID s
 		if s.ID != authz.PublicSubjectID {
 			return fmt.Errorf("%w: a public grant uses subject %q", authz.ErrInvalid, authz.PublicSubjectID)
 		}
+		return a.requirePublicAllowed(ctx, tx, tenantID)
 	default:
 		return fmt.Errorf("%w: unknown subject type %q", authz.ErrInvalid, s.Type)
 	}
@@ -209,6 +210,24 @@ func (a *Authorizer) ListGrants(ctx context.Context, actor authz.Principal, item
 		out = append(out, *grantFromEnt(g))
 	}
 	return out, nil
+}
+
+// ItemAccess returns an item's grants and whether it inherits. Requires CapShare.
+func (a *Authorizer) ItemAccess(ctx context.Context, actor authz.Principal, itemID string) (*authz.ItemAccess, error) {
+	grants, err := a.ListGrants(ctx, actor, itemID)
+	if err != nil {
+		return nil, err
+	}
+	item, err := a.db.DriveItem.Query().
+		Where(driveitem.ID(itemID), driveitem.TenantID(actor.TenantID)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: item", authz.ErrNotFound)
+		}
+		return nil, err
+	}
+	return &authz.ItemAccess{ItemID: itemID, InheritsPermissions: item.InheritPerms, Grants: grants}, nil
 }
 
 // SetInheritance stops or resumes an item inheriting its ancestors' grants.

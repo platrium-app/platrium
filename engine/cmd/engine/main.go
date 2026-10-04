@@ -74,6 +74,7 @@ func main() {
 
 	// Setup Identity Domain
 	tenantStore := identity.NewTenantStore(database)
+	groupStore := identity.NewGroupStore(database)
 	userStore := identity.NewUserStore(database)
 
 	// Setup Auth Domain
@@ -126,8 +127,12 @@ func main() {
 		Broker:      notifBroker,
 		SubsManager: gqlTransport,
 		TenantStore: tenantStore,
+		UserStore:   userStore,
+		GroupStore:  groupStore,
 		IdpStore:    idpStore,
 	}}))
+
+	graphqlSrv.SetErrorPresenter(graphql.ErrorPresenter)
 
 	// GraphQL Routes
 	router.Route("/graphql", func(r chi.Router) {

@@ -52,3 +52,34 @@ func TestUserCreateAndLookup(t *testing.T) {
 		t.Errorf("unknown tenant must be not found, got %v", err)
 	}
 }
+
+func TestUserGetByIDs(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	acme, acmeIdp := e.tenantWithIdp(t, "acme", false)
+	other, otherIdp := e.tenantWithIdp(t, "other", false)
+
+	var a, o *identity.User
+	err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
+		var err error
+		if a, err = e.users.CreateUserTx(ctx, tx, identity.CreateUserParams{TenantID: acme.ID, IdpID: acmeIdp.ID, ExternalID: "a", Email: "a@x.com", DisplayName: "A"}); err != nil {
+			return err
+		}
+		o, err = e.users.CreateUserTx(ctx, tx, identity.CreateUserParams{TenantID: other.ID, IdpID: otherIdp.ID, ExternalID: "o", Email: "o@x.com", DisplayName: "O"})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := e.users.GetByIDs(ctx, acme.ID, []string{a.ID, o.ID, "missing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[a.ID] == nil || got[a.ID].DisplayName != "A" {
+		t.Fatalf("only the tenant's own users are returned, got %+v", got)
+	}
+	if got, err := e.users.GetByIDs(ctx, acme.ID, nil); err != nil || len(got) != 0 {
+		t.Errorf("empty input: %v %v", got, err)
+	}
+}

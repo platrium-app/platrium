@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"platrium/internal/authz"
+	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/drive"
 	"platrium/internal/infra/db/ent/driveitem"
 	"platrium/internal/infra/db/ent/grant"
@@ -136,6 +137,7 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 	}
 
 	byResource := map[string]authz.Capability{}
+	publicOK := map[string]bool{} // tenant -> allows public sharing, looked up only if a public grant turns up
 	now := time.Now().UTC()
 	for chunk := range slices.Chunk(resourceIDs, grantChunk) {
 		grants, err := a.db.Grant.Query().
@@ -145,6 +147,15 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 			return fmt.Errorf("failed to load grants: %w", err)
 		}
 		for _, g := range grants {
+			if g.SubjectType == string(authz.SubjectPublic) {
+				ok, err := a.publicAllowed(ctx, publicOK, g.TenantID)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					continue // the tenant turned public sharing off
+				}
+			}
 			byResource[g.ResourceID] |= authz.Capability(g.Caps)
 		}
 	}
@@ -219,4 +230,23 @@ func subjectMatches(p authz.Principal) predicate.Grant {
 
 func notExpired(now time.Time) predicate.Grant {
 	return grant.Or(grant.ExpiresAtIsNil(), grant.ExpiresAtGT(now))
+}
+
+// publicAllowed reports whether a tenant currently allows public sharing,
+// caching the answer for the duration of one evaluation. Turning the setting
+// off ends all public access at once, without touching the grants.
+func (a *Authorizer) publicAllowed(ctx context.Context, cache map[string]bool, tenantID string) (bool, error) {
+	if ok, seen := cache[tenantID]; seen {
+		return ok, nil
+	}
+	t, err := a.db.Tenant.Get(ctx, tenantID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			cache[tenantID] = false
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to load tenant: %w", err)
+	}
+	cache[tenantID] = t.AllowPublicSharing
+	return t.AllowPublicSharing, nil
 }

@@ -292,18 +292,14 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 
 // DownloadSessionInitialize handles POST /files/downloadsession (Stage 1: Passport Issuance).
 func (api *RestAPI) DownloadSessionInitialize(ctx context.Context, request DownloadSessionInitializeRequestObject) (DownloadSessionInitializeResponseObject, error) {
-	sessionInfo, ok := session.FromContext(ctx)
-	if !ok {
-		return DownloadSessionInitialize404JSONResponse{}, nil // Standard 404/Unauthorized placeholder
-	}
-
 	if request.Body == nil {
 		return DownloadSessionInitialize500JSONResponse{Debuginfo: "missing request body"}, nil
 	}
 	fileID := request.Body.FileId
 
 	// 1. Fetch File Metadata from FSOps, which verifies the user may download it
-	principal, err := api.Authz.Principal(ctx, sessionInfo.TenantID, sessionInfo.UserID)
+	// Visitors without a session may download what is shared publicly.
+	principal, err := actor.PrincipalOrAnonymous(ctx, api.Authz)
 	if err != nil {
 		return DownloadSessionInitialize404JSONResponse{}, nil
 	}

@@ -148,3 +148,16 @@ func TestValid(t *testing.T) {
 		t.Error("bit 63 must be rejected so values fit a signed column")
 	}
 }
+
+func TestVerbs(t *testing.T) {
+	if got := (CapList | CapView | CapDownload).Verbs(); len(got) != 3 || got[0] != "LIST" || got[2] != "DOWNLOAD" {
+		t.Errorf("Verbs = %v", got)
+	}
+	if got := Capability(0).Verbs(); got == nil || len(got) != 0 {
+		t.Errorf("no capabilities is an empty list, not nil: %#v", got)
+	}
+	future := Capability(1) << 30
+	if got := (CapView | future).Verbs(); len(got) != 2 || got[1] != "BIT(30)" {
+		t.Errorf("unknown bits must still be reported: %v", got)
+	}
+}

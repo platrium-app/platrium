@@ -26,12 +26,19 @@ type Authorizer interface {
 	SharedWithMe(ctx context.Context, p Principal, limit int, after string) ([]SharedItem, error)
 	// ListGrants returns the grants on an item. Requires CapShare.
 	ListGrants(ctx context.Context, actor Principal, itemID string) ([]Grant, error)
+	// ItemAccess returns an item's grants and whether it inherits. Requires CapShare.
+	ItemAccess(ctx context.Context, actor Principal, itemID string) (*ItemAccess, error)
 
 	// Grant shares an item. The actor needs CapShare and cannot hand out
 	// capabilities they do not hold themselves.
 	Grant(ctx context.Context, actor Principal, in GrantInput) (*Grant, error)
 	// Revoke removes a grant. The actor needs CapShare on the grant's item.
 	Revoke(ctx context.Context, actor Principal, grantID string) error
+	// SetGeneralAccess sets who else can open an item beyond the people and
+	// groups added by name: restricted, the whole organization, or anyone with
+	// the link. It replaces any earlier general access in one step. Requires
+	// CapShare; public access also needs the tenant to allow it.
+	SetGeneralAccess(ctx context.Context, actor Principal, in GeneralAccessInput) error
 	// SetInheritance stops (false) or resumes (true) an item inheriting its
 	// ancestors' grants. Requires CapManage. Breaking inheritance keeps the
 	// actor's own access with a direct manager grant so they cannot lock
