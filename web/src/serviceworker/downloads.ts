@@ -33,7 +33,8 @@ export function buildDownloadHeaders(
 }
 
 function getClient(): PlatriumClient {
-    return new PlatriumClient("http://localhost:3000/api");
+    // Same origin as the page that registered this worker, not a fixed host.
+    return new PlatriumClient(`${self.location.origin}/api`);
 }
 
 // TODO: This needs to be written better instead of parsing

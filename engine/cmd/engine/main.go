@@ -6,11 +6,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"platrium/internal/api"
 	"platrium/internal/auth"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
+	"platrium/internal/auth/token"
 	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/fsops"
 	"platrium/internal/graphql"
@@ -25,11 +27,17 @@ import (
 	"platrium/internal/setup"
 	"platrium/ui"
 
+	gqlgraphql "github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/lru"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // @title           Platrium Core API
@@ -77,10 +85,13 @@ func main() {
 	groupStore := identity.NewGroupStore(database)
 	policyStore := identity.NewPolicyStore(database)
 	userStore := identity.NewUserStore(database)
+	deviceStore := identity.NewEntDeviceStore(database)
 
 	// Setup Auth Domain
 	idpStore := auth.NewIdpStore(database)
 	localUserStore := local.NewLocalUserStore(database)
+	tokenStore := token.NewStore(database, deviceStore, token.DefaultIdleTimeout)
+	codeStore := token.NewCodeStore(kvStore)
 
 	// Setup Cross-Domain Orchestrators
 	userOrchestrator := orchestrator.NewUserOrchestrator(userStore, fsOps)
@@ -105,7 +116,7 @@ func main() {
 	gqlTransport := transports.NewGraphQLTransport()
 	notifBroker := notifications.NewBroker(gqlTransport)
 
-	restAPI := restapi.NewRestAPI(fsOps, authorizer, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager)
+	restAPI := restapi.NewRestAPI(fsOps, authorizer, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager, tokenStore, codeStore, deviceStore)
 	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
@@ -122,7 +133,7 @@ func main() {
 	}))
 
 	// Setup GraphQL
-	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
+	graphqlSrv := newGraphQLServer(tokenStore, graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
 		FSOps:       fsOps,
 		Authz:       authorizer,
 		DriveOrch:   orchestrator.NewDriveOrchestrator(database, fsOps, authorizer, userStore, policyStore),
@@ -140,6 +151,7 @@ func main() {
 	router.Route("/graphql", func(r chi.Router) {
 		r.Use(sessionManager.LoadAndSave)
 		r.Use(session.Middleware(sessionManager))
+		r.Use(session.Bearer(tokenStore))
 		r.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Header.Get("Upgrade") == "websocket" {
@@ -157,6 +169,8 @@ func main() {
 	router.Route("/api", func(r chi.Router) {
 		r.Use(sessionManager.LoadAndSave)
 		r.Use(session.Middleware(sessionManager))
+		r.Use(session.Bearer(tokenStore))
+		r.Use(rateLimitPath("/api/auth/token", httprate.LimitByIP(20, time.Minute)))
 
 		r.Get("/health", HealthHandler)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
@@ -187,4 +201,46 @@ func main() {
 // @Router       /health [get]
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Platrium Engine is running"})
+}
+
+// rateLimitPath applies a limiter to a single path and leaves the rest of the
+// router alone. The token endpoint is unauthenticated, so it is the one place
+// a client can be hammered without credentials.
+func rateLimitPath(path string, limiter func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		limited := limiter(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == path {
+				limited.ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// newGraphQLServer is gqlgen's default server plus bearer auth for websocket
+// subscriptions. Browsers authenticate the upgrade request with their cookie;
+// native clients send {"Authorization": "Bearer ..."} in connection_init.
+func newGraphQLServer(tokens *token.Store, es gqlgraphql.ExecutableSchema) *handler.Server {
+	srv := handler.New(es)
+	srv.AddTransport(transport.Websocket{
+		KeepAlivePingInterval: 10 * time.Second,
+		InitFunc: func(ctx context.Context, payload transport.InitPayload) (context.Context, *transport.InitPayload, error) {
+			secret, ok := session.BearerFromHeader(payload.Authorization())
+			if !ok {
+				return ctx, &payload, nil
+			}
+			ctx, err := session.WithBearer(ctx, tokens, secret)
+			return ctx, &payload, err
+		},
+	})
+	srv.AddTransport(transport.Options{})
+	srv.AddTransport(transport.GET{})
+	srv.AddTransport(transport.POST{})
+	srv.AddTransport(transport.MultipartForm{})
+	srv.SetQueryCache(lru.New[*ast.QueryDocument](1000))
+	srv.Use(extension.Introspection{})
+	srv.Use(extension.AutomaticPersistedQuery{Cache: lru.New[string](100)})
+	return srv
 }

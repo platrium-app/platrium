@@ -6,28 +6,35 @@ import (
 	"time"
 
 	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/device"
 )
 
-// Device represents a user's registered physical device for push notifications, MDM, etc.
+// Device is a user's registered native client (iOS, macOS, Android app).
 type Device struct {
-	ID                        string            `json:"id"`
-	UserID                    string            `json:"user_id"`
-	NotificationTransportType string            `json:"notification_transport_type"` // Maps to notifications.TransportType (e.g. "GRAPHQL", "APNS")
-	Metadata                  map[string]string `json:"metadata"`
-	CreatedAt                 time.Time         `json:"created_at"`
+	ID                        string    `json:"id"`
+	UserID                    string    `json:"user_id"`
+	Name                      string    `json:"name"`
+	Platform                  string    `json:"platform"`
+	AppVersion                string    `json:"app_version"`
+	NotificationTransportType string    `json:"notification_transport_type"` // Maps to notifications.TransportType (APNS, FCM); empty until a push token is registered
+	PushToken                 string    `json:"-"`
+	CreatedAt                 time.Time `json:"created_at"`
 }
 
-// DeviceStore defines operations for managing user devices.
-type DeviceStore interface {
-	RegisterDevice(ctx context.Context, userID string, req RegisterDeviceReq) (*Device, error)
-	DeregisterDevice(ctx context.Context, deviceID string) error
-	GetDevicesForUser(ctx context.Context, userID string) ([]*Device, error)
-}
-
+// RegisterDeviceReq describes a device being registered at sign-in.
 type RegisterDeviceReq struct {
-	NotificationTransportType string
-	Metadata                  map[string]string
+	Name       string
+	Platform   string
+	AppVersion string
+}
+
+// DeviceStore manages the push-related state of registered devices. Devices
+// are created and deleted together with their AuthToken (see auth/token).
+type DeviceStore interface {
+	SetPush(ctx context.Context, tenantID, deviceID, transport, pushToken string) error
+	ClearPush(ctx context.Context, tenantID, deviceID string) error
+	GetDevicesForUser(ctx context.Context, userID string) ([]*Device, error)
 }
 
 // EntDeviceStore manages Device records.
@@ -41,14 +48,52 @@ func NewEntDeviceStore(d *db.DB) *EntDeviceStore {
 	return &EntDeviceStore{db: d}
 }
 
-func (s *EntDeviceStore) RegisterDevice(ctx context.Context, userID string, req RegisterDeviceReq) (*Device, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("not implemented")
+// CreateTx inserts a device within the caller's transaction. The caller is
+// responsible for having verified that userID belongs to tenantID.
+func (s *EntDeviceStore) CreateTx(ctx context.Context, tx *ent.Tx, tenantID, userID string, req RegisterDeviceReq) (*ent.Device, error) {
+	d, err := tx.Device.Create().
+		SetTenantID(tenantID).
+		SetUserID(userID).
+		SetName(req.Name).
+		SetPlatform(req.Platform).
+		SetAppVersion(req.AppVersion).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create device: %w", err)
+	}
+	return d, nil
 }
 
-func (s *EntDeviceStore) DeregisterDevice(ctx context.Context, deviceID string) error {
-	// TODO: implement
-	return fmt.Errorf("not implemented")
+// SetPush records where to deliver push notifications for a device.
+func (s *EntDeviceStore) SetPush(ctx context.Context, tenantID, deviceID, transport, pushToken string) error {
+	n, err := s.db.Device.Update().
+		Where(device.ID(deviceID), device.TenantID(tenantID)).
+		SetPushTransport(transport).
+		SetPushToken(pushToken).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to set push token: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: device not found", ErrNotFound)
+	}
+	return nil
+}
+
+// ClearPush stops push delivery to a device.
+func (s *EntDeviceStore) ClearPush(ctx context.Context, tenantID, deviceID string) error {
+	n, err := s.db.Device.Update().
+		Where(device.ID(deviceID), device.TenantID(tenantID)).
+		ClearPushTransport().
+		ClearPushToken().
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to clear push token: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: device not found", ErrNotFound)
+	}
+	return nil
 }
 
 // GetDevicesForUser fetches all devices belonging to a specific user.
@@ -63,13 +108,21 @@ func (s *EntDeviceStore) GetDevicesForUser(ctx context.Context, userID string) (
 
 	devices := make([]*Device, 0, len(rows))
 	for _, d := range rows {
-		devices = append(devices, &Device{
-			ID:                        d.ID,
-			UserID:                    d.UserID,
-			NotificationTransportType: d.TransportType,
-			Metadata:                  d.Metadata,
-			CreatedAt:                 d.CreatedAt,
-		})
+		dev := &Device{
+			ID:         d.ID,
+			UserID:     d.UserID,
+			Name:       d.Name,
+			Platform:   d.Platform,
+			AppVersion: d.AppVersion,
+			CreatedAt:  d.CreatedAt,
+		}
+		if d.PushTransport != nil {
+			dev.NotificationTransportType = *d.PushTransport
+		}
+		if d.PushToken != nil {
+			dev.PushToken = *d.PushToken
+		}
+		devices = append(devices, dev)
 	}
 	return devices, nil
 }

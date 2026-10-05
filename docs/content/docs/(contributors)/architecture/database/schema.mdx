@@ -27,7 +27,8 @@ Foreign key relationships enforce the hierarchy (e.g., all identities and storag
 | `users` | Individuals authenticated via an IdP. | Belongs to `tenants` (`tenant_id`) and `idp_providers` (`idp_id`). |
 | `groups` | Collections of users. | Belongs to `tenants` (`tenant_id`) and `idp_providers` (`idp_id`). |
 | `local_credentials` | Password hashes for local IdP users. | Belongs to `users` (`user_id`). |
-| `devices` | Authenticated client sessions. | Belongs to `users` (`user_id`). |
+| `devices` | Registered native clients (iOS, macOS, Android) and their push token. | Belongs to `users` (`user_id`). Owns one `auth_tokens` row. |
+| `auth_tokens` | Bearer credentials for devices and apps (CLI, FUSE, scripts). Only the SHA-256 is stored. | Belongs to `users` (`user_id`); optionally to `devices` (`device_id`, cascades). |
 
 ### 3. Storage Domain
 

@@ -47,7 +47,7 @@ func (t *APNSTransport) DeliverEvent(ctx context.Context, targets []*identity.De
 	_ = bytes
 
 	// TODO: For each target in targets:
-	// 1. target.Metadata["token"]
+	// 1. target.PushToken
 	// 2. Fire the HTTP request to Apple using the generated JSON payload.
 	return nil
 }

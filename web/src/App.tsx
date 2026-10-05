@@ -13,6 +13,8 @@ import SharedDrivesView from "./pages/drives/SharedDrivesView"
 import { FilePreviewView } from "./pages/filepreview/FilePreviewCore"
 
 import LoginView from "./pages/LoginView"
+import AuthorizeView from "./pages/AuthorizeView"
+import DevicesAppsView from "./pages/DevicesAppsView"
 import { ServerInfoProvider } from "./contexts/ServerInfoContext"
 import { ApolloProvider } from "@apollo/client/react"
 import { client } from "./lib/apollo"
@@ -33,6 +35,9 @@ export function App() {
               <Route path="/login" element={<LoginView />} />
               <Route path="/login/:alias" element={<LoginView />} />
 
+              {/* Native apps and CLIs send users here to approve a sign-in. */}
+              <Route path="/authorize" element={<RequireAuth><AuthorizeView /></RequireAuth>} />
+
               <Route path="/file/:id" element={<FilePreviewView />} />
 
               {/* Folders can be shared with anyone who has the link, so visitors may try them too. */}
@@ -48,6 +53,7 @@ export function App() {
                 <Route index element={<Navigate to="/home" replace />} />
                 <Route path="home" element={<HomeView />} />
                 <Route path="shared-drives" element={<SharedDrivesView />} />
+                <Route path="settings/devices" element={<DevicesAppsView />} />
                 <Route
                   path="rawcontent/*"
                   element={<DownloadFallbackView />}

@@ -6,7 +6,7 @@
       "FSExtension/**/*.graphql"
     ],
     "schemaSearchPaths": [
-      "../api/graphql/fsops.graphql"
+      "../api/graphql/core/*.graphql"
     ]
   },
   "output": {

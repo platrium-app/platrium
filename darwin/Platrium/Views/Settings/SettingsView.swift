@@ -1,23 +1,39 @@
+import PlatriumCore
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(AccountStore.self) private var store
+
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "gear")
-                .font(.system(size: 48))
-                .foregroundStyle(.tint)
-            Text("Settings")
-                .font(.title)
-                .bold()
-            Text("Server connection and app settings will be managed here.")
-                .foregroundStyle(.secondary)
+        Form {
+            if let account = store.activeAccount, let server = store.activeServer {
+                Section("Account") {
+                    LabeledContent("Email", value: account.email)
+                    LabeledContent("Server", value: server.host)
+                    if account.status == .needsReauth {
+                        Label("Sign in again to continue", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+
+            Section("This Device") {
+                LabeledContent("Name", value: DeviceDescriptor.current.name)
+                LabeledContent("Version", value: DeviceDescriptor.current.appVersion)
+            }
+
+            Section {
+                Button("Switch Account…") { store.isShowingAccountSwitcher = true }
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .formStyle(.grouped)
         .navigationTitle("Settings")
     }
 }
 
 #Preview {
-    SettingsView()
+    NavigationStack {
+        SettingsView()
+            .environment(AccountStore())
+    }
 }

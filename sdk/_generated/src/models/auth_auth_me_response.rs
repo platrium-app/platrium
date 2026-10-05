@@ -19,15 +19,39 @@ pub struct AuthAuthMeResponse {
     pub tenant_id: String,
     #[serde(rename = "email")]
     pub email: String,
+    /// How this request authenticated: SESSION (browser), DEVICE or APP (bearer token).
+    #[serde(rename = "auth_kind")]
+    pub auth_kind: AuthKind,
+    /// Set when auth_kind is DEVICE.
+    #[serde(rename = "device_id", skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
 }
 
 impl AuthAuthMeResponse {
-    pub fn new(user_id: String, tenant_id: String, email: String) -> AuthAuthMeResponse {
+    pub fn new(user_id: String, tenant_id: String, email: String, auth_kind: AuthKind) -> AuthAuthMeResponse {
         AuthAuthMeResponse {
             user_id,
             tenant_id,
             email,
+            auth_kind,
+            device_id: None,
         }
+    }
+}
+/// How this request authenticated: SESSION (browser), DEVICE or APP (bearer token).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum AuthKind {
+    #[serde(rename = "SESSION")]
+    Session,
+    #[serde(rename = "DEVICE")]
+    Device,
+    #[serde(rename = "APP")]
+    App,
+}
+
+impl Default for AuthKind {
+    fn default() -> AuthKind {
+        Self::Session
     }
 }
 

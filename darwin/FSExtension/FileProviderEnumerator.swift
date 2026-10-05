@@ -15,11 +15,12 @@ private let logger = Logger(subsystem: "org.platrium.FSExtension", category: "En
 class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
     
     private let enumeratedItemIdentifier: NSFileProviderItemIdentifier
-    private let apollo: ApolloClient
+    private let session: DomainSession
+    private var apollo: ApolloClient { session.apollo }
     
-    init(enumeratedItemIdentifier: NSFileProviderItemIdentifier, apollo: ApolloClient) {
+    init(enumeratedItemIdentifier: NSFileProviderItemIdentifier, session: DomainSession) {
         self.enumeratedItemIdentifier = enumeratedItemIdentifier
-        self.apollo = apollo
+        self.session = session
         super.init()
     }
 
@@ -44,7 +45,7 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
                     }
                 case .failure(let error):
                     logger.error("FSExtension Root Query Error: \(error.localizedDescription, privacy: .public)")
-                    observer.finishEnumeratingWithError(error)
+                    observer.finishEnumeratingWithError(self.session.mapAuthentication(error))
                 }
             }
         } else {
@@ -87,7 +88,7 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
                     }
                 case .failure(let error):
                     logger.error("FSExtension Folder Query Error: \(error.localizedDescription, privacy: .public)")
-                    observer.finishEnumeratingWithError(error)
+                    observer.finishEnumeratingWithError(self.session.mapAuthentication(error))
                 }
             }
         }
@@ -137,7 +138,7 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
                 }
             case .failure(let error):
                 logger.error("FSExtension Root GetChanges Error: \(error.localizedDescription, privacy: .public)")
-                observer.finishEnumeratingWithError(error)
+                observer.finishEnumeratingWithError(self.session.mapAuthentication(error))
             }
         }
     }
@@ -184,7 +185,7 @@ class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
                 }
             case .failure(let error):
                 logger.error("FSExtension GetChanges Error: \(error.localizedDescription, privacy: .public)")
-                observer.finishEnumeratingWithError(error)
+                observer.finishEnumeratingWithError(self.session.mapAuthentication(error))
             }
         }
     }

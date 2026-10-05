@@ -7,6 +7,14 @@ import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 
 The magic of Platrium on macOS is that you never have to download files before using them. Through Apple's `NSFileProviderReplicatedExtension` API, we project the entire Platrium cloud directly into the native macOS Finder as a **Virtual File System (VFS)**.
 
+## One Domain Per Account
+
+Each signed-in account gets its own domain, and the **domain identifier is the account id**. When the system starts the extension for a domain, it looks that id up in the SQLite store shared with the app (`DomainSession`), finds the account's server, and builds a GraphQL client for it. The bearer token is read from the shared Keychain on every request, so signing in again in the app takes effect without restarting the extension.
+
+Item identifiers are the raw ids from the server, with no server or user prefix. Giving every account its own domain is what keeps ids from different servers and users from ever colliding.
+
+If a domain has no account, or the server rejects the token (HTTP 401), the extension answers with `NSFileProviderError.notAuthenticated`, which the system shows as signed out, and flags the account as needing a new sign-in.
+
 ## The Root Container
 
 When macOS mounts the virtual drive, it doesn't instantly know what files exist. Instead, it asks our extension for the contents of the `rootContainer` (the absolute top level of the drive).

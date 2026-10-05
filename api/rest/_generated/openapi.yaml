@@ -5,6 +5,213 @@ info:
 tags:
   - name: Files
 paths:
+  /auth/authorize:
+    post:
+      operationId: Auth_authorize
+      summary: Authorize a Client
+      description: Called by the web consent page once the signed-in user approves a native client or app. Stores a single-use code bound to the PKCE challenge and returns the URL to send the user back to. Browser session only. Include platform to register the client as a device.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.AuthorizeResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.BadRequest'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Forbidden'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Auth.AuthorizeRequest'
+  /auth/clients:
+    get:
+      operationId: Auth_list_clients
+      summary: List Devices and Apps
+      description: Lists the devices and apps signed in as the current user.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.ClientListResponse'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+    post:
+      operationId: Auth_create_client
+      summary: Create App Token
+      description: Manually creates a named app token for scripts and CI. The token is only returned here. Browser session only.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.TokenResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.BadRequest'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Forbidden'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Auth.CreateClientRequest'
+  /auth/clients/{id}:
+    delete:
+      operationId: Auth_delete_client
+      summary: Revoke Device or App
+      description: Deletes the token and, for a device, the device with it. Takes effect immediately.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.NotFound'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+  /auth/device/push:
+    put:
+      operationId: Auth_set_push
+      summary: Register Push Token
+      description: Registers the APNs or FCM token for the device that owns the calling bearer token.
+      parameters: []
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.BadRequest'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Forbidden'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Auth.PushRequest'
+    delete:
+      operationId: Auth_clear_push
+      summary: Clear Push Token
+      description: Stops push delivery to the device that owns the calling bearer token.
+      parameters: []
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Unauthorized'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.Forbidden'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
   /auth/login:
     post:
       operationId: Auth_local_user_login
@@ -67,6 +274,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Errors.EngineInternal'
+  /auth/logout:
+    post:
+      operationId: Auth_logout
+      summary: Log Out
+      description: 'Ends the current credential: deletes the calling bearer token (and its device), or destroys the browser session.'
+      parameters: []
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
   /auth/me:
     get:
       operationId: Auth_me
@@ -117,6 +339,37 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Auth.MFAVerifyRequest'
+  /auth/token:
+    post:
+      operationId: Auth_token
+      summary: Exchange Code for Token
+      description: Redeems the single-use code from /authorize together with the PKCE code_verifier and returns a bearer token. Rate limited.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Auth.TokenResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.BadRequest'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Errors.EngineInternal'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Auth.TokenRequest'
   /files/downloadsession/chunks:
     post:
       operationId: DownloadSession_chunks
@@ -287,6 +540,7 @@ components:
         - user_id
         - tenant_id
         - email
+        - auth_kind
       properties:
         user_id:
           type: string
@@ -294,6 +548,102 @@ components:
           type: string
         email:
           type: string
+        auth_kind:
+          type: string
+          enum:
+            - SESSION
+            - DEVICE
+            - APP
+          description: 'How this request authenticated: SESSION (browser), DEVICE or APP (bearer token).'
+        device_id:
+          type: string
+          description: Set when auth_kind is DEVICE.
+    Auth.AuthorizeRequest:
+      type: object
+      required:
+        - redirect_uri
+        - code_challenge
+        - name
+      properties:
+        redirect_uri:
+          type: string
+          description: 'Where to send the user afterwards: a custom URL scheme, a loopback http URL (127.0.0.1, [::1], localhost, any port), or a configured https universal link.'
+        code_challenge:
+          type: string
+          description: Base64url SHA-256 of the client's secret code_verifier (PKCE S256).
+        state:
+          type: string
+          description: Opaque client value echoed back on the redirect.
+        name:
+          type: string
+          description: Shown to the user and in the Devices/Apps list, e.g. "Platrium for iPhone" or "Platrium CLI".
+        platform:
+          type: string
+          description: IOS, MACOS, ANDROID, ... When present the client is registered as a device; when absent it is an app.
+        app_version:
+          type: string
+    Auth.AuthorizeResponse:
+      type: object
+      required:
+        - redirect_to
+      properties:
+        redirect_to:
+          type: string
+    Auth.Client:
+      type: object
+      required:
+        - id
+        - kind
+        - name
+        - created_at
+        - last_used_at
+        - current
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - DEVICE
+            - APP
+        name:
+          type: string
+        platform:
+          type: string
+        app_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: True for the credential making this request.
+    Auth.ClientListResponse:
+      type: object
+      required:
+        - clients
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/Auth.Client'
+    Auth.CreateClientRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        expires_in_days:
+          type: integer
+          format: int32
+          description: Lifetime in days; omit for a token that only expires when idle.
     Auth.LoginRequest:
       type: object
       required:
@@ -335,12 +685,62 @@ components:
           type: string
         code:
           type: string
+    Auth.PushRequest:
+      type: object
+      required:
+        - transport
+        - token
+      properties:
+        transport:
+          type: string
+          enum:
+            - APNS
+            - FCM
+        token:
+          type: string
+    Auth.TokenRequest:
+      type: object
+      required:
+        - code
+        - code_verifier
+      properties:
+        code:
+          type: string
+        code_verifier:
+          type: string
+    Auth.TokenResponse:
+      type: object
+      required:
+        - token
+        - id
+      properties:
+        token:
+          type: string
+          description: Bearer token. Only shown once.
+        id:
+          type: string
+          description: Token ID, usable with DELETE /auth/clients/{id}.
+        device_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    Errors.BadRequest:
+      type: object
+      properties:
+        message:
+          type: string
     Errors.EngineInternal:
       type: object
       required:
         - debuginfo
       properties:
         debuginfo:
+          type: string
+    Errors.Forbidden:
+      type: object
+      properties:
+        message:
           type: string
     Errors.MissingChunks:
       type: object

@@ -68,6 +68,8 @@ func (User) Edges() []ent.Edge {
 			Field("idp_id").Unique().Required().Immutable().
 			Annotations(entsql.OnDelete(entsql.Restrict)),
 		edge.To("devices", Device.Type),
+		edge.To("auth_tokens", AuthToken.Type).
+			Annotations(entsql.OnDelete(entsql.Restrict)),
 		// owner_id is nullable (tenant-owned drives), so the foreign key must be
 		// declared here with an explicit action: the default SET NULL would also
 		// forbid the owner_id CHECK on MySQL and MariaDB.
@@ -151,7 +153,9 @@ func (Domain) Annotations() []schema.Annotation {
 	}
 }
 
-// Device is a user's registered device (push notifications, MDM, ...).
+// Device is a user's registered native client (iOS, macOS, Android app). It is
+// created together with the AuthToken the client signs in with, and deleted
+// with it. Push delivery details live here.
 type Device struct{ ent.Schema }
 
 func (Device) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
@@ -160,10 +164,14 @@ func (Device) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
 		field.String("user_id").MaxLen(idLen).SchemaType(idType).Immutable(),
-		// Maps to notifications.TransportType (e.g. "GRAPHQL", "APNS").
-		field.String("transport_type").MaxLen(32).NotEmpty(),
-		// Opaque transport-specific data; never queried into.
-		field.JSON("metadata", map[string]string{}).Optional(),
+		field.String("name").MaxLen(nameLen).NotEmpty(),
+		// IOS, MACOS, ANDROID, ... Free-form so new platforms need no migration.
+		field.String("platform").MaxLen(32).NotEmpty(),
+		field.String("app_version").MaxLen(64).Default(""),
+		// Maps to notifications.TransportType (APNS or FCM). Null until the
+		// client registers a push token.
+		field.String("push_transport").MaxLen(32).Optional().Nillable(),
+		field.String("push_token").MaxLen(1024).Optional().Nillable().Sensitive(),
 	}
 }
 
@@ -172,6 +180,9 @@ func (Device) Edges() []ent.Edge {
 		edge.From("user", User.Type).Ref("devices").
 			Field("user_id").Unique().Required().Immutable().
 			Annotations(entsql.OnDelete(entsql.Restrict)),
+		// The token cascades with its device, so deleting a device signs it out.
+		edge.To("token", AuthToken.Type).Unique().
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 

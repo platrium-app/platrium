@@ -1,9 +1,9 @@
+import PlatriumCore
 import SwiftUI
 
 struct AppTabBar: View {
-    @Environment(ServerStore.self) private var serverStore
+    @Environment(AccountStore.self) private var store
     @Binding var selection: SidebarSelection?
-    @State private var isShowingServerSheet = false
     @State private var drivesViewModel = DrivesViewModel()
 
     var body: some View {
@@ -38,9 +38,9 @@ struct AppTabBar: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            isShowingServerSheet = true
+                            store.isShowingAccountSwitcher = true
                         } label: {
-                            Label(serverStore.activeServer.name, systemImage: "server.rack")
+                            Label(store.activeAccount?.email ?? "Accounts", systemImage: "person.crop.circle")
                         }
                     }
                 }
@@ -59,18 +59,14 @@ struct AppTabBar: View {
                 Label("Settings", systemImage: "gear")
             }
         }
-        .sheet(isPresented: $isShowingServerSheet) {
-            ServerPickerSheet()
-        }
-        .task(id: serverStore.activeServerId) {
-            let serverId = serverStore.activeServerId
-            let apollo = serverStore.apollo!
-            await drivesViewModel.load(serverId: serverId, apollo: apollo)
+        .task(id: store.activeAccount?.id) {
+            guard let apollo = store.apollo else { return }
+            await drivesViewModel.load(apollo: apollo)
         }
     }
 }
 
 #Preview {
     AppTabBar(selection: .constant(.home))
-        .environment(ServerStore())
+        .environment(AccountStore())
 }

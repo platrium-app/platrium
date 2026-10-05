@@ -9,15 +9,10 @@ import Foundation
 import FileProvider
 import PlatriumSDK
 
+/// Moves file contents for one account. Build it from `DomainSession.contentTransfer()`,
+/// which hands it a client carrying the account's current token.
 class ContentTransferUtility {
-    static let shared = ContentTransferUtility()
-    
     let client: PlatriumClient
-    
-    // TODO: URL should be looked up from a shared config/DB keyed by domain ID for multi-server support
-    private convenience init() {
-        self.init(client: try! PlatriumClient(baseUrl: "http://172.20.0.179:3000/api"))
-    }
     
     init(client: PlatriumClient) {
         self.client = client

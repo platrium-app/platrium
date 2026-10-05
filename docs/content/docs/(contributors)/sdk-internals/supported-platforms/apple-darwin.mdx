@@ -250,8 +250,17 @@ Then add `PlatriumSDK` as a framework dependency for your app target. That's it!
 ```swift title="Example Xcode usage"
 import PlatriumSDK
 
-let client = try PlatriumClient(baseUrl: "https://my.platrium.app")
+let client = try PlatriumClient(baseUrl: "https://my.platrium.app/api")
 ```
+
+To act as a signed-in user, create the client with a bearer token instead. It is sent on every request, including raw chunk transfers:
+
+```swift title="Authenticated client"
+let client = try PlatriumClient.withToken(baseUrl: "https://my.platrium.app/api", token: token)
+let who = try await client.auth().me()
+```
+
+`client.auth()` exposes the sign-in calls (`exchangeCode(code:codeVerifier:)` and `me()`). They are generated from the engine's OpenAPI, so an API change breaks the SDK build and, through UniFFI, the Swift app. A 401 surfaces as `PlatriumError.Unauthorized`.
 
 ### Auto-Rebuilding in Xcode
 

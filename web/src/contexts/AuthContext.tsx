@@ -4,6 +4,7 @@ export interface AuthUser {
   user_id: string
   tenant_id: string
   email: string
+  auth_kind?: "SESSION" | "DEVICE" | "APP"
 }
 
 interface AuthContextType {

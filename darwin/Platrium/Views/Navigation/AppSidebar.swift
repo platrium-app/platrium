@@ -1,7 +1,8 @@
+import PlatriumCore
 import SwiftUI
 
 struct AppSidebar: View {
-    @Environment(ServerStore.self) private var serverStore
+    @Environment(AccountStore.self) private var store
     @Binding var selection: SidebarSelection?
     @State private var drivesViewModel = DrivesViewModel()
 
@@ -38,10 +39,9 @@ struct AppSidebar: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Platrium")
-        .task(id: serverStore.activeServerId) {
-            let serverId = serverStore.activeServerId
-            let apollo = serverStore.apollo!
-            await drivesViewModel.load(serverId: serverId, apollo: apollo)
+        .task(id: store.activeAccount?.id) {
+            guard let apollo = store.apollo else { return }
+            await drivesViewModel.load(apollo: apollo)
         }
     }
 }
@@ -49,7 +49,7 @@ struct AppSidebar: View {
 #Preview {
     NavigationSplitView {
         AppSidebar(selection: .constant(.home))
-            .environment(ServerStore())
+            .environment(AccountStore())
     } detail: {
         Text("Detail View")
     }

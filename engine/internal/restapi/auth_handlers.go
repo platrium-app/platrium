@@ -98,9 +98,15 @@ func (a *RestAPI) AuthMe(ctx context.Context, request AuthMeRequestObject) (Auth
 		return AuthMe401JSONResponse{}, nil
 	}
 
-	return AuthMe200JSONResponse{
+	info, _ := session.AuthInfoFromContext(ctx)
+	resp := AuthMe200JSONResponse{
 		UserId:   sess.UserID,
 		TenantId: sess.TenantID,
 		Email:    sess.Email,
-	}, nil
+		AuthKind: AuthAuthMeResponseAuthKind(info.Kind),
+	}
+	if info.DeviceID != "" {
+		resp.DeviceId = &info.DeviceID
+	}
+	return resp, nil
 }

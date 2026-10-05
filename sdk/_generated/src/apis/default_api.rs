@@ -15,11 +15,62 @@ use crate::{apis::ResponseContent, models};
 use super::{Error, configuration, ContentType};
 
 
+/// struct for typed errors of method [`auth_authorize`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthAuthorizeError {
+    Status400(models::ErrorsBadRequest),
+    Status401(models::ErrorsUnauthorized),
+    Status403(models::ErrorsForbidden),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`auth_clear_push`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthClearPushError {
+    Status401(models::ErrorsUnauthorized),
+    Status403(models::ErrorsForbidden),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`auth_create_client`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthCreateClientError {
+    Status400(models::ErrorsBadRequest),
+    Status401(models::ErrorsUnauthorized),
+    Status403(models::ErrorsForbidden),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`auth_delete_client`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthDeleteClientError {
+    Status401(models::ErrorsUnauthorized),
+    Status404(models::ErrorsNotFound),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`auth_idp_redirect`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum AuthIdpRedirectError {
     Status404(models::ErrorsNotFound),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`auth_list_clients`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthListClientsError {
+    Status401(models::ErrorsUnauthorized),
     Status500(models::ErrorsEngineInternal),
     UnknownValue(serde_json::Value),
 }
@@ -33,11 +84,39 @@ pub enum AuthLocalUserLoginError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`auth_logout`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthLogoutError {
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`auth_me`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum AuthMeError {
     Status401(models::ErrorsUnauthorized),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`auth_set_push`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthSetPushError {
+    Status400(models::ErrorsBadRequest),
+    Status401(models::ErrorsUnauthorized),
+    Status403(models::ErrorsForbidden),
+    Status500(models::ErrorsEngineInternal),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`auth_token`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AuthTokenError {
+    Status400(models::ErrorsBadRequest),
+    Status500(models::ErrorsEngineInternal),
     UnknownValue(serde_json::Value),
 }
 
@@ -50,6 +129,132 @@ pub enum AuthVerifyError {
     UnknownValue(serde_json::Value),
 }
 
+
+/// Called by the web consent page once the signed-in user approves a native client or app. Stores a single-use code bound to the PKCE challenge and returns the URL to send the user back to. Browser session only. Include platform to register the client as a device.
+pub async fn auth_authorize(configuration: &configuration::Configuration, auth_authorize_request: models::AuthAuthorizeRequest) -> Result<models::AuthAuthorizeResponse, Error<AuthAuthorizeError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_auth_authorize_request = auth_authorize_request;
+
+    let uri_str = format!("{}/auth/authorize", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_auth_authorize_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::AuthAuthorizeResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::AuthAuthorizeResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthAuthorizeError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Stops push delivery to the device that owns the calling bearer token.
+pub async fn auth_clear_push(configuration: &configuration::Configuration, ) -> Result<(), Error<AuthClearPushError>> {
+
+    let uri_str = format!("{}/auth/device/push", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::DELETE, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthClearPushError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Manually creates a named app token for scripts and CI. The token is only returned here. Browser session only.
+pub async fn auth_create_client(configuration: &configuration::Configuration, auth_create_client_request: models::AuthCreateClientRequest) -> Result<models::AuthTokenResponse, Error<AuthCreateClientError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_auth_create_client_request = auth_create_client_request;
+
+    let uri_str = format!("{}/auth/clients", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_auth_create_client_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::AuthTokenResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::AuthTokenResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthCreateClientError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Deletes the token and, for a device, the device with it. Takes effect immediately.
+pub async fn auth_delete_client(configuration: &configuration::Configuration, id: &str) -> Result<(), Error<AuthDeleteClientError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_id = id;
+
+    let uri_str = format!("{}/auth/clients/{id}", configuration.base_path, id=crate::apis::urlencode(p_path_id));
+    let mut req_builder = configuration.client.request(reqwest::Method::DELETE, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthDeleteClientError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
 
 /// Initiates an external SSO handshake (SAML/OIDC) and redirects the user.
 pub async fn auth_idp_redirect(configuration: &configuration::Configuration, idp: &str) -> Result<(), Error<AuthIdpRedirectError>> {
@@ -74,6 +279,41 @@ pub async fn auth_idp_redirect(configuration: &configuration::Configuration, idp
     } else {
         let content = resp.text().await?;
         let entity: Option<AuthIdpRedirectError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Lists the devices and apps signed in as the current user.
+pub async fn auth_list_clients(configuration: &configuration::Configuration, ) -> Result<models::AuthClientListResponse, Error<AuthListClientsError>> {
+
+    let uri_str = format!("{}/auth/clients", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::AuthClientListResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::AuthClientListResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthListClientsError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }
@@ -116,6 +356,30 @@ pub async fn auth_local_user_login(configuration: &configuration::Configuration,
     }
 }
 
+/// Ends the current credential: deletes the calling bearer token (and its device), or destroys the browser session.
+pub async fn auth_logout(configuration: &configuration::Configuration, ) -> Result<(), Error<AuthLogoutError>> {
+
+    let uri_str = format!("{}/auth/logout", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthLogoutError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
 /// Returns the currently authenticated user's session data.
 pub async fn auth_me(configuration: &configuration::Configuration, ) -> Result<models::AuthAuthMeResponse, Error<AuthMeError>> {
 
@@ -147,6 +411,71 @@ pub async fn auth_me(configuration: &configuration::Configuration, ) -> Result<m
     } else {
         let content = resp.text().await?;
         let entity: Option<AuthMeError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Registers the APNs or FCM token for the device that owns the calling bearer token.
+pub async fn auth_set_push(configuration: &configuration::Configuration, auth_push_request: models::AuthPushRequest) -> Result<(), Error<AuthSetPushError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_auth_push_request = auth_push_request;
+
+    let uri_str = format!("{}/auth/device/push", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_auth_push_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthSetPushError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Redeems the single-use code from /authorize together with the PKCE code_verifier and returns a bearer token. Rate limited.
+pub async fn auth_token(configuration: &configuration::Configuration, auth_token_request: models::AuthTokenRequest) -> Result<models::AuthTokenResponse, Error<AuthTokenError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_body_auth_token_request = auth_token_request;
+
+    let uri_str = format!("{}/auth/token", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    req_builder = req_builder.json(&p_body_auth_token_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::AuthTokenResponse`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::AuthTokenResponse`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<AuthTokenError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }
