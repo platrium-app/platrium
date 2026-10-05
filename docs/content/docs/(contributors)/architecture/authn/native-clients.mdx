@@ -69,9 +69,9 @@ A custom URL scheme like `platrium://` is not private to one app: another app ca
 
 `redirect_uri` is validated before a code is created:
 
-- a custom app scheme (`platrium://callback`)
+- a custom app scheme (`platrium://callback`; the iOS, macOS and Android apps use `platrium://auth/callback`)
 - `http` on a loopback host with any port (`127.0.0.1`, `[::1]`, `localhost`), used by the CLI and FUSE drivers that listen for the callback
-- `https` URLs starting with an entry of `AUTH_NATIVE_HTTPS_REDIRECTS` (comma separated), used for universal links
+- `https` URLs starting with an entry of `AUTH_NATIVE_HTTPS_REDIRECTS` (comma separated), used for universal links on iOS and app links on Android
 
 Everything else, such as `javascript:`, `file:` or `http://example.com`, is refused.
 

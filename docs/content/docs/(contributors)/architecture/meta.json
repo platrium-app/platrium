@@ -9,6 +9,7 @@
         "authz",
         "notifications-broker",
         "web-interface",
-        "darwin"
+        "darwin",
+        "android"
     ]
 }
