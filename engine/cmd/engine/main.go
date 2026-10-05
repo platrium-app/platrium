@@ -11,10 +11,11 @@ import (
 	"platrium/internal/auth"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
+	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/fsops"
 	"platrium/internal/graphql"
 	"platrium/internal/identity"
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db"
 	"platrium/internal/infra/kvstore"
 	"platrium/internal/infra/storage"
 	"platrium/internal/notifications"
@@ -44,12 +45,12 @@ func main() {
 	defer kvStore.Close()
 	log.Println("kv store initialized successfully")
 
-	graphStore, err := graph.NewFromEnv()
+	database, err := db.NewFromEnv(context.Background())
 	if err != nil {
-		log.Fatalf("failed to initialize Graph store: %v", err)
+		log.Fatalf("failed to initialize database: %v", err)
 	}
-	defer graphStore.Close(context.Background())
-	log.Println("graph store initialized successfully")
+	defer database.Close()
+	log.Println("database initialized successfully")
 
 	// Initialize Chunk Store
 	chunkStore := fsops.NewChunkStore(kvStore)
@@ -68,19 +69,22 @@ func main() {
 	})
 
 	manifestRepo := fsops.NewManifestRepo(kvStore)
-	fsOps := fsops.NewFSOps(graphStore, manifestRepo)
+	authorizer := sqlauthz.New(database)
+	fsOps := fsops.NewFSOps(database, manifestRepo, authorizer)
 
 	// Setup Identity Domain
-	tenantStore := identity.NewTenantStore(graphStore)
-	userStore := identity.NewUserStore(graphStore)
+	tenantStore := identity.NewTenantStore(database)
+	groupStore := identity.NewGroupStore(database)
+	policyStore := identity.NewPolicyStore(database)
+	userStore := identity.NewUserStore(database)
 
 	// Setup Auth Domain
-	idpStore := auth.NewIdpStore(graphStore)
-	localUserStore := local.NewLocalUserStore(kvStore)
+	idpStore := auth.NewIdpStore(database)
+	localUserStore := local.NewLocalUserStore(database)
 
 	// Setup Cross-Domain Orchestrators
 	userOrchestrator := orchestrator.NewUserOrchestrator(userStore, fsOps)
-	tenantOrchestrator := orchestrator.NewTenantOrchestrator(graphStore, tenantStore, idpStore, userOrchestrator, localUserStore)
+	tenantOrchestrator := orchestrator.NewTenantOrchestrator(database, tenantStore, idpStore, userOrchestrator, localUserStore)
 
 	// Setup Instance Config Store
 	instanceConfigStore := setup.NewInstanceConfigStore(kvStore)
@@ -101,7 +105,7 @@ func main() {
 	gqlTransport := transports.NewGraphQLTransport()
 	notifBroker := notifications.NewBroker(gqlTransport)
 
-	restAPI := restapi.NewRestAPI(fsOps, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager)
+	restAPI := restapi.NewRestAPI(fsOps, authorizer, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager)
 	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
@@ -120,11 +124,17 @@ func main() {
 	// Setup GraphQL
 	graphqlSrv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
 		FSOps:       fsOps,
+		Authz:       authorizer,
+		DriveOrch:   orchestrator.NewDriveOrchestrator(database, fsOps, authorizer, userStore, policyStore),
 		Broker:      notifBroker,
 		SubsManager: gqlTransport,
 		TenantStore: tenantStore,
+		UserStore:   userStore,
+		GroupStore:  groupStore,
 		IdpStore:    idpStore,
 	}}))
+
+	graphqlSrv.SetErrorPresenter(graphql.ErrorPresenter)
 
 	// GraphQL Routes
 	router.Route("/graphql", func(r chi.Router) {

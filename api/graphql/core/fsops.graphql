@@ -17,6 +17,8 @@ interface DriveItem {
   name: String!
   type: DriveItemType!
   path: [Folder!]!
+  "What the signed-in user (or an anonymous visitor) may do with this item."
+  myCapabilities: [String!]!
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -37,6 +39,7 @@ type File implements DriveItem {
   version: Int!
   versions: [FileVersion!]
   path: [Folder!]!
+  myCapabilities: [String!]!
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -54,6 +57,7 @@ type Folder implements DriveItem {
   type: DriveItemType!
   driveMetadata: DriveMetadata
   path: [Folder!]!
+  myCapabilities: [String!]!
   createdAt: DateTime!
   updatedAt: DateTime!
 }

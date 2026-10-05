@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { TelescopeIcon } from "lucide-react"
 import RootLayout from "./layouts/RootLayout"
+import AuthAwareLayout from "./layouts/AuthAwareLayout"
 import FolderRootView from "./pages/folder/FolderRootView"
 import { UploadProvider } from "./contexts/UploadContext"
 import { BreadcrumbProvider } from "./contexts/BreadcrumbContext"
@@ -8,6 +9,7 @@ import { PlaceholderView } from "./components/custom/PlaceholderView"
 import DownloadFallbackView from "./pages/DownloadFallbackView"
 
 import HomeView from "./pages/HomeView"
+import SharedDrivesView from "./pages/drives/SharedDrivesView"
 import { FilePreviewView } from "./pages/filepreview/FilePreviewCore"
 
 import LoginView from "./pages/LoginView"
@@ -32,7 +34,12 @@ export function App() {
               <Route path="/login/:alias" element={<LoginView />} />
 
               <Route path="/file/:id" element={<FilePreviewView />} />
-              
+
+              {/* Folders can be shared with anyone who has the link, so visitors may try them too. */}
+              <Route element={<AuthAwareLayout />}>
+                <Route path="/folder/:id" element={<FolderRootView />} />
+              </Route>
+
               <Route path="/" element={
                 <RequireAuth>
                   <RootLayout />
@@ -40,7 +47,7 @@ export function App() {
               }>
                 <Route index element={<Navigate to="/home" replace />} />
                 <Route path="home" element={<HomeView />} />
-                <Route path="folder/:id" element={<FolderRootView />} />
+                <Route path="shared-drives" element={<SharedDrivesView />} />
                 <Route
                   path="rawcontent/*"
                   element={<DownloadFallbackView />}

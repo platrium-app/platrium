@@ -11,10 +11,12 @@ const DRIVE_ITEM_CHANGED_SUB = graphql(`
   }
 `)
 
-export function useDriveEventSubscription(onUpdateNeeded: () => void) {
+/** Pass enabled = false for visitors who are not signed in: they have no one to receive events for. */
+export function useDriveEventSubscription(onUpdateNeeded: () => void, enabled = true) {
   const client = useApolloClient()
 
   useSubscription(DRIVE_ITEM_CHANGED_SUB, {
+    skip: !enabled,
     onData: ({ data }) => {
       const event = data.data?.driveItemChanged
       if (!event) return

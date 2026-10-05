@@ -7,6 +7,7 @@ import {
   X,
   Download,
   Share2,
+  UserCog,
   Pencil,
   Trash2,
   LayoutGridIcon,
@@ -25,7 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useUpload } from "@/contexts/UploadContext"
-import type { SortField, SortDirection, ViewMode, DriveItemNode } from "./FolderViewTypes"
+import type { SortField, SortDirection, ViewMode, DriveItemNode, DriveOperation } from "./FolderViewTypes"
+import { allCan, hasCapability, isSharedDriveRoot } from "@/lib/capabilities"
 import { cn, triggerFileDownload } from "@/lib/utils"
 
 export interface FolderHeaderToolbarProps {
@@ -37,8 +39,12 @@ export interface FolderHeaderToolbarProps {
   sortDirection: SortDirection
   onSortChange: (field: SortField) => void
   folderId: string
-  onOperation?: (mode: "CREATE_FOLDER" | "RENAME" | "MOVE" | "COPY", items: DriveItemNode[]) => void
+  onOperation?: (mode: DriveOperation, items: DriveItemNode[]) => void
   selectedItems?: DriveItemNode[]
+  /** What the user may do with the folder being viewed (create, share, ...). */
+  folderCapabilities?: string[]
+  /** The folder being viewed, so it can be shared itself when nothing is selected. */
+  currentFolder?: DriveItemNode
 }
 
 export function FolderHeaderToolbar({
@@ -51,6 +57,8 @@ export function FolderHeaderToolbar({
   folderId,
   onOperation,
   selectedItems = [],
+  folderCapabilities,
+  currentFolder,
 }: FolderHeaderToolbarProps) {
   const { triggerUpload } = useUpload()
 
@@ -62,6 +70,13 @@ export function FolderHeaderToolbar({
   ]
 
   const hasSelection = selectedCount > 0
+  const canCreateHere = hasCapability(folderCapabilities, "CREATE")
+  const canShareFolder = !!currentFolder && hasCapability(folderCapabilities, "SHARE")
+  const sharedDriveRoot = isSharedDriveRoot(currentFolder)
+  const canDownload = allCan(selectedItems, "DOWNLOAD")
+  const canShareSelection = selectedCount === 1 && allCan(selectedItems, "SHARE")
+  const canRename = selectedCount === 1 && allCan(selectedItems, "EDIT")
+  const canMove = selectedCount > 0 && allCan(selectedItems, "MOVE")
 
   return (
     <div className="flex h-12 w-full shrink-0 items-center justify-between pb-2 transition-colors duration-300">
@@ -76,6 +91,7 @@ export function FolderHeaderToolbar({
               : "translate-y-0 opacity-100 visible"
           )}
         >
+          {canCreateHere && (
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="default" />}>
               <Plus className="size-4" />
@@ -97,6 +113,18 @@ export function FolderHeaderToolbar({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
+          {canShareFolder && (
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              title={sharedDriveRoot ? "Manage access to this drive" : "Share this folder"}
+              onClick={() => onOperation?.("SHARE", [currentFolder!])}
+            >
+              {sharedDriveRoot ? <UserCog className="size-4" /> : <Share2 className="size-4" />}
+              <span className="hidden sm:inline">{sharedDriveRoot ? "Manage access" : "Share"}</span>
+            </Button>
+          )}
         </div>
 
         {/* Selection State: Action Bar */}
@@ -126,7 +154,7 @@ export function FolderHeaderToolbar({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar [&_button]:shrink-0 mask-edges min-w-0">
-            {selectedCount > 0 && selectedItems.every(i => i.type === "FILE") && (
+            {selectedCount > 0 && canDownload && selectedItems.every(i => i.type === "FILE") && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -141,19 +169,21 @@ export function FolderHeaderToolbar({
               </Button>
             )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="h-8 gap-1.5 px-1 text-xs font-medium opacity-50 cursor-not-allowed"
-              title="Share"
-            >
-              <Share2 className="size-3.5" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
+            {canShareSelection && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-1 text-xs font-medium"
+                title="Share"
+                onClick={() => onOperation?.("SHARE", selectedItems)}
+              >
+                <Share2 className="size-3.5" />
+                <span className="hidden sm:inline">Share</span>
+              </Button>
+            )}
 
             {/* Rename: Single item only */}
-            {selectedCount === 1 && (
+            {canRename && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -167,7 +197,7 @@ export function FolderHeaderToolbar({
             )}
 
             {/* Move: Any selected items */}
-            {selectedCount > 0 && (
+            {canMove && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -181,7 +211,7 @@ export function FolderHeaderToolbar({
             )}
 
             {/* Copy: Only if EXACTLY one file is selected */}
-            {selectedCount === 1 && selectedItems[0]?.type === "FILE" && (
+            {selectedCount === 1 && canDownload && selectedItems[0]?.type === "FILE" && (
               <Button
                 variant="ghost"
                 size="sm"

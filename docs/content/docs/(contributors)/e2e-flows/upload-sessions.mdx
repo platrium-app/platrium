@@ -45,7 +45,7 @@ sequenceDiagram
     note over C, DB: Stage 4: Zero-Read Commit
     C->>A: POST /commit (JWT + Ordered Hashes + Receipts)
     note over A: Zero-Read In-Memory HMAC Validation
-    A->>DB: Save File Node & Chunk Manifest
+    A->>DB: Save file row & chunk manifest
     A-->>C: 200 OK (FileId)
 ```
 
@@ -141,11 +141,11 @@ for i, chunk := range chunks {
 }
 ```
 
-If every receipt matches perfectly, the backend has mathematically proven the structural geometry of the file. It knows with 100% certainty that it authorized this sequence of chunks. It immediately creates the File Node in the graph database, and the upload is fully completed!
+If every receipt matches perfectly, the backend has mathematically proven the structural geometry of the file. It knows with 100% certainty that it authorized this sequence of chunks. It immediately creates the file in the database (a `FILE` row under the parent folder), and the upload is fully completed!
 
 :::note
 **What if a user successfully commits, but skipped the Object Storage upload?**
-Because the Zero-Read Commit doesn't actively verify if the bytes exist in Object Storage, a malicious user *could* successfully commit a File Node without actually uploading the data. 
+Because the Zero-Read Commit doesn't actively verify if the bytes exist in Object Storage, a malicious user *could* successfully commit a file record without actually uploading the data. 
 
 However, this only corrupts *their* file! Because the missing chunks will never trigger a native `ValidatedChunk` event from the Storage Backend (as discussed in Stage 3), they will never be marked as `VALIDATED` in the ChunkStore. If a second user attempts to upload the exact same chunk, they will not be offered deduplication (`UploadUrl` will not be `nil`), and they will legitimately upload the missing bytes, healing the system.
 :::

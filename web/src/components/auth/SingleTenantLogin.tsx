@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useLocation } from "react-router-dom"
 import { AuthLayout } from "@/layouts/AuthLayout"
 import { Button } from "@/components/ui/button"
 import {
@@ -53,6 +54,12 @@ export function SingleTenantLogin({
   const [challengeToken, setChallengeToken] = useState("")
   const [mfaMethod, setMfaMethod] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
+  const location = useLocation()
+  
+  const getReturnUrl = () => {
+    const from = location.state?.from
+    return from ? from.pathname + (from.search || "") : "/home"
+  }
 
   // If providers are passed down (e.g. from an EE wrapper), use them.
   // Otherwise, fetch the CE auth config.
@@ -119,7 +126,7 @@ export function SingleTenantLogin({
           setMfaMethod(data.next_step || "MFA_TOTP")
           setStep("2fa")
         } else if (res.ok && data.status === "SUCCESS") {
-          window.location.href = "/home"
+          window.location.href = getReturnUrl()
         } else {
           setErrorMsg(data.message || "Invalid credentials")
         }
@@ -139,7 +146,7 @@ export function SingleTenantLogin({
         })
         const data = await res.json()
         if (res.ok && data.status === "SUCCESS") {
-          window.location.href = "/home"
+          window.location.href = getReturnUrl()
         } else {
           setErrorMsg(data.message || "Invalid MFA code")
         }

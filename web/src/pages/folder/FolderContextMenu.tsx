@@ -13,10 +13,16 @@ import { useUpload } from "@/contexts/UploadContext"
 export interface FolderContextMenuProps {
     children: React.ReactNode
     folderId: string
+    /** Whether the user may add things here; without it there is nothing to offer. */
+    canCreate?: boolean
 }
 
-export function FolderContextMenu({ children, folderId }: FolderContextMenuProps) {
+export function FolderContextMenu({ children, folderId, canCreate = true }: FolderContextMenuProps) {
     const { triggerUpload } = useUpload()
+
+    if (!canCreate) {
+        return <div className="flex min-h-full w-full flex-1 flex-col">{children}</div>
+    }
 
     return (
         <ContextMenu>

@@ -1,0 +1,146 @@
+# Sharing and access. Roles, capabilities and subject types are plain strings so
+# new ones can be added without breaking clients; clients must ignore values they
+# do not recognize.
+#
+#   subjectType: USER | GROUP | TENANT | PUBLIC
+#   role:        VIEWER | COMMENTER | RESTRICTED_EDITOR | FULL_EDITOR | DRIVE_ADMIN | CUSTOM
+#                A file or folder is shared as VIEWER or FULL_EDITOR (shown as "Editor");
+#                a shared drive's members can hold any of the five. Ask shareRoles(itemId).
+#   level:       RESTRICTED | TENANT | PUBLIC
+#   capability:  LIST | VIEW | DOWNLOAD | COMMENT | CREATE | EDIT | DELETE | MOVE |
+#                TRASH | MOVE_OUT | SHARE | MANAGE | DELETE_DRIVE
+
+type AccessGrant {
+  id: ID!
+  subjectType: String!
+  subjectId: String!
+  "A display name for the subject, such as a person's name or a group's name."
+  subjectName: String!
+  role: String!
+  "True when the role is granted without the ability to download."
+  noDownload: Boolean!
+  capabilities: [String!]!
+  expiresAt: DateTime
+  createdAt: DateTime!
+  "True when this grant is to the signed-in user. Clients should show it as \"You\" and not offer to change or remove it."
+  isYou: Boolean!
+  "Set on access that comes from a folder or drive above the item. It cannot be changed from the item; change it where it was granted."
+  inheritedFrom: ItemRef
+}
+
+"A reference to an item, for saying where access comes from."
+type ItemRef {
+  "Null when the signed-in user cannot open the item."
+  id: ID
+  name: String!
+}
+
+"Who else can open an item beyond the people and groups added by name."
+type GeneralAccess {
+  level: String!
+  role: String
+  noDownload: Boolean!
+  expiresAt: DateTime
+}
+
+"A person, group or organization shown in a picker or on an access list."
+type DirectorySubject {
+  "USER | GROUP | TENANT"
+  type: String!
+  id: ID!
+  name: String!
+  email: String
+  "True when this is the signed-in user."
+  isYou: Boolean!
+}
+
+"A role as it should be shown when choosing one."
+type RoleOption {
+  role: String!
+  label: String!
+  description: String!
+  capabilities: [String!]!
+  "False for roles that edit: they need the content, so download cannot be withheld."
+  downloadOptional: Boolean!
+}
+
+"A general-access level that can be chosen for an item, as the server defines it."
+type AccessLevelOption {
+  level: String!
+  label: String!
+  "One line saying who can open the item at this level."
+  blurb: String!
+  "The roles this level may carry; empty when it takes none (RESTRICTED)."
+  roles: [String!]!
+  supportsExpiry: Boolean!
+}
+
+type ItemAccess {
+  itemId: ID!
+  "Who owns the item's drive: a person for a private drive, the organization for a shared one."
+  owner: DirectorySubject!
+  "False when the item is restricted from the access of its parent folders."
+  inheritsPermissions: Boolean!
+  generalAccess: GeneralAccess!
+  "People and groups added by name. General access is reported separately."
+  grants: [AccessGrant!]!
+  "Access that reaches the item from folders and the drive above, nearest first. Read-only here: each entry says where it comes from. Above a restriction only drive admins appear, since they keep access through it."
+  inherited: [AccessGrant!]!
+}
+
+type SharedItem {
+  item: DriveItem!
+  role: String!
+  capabilities: [String!]!
+}
+
+type SharedItemEdge {
+  cursor: String!
+  node: SharedItem!
+}
+
+type SharedItemConnection {
+  edges: [SharedItemEdge!]!
+  pageInfo: PageInfo!
+}
+
+input ShareInput {
+  itemId: ID!
+  subjectType: String!
+  subjectId: String!
+  role: String!
+  noDownload: Boolean
+  expiresAt: DateTime
+}
+
+input GeneralAccessInput {
+  itemId: ID!
+  level: String!
+  "Required unless the level is RESTRICTED."
+  role: String
+  noDownload: Boolean
+  expiresAt: DateTime
+}
+
+extend type Query {
+  "The roles to offer when sharing an item: Viewer and Editor for a file or folder, the full ladder for a shared drive's root."
+  shareRoles(itemId: ID!): [RoleOption!]!
+  "The general-access levels that can be chosen for an item, narrowest first. Requires permission to share it."
+  generalAccessOptions(itemId: ID!): [AccessLevelOption!]!
+  "Find people and groups in the organization by name or email, for the people picker."
+  searchDirectory(query: String!, first: Int, excludeAccessToItemId: ID): [DirectorySubject!]!
+  "Who has access to an item. Requires permission to share it."
+  itemAccess(itemId: ID!): ItemAccess!
+  "Items shared directly with the signed-in user or their groups."
+  sharedWithMe(first: Int, after: String): SharedItemConnection!
+}
+
+extend type Mutation {
+  "Share an item with a user, group, the organization, or anyone with the link."
+  shareItem(input: ShareInput!): AccessGrant!
+  revokeAccess(grantId: ID!): Boolean!
+  "Set who else can open an item: restricted, the organization, or anyone with the link."
+  setGeneralAccess(input: GeneralAccessInput!): GeneralAccess!
+  "Stop or resume an item inheriting access from its parent folders."
+  setInheritance(itemId: ID!, inherit: Boolean!): Boolean!
+}

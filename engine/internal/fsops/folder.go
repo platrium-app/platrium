@@ -5,84 +5,74 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"platrium/internal/infra/graph"
+	"platrium/internal/authz"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/driveitem"
 )
 
-// Folder represents a folder node in the graph database.
+// Folder represents a folder in a drive's tree.
 type Folder struct {
-	ID           string    `json:"id"`
-	TenantID     string    `json:"tenant_id"`
-	ParentID     *string   `json:"parent_id,omitempty"`
-	Name         string    `json:"name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-
-	// Drive specific metadata, if this folder acts as a root drive
-	DriveMetadata *DriveMetadata `json:"drive_metadata,omitempty"`
+	ID        string    `json:"id"`
+	TenantID  string    `json:"tenant_id"`
+	ParentID  *string   `json:"parent_id,omitempty"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// Caps is what the calling principal may do with the folder.
+	Caps authz.Capability `json:"-"`
 }
 
-type DriveMetadata struct {
-	DriveType    string `json:"drive_type"`
-	StorageUsed  int64  `json:"storage_used"`
-	StorageQuota *int64 `json:"storage_quota,omitempty"`
+func folderFromEnt(i *ent.DriveItem, caps authz.Capability) *Folder {
+	return &Folder{
+		Caps:      caps,
+		ID:        i.ID,
+		TenantID:  i.TenantID,
+		ParentID:  i.ParentID,
+		Name:      i.Name,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: i.UpdatedAt,
+	}
 }
 
-// CreateFolder creates a new folder node and attaches it to the parent.
-func (f *FSOps) CreateFolder(ctx context.Context, tenantID string, parentID string, name string) (*Folder, error) {
+// CreateFolder creates a new folder and attaches it to the parent. Requires
+// CREATE on the parent.
+func (f *FSOps) CreateFolder(ctx context.Context, p authz.Principal, parentID string, name string) (*Folder, error) {
 	if name == "" {
-		return nil, fmt.Errorf("folder name cannot be empty")
+		return nil, fmt.Errorf("%w: folder name cannot be empty", ErrInvalid)
 	}
-	// TODO: Stub permissions check (CheckPermissions)
-	
-	newID := uuid.New().String()
-	now := time.Now().UTC()
-
-	query := `
-		MATCH (p:Resource:Folder {id: $parent_id, tenant_id: $tenant_id})
-		CREATE (n:Resource:Folder {
-			id: $new_id,
-			tenant_id: $tenant_id,
-			name: $name,
-			created_at: $now,
-			updated_at: $now
-		})-[:CHILD_OF]->(p)
-		RETURN n.id AS id, n.tenant_id AS tenant_id, n.name AS name, n.created_at AS created_at, n.updated_at AS updated_at
-	`
-	params := map[string]interface{}{
-		"parent_id": parentID,
-		"tenant_id": tenantID,
-		"new_id":    newID,
-		"name":      name,
-		"now":       now,
-	}
-
-	var folder Folder
-	err := f.graph.WriteTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		if !res.Next() {
-			if err := res.Err(); err != nil {
-				return err
-			}
-			return fmt.Errorf("parent folder not found or access denied")
-		}
-
-		if err := res.Scan(&folder); err != nil {
-			return err
-		}
-		
-		folder.ParentID = &parentID
-		return nil
-	})
-
+	parentCaps, err := f.requireCaps(ctx, p, parentID, authz.CapCreate)
 	if err != nil {
 		return nil, err
 	}
+	tenantID := p.TenantID
 
-	return &folder, nil
+	var folder *Folder
+	err = f.db.WithTx(ctx, func(tx *ent.Tx) error {
+		parent, err := tx.DriveItem.Query().
+			Where(driveitem.ID(parentID), driveitem.TenantID(tenantID), driveitem.KindEQ(driveitem.KindFOLDER)).
+			Only(ctx)
+		if err != nil {
+			if ent.IsNotFound(err) {
+				return fmt.Errorf("%w: parent folder not found or access denied", ErrNotFound)
+			}
+			return err
+		}
+
+		created, err := tx.DriveItem.Create().
+			SetTenantID(tenantID).
+			SetDriveID(parent.DriveID).
+			SetParentID(parent.ID).
+			SetKind(driveitem.KindFOLDER).
+			SetName(name).
+			Save(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create folder: %w", err)
+		}
+		folder = folderFromEnt(created, parentCaps) // a new folder inherits exactly its parent's access
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return folder, nil
 }

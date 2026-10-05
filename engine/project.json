@@ -30,6 +30,22 @@
         "{projectRoot}/internal/restapi/spec.gen.go"
       ]
     },
+    "_generate_ent": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go generate ./internal/infra/db/...",
+        "cwd": "engine"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/internal/infra/db/schema/**/*.go",
+        "{projectRoot}/internal/infra/db/generate.go",
+        "{projectRoot}/go.mod"
+      ],
+      "outputs": [
+        "{projectRoot}/internal/infra/db/ent/**/*.go"
+      ]
+    },
     "_generate_graphql_bindings": {
       "executor": "nx:run-commands",
       "options": {
@@ -60,6 +76,7 @@
       "cache": true,
       "executor": "nx:run-commands",
       "dependsOn": [
+        "_generate_ent",
         "_generate_restapi_bindings",
         "_generate_graphql_bindings",
         "web:build"
@@ -71,6 +88,7 @@
       "configurations": {
         "ce": {
           "dependsOn": [
+            "_generate_ent",
             "_generate_restapi_bindings",
             "_generate_graphql_bindings",
             {
@@ -95,6 +113,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "dependsOn": [
+        "_generate_ent",
         "_generate_restapi_bindings",
         "_generate_graphql_bindings"
       ],
@@ -119,6 +138,9 @@
         "{projectRoot}/**/*.go",
         "{projectRoot}/go.mod",
         "{projectRoot}/go.sum"
+      ],
+      "dependsOn": [
+        "_generate_ent"
       ]
     }
   }

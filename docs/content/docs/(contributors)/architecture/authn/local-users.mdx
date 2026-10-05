@@ -12,40 +12,34 @@ The architectural integration for the `IdPAuthHandoff` engine is actively being 
 
 While Platrium is designed to support Enterprise SSO (SAML, OIDC) out of the box, every system needs a reliable fallback. **Cluster Local Users** represent identities whose authentication secrets (Bcrypt hashes, TOTP seeds) are securely managed directly by Platrium itself, rather than delegated to an external identity provider.
 
-## The KV Store (BadgerDB, DynamoDB, etc.)
+## The LocalCredential Table
 
-A defining architectural decision in Platrium is the absolute separation of **Authorization (AuthZ)** from **Authentication (AuthN)**.
+A defining architectural decision in Platrium is the separation of **identity** (who a user is) from **authentication secrets** (how they prove it). Secrets live in their own table, `local_credentials`, with a strict one-to-one link to the user:
 
-Graph Databases (Neo4j/Memgraph) are incredibly powerful at resolving structural relationships (AuthZ: "Can User A view Folder B?"). However, they are fundamentally the wrong tool for storing high-frequency, write-heavy cryptographic blobs. 
+| Column | Purpose |
+|---|---|
+| `user_id` | The owning user. Unique, so a user has at most one credential. |
+| `tenant_id` | The tenant, used for isolation. |
+| `password_hash` | The bcrypt hash. Never the password. |
+| `password_changed_at` | When the password last changed. |
+| `totp_secret`, `backup_codes` | Second-factor material (optional). |
 
-To maintain blistering speeds, we deliberately partition all Local Authentication secrets into a highly-optimized, embedded Key-Value store like BadgerDB, DynamoDB, etc.
-
-When a local user is created, their secrets are stored as a JSON payload in the KV store under the `auth:local:{userId}` namespace:
-
-```go
-type LocalIdentityRecord struct {
-	PasswordHash      string   `json:"passwordHash"`
-	TOTPSecret        string   `json:"totpSecret,omitempty"`
-	BackupCodes       []string `json:"backupCodes,omitempty"`
-	PasswordChangedAt int64    `json:"passwordChangedAt"`
-}
-```
+All secret columns are marked **sensitive** in the schema, so ent never prints them in logs or error messages. Only users bound to a `LOCAL` identity provider can hold a credential; the store verifies this when it is created.
 
 <Accordions>
-  <Accordion title="Why separate the hash from the User Node?">
-    If we stored the `passwordHash` directly on the `User` node in the GraphDB, every time a user logs in and updates their "Last Login" or rotates their TOTP, we would incur a massive structural graph write.
+  <Accordion title="Why a separate table instead of columns on the User?">
+    Identity reads are everywhere: listings, sharing autocompletes, session lookups. Keeping secrets on a separate table means those queries never select a password hash, and a bug in one of them cannot leak one. It also means rotating a password or a TOTP seed updates a single small row and leaves the `users` row untouched.
     
-    By moving cryptographic secrets to a dedicated Key-Value store, we keep the GraphDB perfectly pristine and aggressively optimized for Authorization traversals. The KV Store handles the cryptographic heavy lifting without breaking a sweat, ensuring logins are fast and secure.
+    Secrets and identity still share one database, so they can be created, changed and rolled back **together**.
+  </Accordion>
+  <Accordion title="Why not the KV store?">
+    Earlier versions stored hashes in a separate KV store. That forced a "write a temporary record with a TTL, then finalize it" dance, because two different databases cannot share a transaction. Now that credentials live next to users in the same relational database, onboarding is a single atomic transaction and the whole class of orphaned-hash and half-created-user failures disappears.
   </Accordion>
 </Accordions>
 
-## Temporary Users
+## Atomic Onboarding
 
-During Tenant and User onboarding, we face a classic distributed systems dilemma: How do we atomically provision a User node in the Graph DB *and* their password hash in the KV Store simultaneously? 
-
-If the server crashes halfway through, we could end up with a devastating state: an orphaned password hash for a user that doesn't exist, or a perfectly formed User node that is impossible to log into!
-
-To solve this mathematically, Platrium uses a **Write-Harmless-First** pattern powered by KV Time-To-Live (TTL):
+When a user or tenant is created, the password is stored in the same transaction as the account:
 
 ```mermaid
 graph TD
@@ -54,25 +48,29 @@ graph TD
     classDef fail fill:#ed1a38,stroke:#b91c1c,stroke-width:2px,color:#fff,rx:6px,ry:6px;
     classDef db fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#fff,rx:6px,ry:6px;
 
-    Start((Start)) --> S1["Write Temp Hash (KV Store TTL 10m)"]:::step
-    S1 --> S2["GraphDB Transaction (Create User)"]:::db
-    
-    S2 -->|Commits| S3["Finalize Hash (Remove TTL)"]:::success
-    S2 -->|Crashes/Rolls Back| F["Hash expires in 10 minutes!"]:::fail
+    Start((Start)) --> S1["Hash password (bcrypt, outside the tx)"]:::step
+    S1 --> S2["Begin transaction"]:::db
+    S2 --> S3["Create Tenant, IdP, User, Drive"]:::db
+    S3 --> S4["Create LocalCredential"]:::db
+    S4 -->|Commit| OK["Account and password exist together"]:::success
+    S3 -->|Any error| F["Rollback: nothing exists"]:::fail
+    S4 -->|Any error| F
 ```
 
-1. **Create Temporary User:** We first write the `LocalIdentityRecord` to the KV Store using `m.localUserStore.CreateTemporaryUser(..., 10*time.Minute)`. This tells the KV Store to automatically delete the hash in exactly 10 minutes.
-2. **Execute Graph Transaction:** We execute the massive GraphDB transaction (creating the Tenant, the User, and the Drive). If this rolls back for *any* reason, we do absolutely nothing. The KV Store record will silently evaporate in 10 minutes, leaving zero orphaned data.
-3. **Finalize:** Once the GraphDB safely commits to disk, we call `FinalizeTemporaryUser(...)`. This fetches the temporary record from the KV Store and immediately rewrites it *without* a TTL, permanently locking the user in.
+1. **Hash First:** `local.HashPassword` runs before the transaction opens. bcrypt takes around 100ms, and we don't want to hold a database connection for that long.
+2. **One Transaction:** The tenant, user, drive and `LocalCredential` are all created inside one `db.WithTx` call. `LocalUserStore.CreateTx` takes the transaction, like every other store.
+3. **All or Nothing:** If anything fails, the credential rolls back with everything else. There are no temporary records to expire and no finalize step.
 
-This guarantees flawless atomicity across entirely different database engines!
+## Password Resets
+
+`SetPassword` hashes the new password and updates the existing credential row. It preserves the second-factor settings and bumps `password_changed_at`.
 
 ## IdPAuthHandoff Integration (In-Progress)
 
 When a Local User attempts to log in via the web UI, the request first hits the HRD (Home Realm Discovery) router. Once HRD confirms the target Tenant uses a `LOCAL` IdpProvider, it triggers the `IdPAuthHandoff` flow.
 
-The handoff engine seamlessly ties the two databases together:
-1. It retrieves the user's `ID` from the Graph DB based on their email.
-2. It queries the `LocalUserStore` (the KV Store) using that `ID` to fetch the `LocalIdentityRecord`.
-3. It verifies the Bcrypt hash against the user's input.
+The handoff engine ties the identity and the secret together:
+1. It looks up the user by their IdP binding (`idp_id` plus `external_id`).
+2. It loads that user's `LocalCredential` by `user_id`.
+3. It verifies the Bcrypt hash against the user's input. A wrong password returns `false`; a missing credential returns a not-found error.
 4. If successful, it securely issues the final JWT Session!

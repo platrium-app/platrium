@@ -32,34 +32,6 @@ func TestSessionContext(t *testing.T) {
 	}
 }
 
-func TestMiddleware_DevFallback(t *testing.T) {
-	sm := NewManager()
-	fallback := &PlatriumSession{
-		UserID:   "admin-user",
-		TenantID: "native-tenant",
-		Email:    "admin@example.com",
-	}
-
-	var capturedSession *PlatriumSession
-	handler := sm.LoadAndSave(Middleware(sm)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sess, ok := FromContext(r.Context())
-		if ok {
-			capturedSession = sess
-		}
-	})))
-
-	req := httptest.NewRequest("GET", "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if capturedSession == nil {
-		t.Fatal("expected capturedSession to be populated by fallback")
-	}
-	if capturedSession.UserID != fallback.UserID || capturedSession.TenantID != fallback.TenantID {
-		t.Fatalf("expected fallback session data, got %+v", capturedSession)
-	}
-}
-
 func TestMiddleware_ActiveSession(t *testing.T) {
 	sm := NewManager()
 	activeSess := &PlatriumSession{

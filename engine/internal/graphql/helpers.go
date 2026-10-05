@@ -2,19 +2,18 @@ package graphql
 
 import (
 	"context"
-	"fmt"
-	"platrium/internal/auth/session"
+	"platrium/internal/auth/actor"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 )
 
 // TODO: Too many helpers, organize this!
 func (r *Resolver) resolveItemPath(ctx context.Context, itemID string) ([]*Folder, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
+	if err != nil {
+		return nil, err
 	}
-	folders, err := r.FSOps.GetItemPath(ctx, sess.TenantID, itemID)
+	folders, err := r.FSOps.GetItemPath(ctx, p, itemID)
 	if err != nil {
 		return nil, err
 	}
@@ -29,6 +28,8 @@ func mapFolderRecord(f *fsops.Folder) *Folder {
 		Type:      DriveItemTypeFolder,
 		CreatedAt: f.CreatedAt,
 		UpdatedAt: f.UpdatedAt,
+
+		MyCapabilities: f.Caps.Verbs(),
 	}
 }
 
@@ -43,20 +44,15 @@ func mapFsopsFolders(fsopsFolders []*fsops.Folder) []*Folder {
 			Type:      folderType,
 			CreatedAt: f.CreatedAt,
 			UpdatedAt: f.UpdatedAt,
+
+			MyCapabilities: f.Caps.Verbs(),
 		})
 	}
 	return folders
 }
 
 func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
-	isFolder := false
-	for _, label := range item.Labels {
-		if label == "Folder" || label == "PrivateDrive" || label == "SharedDrive" {
-			isFolder = true
-		}
-	}
-
-	if isFolder {
+	if item.IsFolder() {
 		return &Folder{
 			ID:        item.ID,
 			ParentID:  item.ParentID,
@@ -64,6 +60,8 @@ func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
 			Type:      DriveItemTypeFolder,
 			CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt,
+
+			MyCapabilities: item.Caps.Verbs(),
 		}
 	} else {
 		var size int64
@@ -87,6 +85,8 @@ func mapDriveItemRecord(item *fsops.DriveItemRecord) DriveItem {
 			MimeType:  mime,
 			CreatedAt: item.CreatedAt,
 			UpdatedAt: item.UpdatedAt,
+
+			MyCapabilities: item.Caps.Verbs(),
 		}
 	}
 }
@@ -103,6 +103,8 @@ func mapFileRecord(file *fsops.File) *File {
 		MimeType:  file.MimeType,
 		CreatedAt: file.CreatedAt,
 		UpdatedAt: file.UpdatedAt,
+
+		MyCapabilities: file.Caps.Verbs(),
 	}
 }
 
@@ -124,5 +126,31 @@ func MapPublicTenantAuthConfig(cfg *identity.PublicTenantAuthConfig) *TenantAuth
 		Alias:        cfg.Alias,
 		DefaultIdpID: cfg.DefaultIdpID,
 		Providers:    providers,
+	}
+}
+
+// mapDrive maps a drive to the folder that represents its root.
+func mapDrive(d *fsops.Drive) *Folder {
+	driveType := DriveTypePrivate
+	if d.Type == fsops.DriveTypeShared {
+		driveType = DriveTypeShared
+	}
+	var quota *int64
+	if d.StorageQuota > 0 {
+		q := d.StorageQuota
+		quota = &q
+	}
+	return &Folder{
+		ID:   d.ID,
+		Name: d.Name,
+		Type: DriveItemTypeFolder,
+		DriveMetadata: &DriveMetadata{
+			DriveType:    driveType,
+			StorageUsed:  d.StorageUsed,
+			StorageQuota: quota,
+		},
+		MyCapabilities: d.Caps.Verbs(),
+		CreatedAt:      d.CreatedAt,
+		UpdatedAt:      d.CreatedAt,
 	}
 }

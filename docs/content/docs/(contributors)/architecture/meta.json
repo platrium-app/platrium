@@ -3,6 +3,7 @@
     "pages": [
         "build-system",
         "storage-engine",
+        "database",
         "identity",
         "authn",
         "authz",

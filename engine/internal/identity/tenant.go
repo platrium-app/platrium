@@ -3,72 +3,115 @@ package identity
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
-	"platrium/internal/infra/graph"
+	"platrium/internal/infra/db"
+	"platrium/internal/infra/db/ent"
+	"platrium/internal/infra/db/ent/idpprovider"
+	"platrium/internal/infra/db/ent/tenant"
 )
 
 // Tenant represents an organization or isolated billing unit.
 type Tenant struct {
-	ID        string `json:"id"`
-	Alias     string `json:"alias"` // e.g., "acme" or "family"
-	Name      string `json:"name"`
-	IsNative  bool   `json:"is_native"`
-	CreatedAt int64  `json:"created_at"`
+	ID        string    `json:"id"`
+	Alias     string    `json:"alias"` // e.g., "acme" or "family"
+	Name      string    `json:"name"`
+	IsNative  bool      `json:"is_native"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
-// TenantStore manages Tenant nodes in the GraphDB.
+func tenantFromEnt(t *ent.Tenant) *Tenant {
+	return &Tenant{
+		ID:        t.ID,
+		Alias:     t.Alias,
+		Name:      t.Name,
+		IsNative:  t.NativeSlot != nil,
+		CreatedAt: t.CreatedAt,
+	}
+}
+
+// NormalizeAlias canonicalizes a tenant alias. Aliases are stored lowercase so
+// uniqueness is identical on case-sensitive and case-insensitive collations.
+func NormalizeAlias(alias string) string {
+	return strings.ToLower(strings.TrimSpace(alias))
+}
+
+// TenantStore manages Tenant records.
 type TenantStore struct {
-	store graph.Graph
+	db *db.DB
 }
 
-func NewTenantStore(store graph.Graph) *TenantStore {
-	return &TenantStore{store: store}
+func NewTenantStore(d *db.DB) *TenantStore {
+	return &TenantStore{db: d}
 }
 
-// CreateTenant creates a new Tenant node and a Local IdP fallback.
+// CreateTenantParams are the inputs for creating a tenant.
+type CreateTenantParams struct {
+	ID       string // optional; generated when empty
+	Alias    string
+	Name     string
+	IsNative bool
+}
+
+// CreateTenantTx creates a tenant within the provided transaction. Uniqueness
+// of the alias and of the native tenant is enforced by the schema, so a
+// violation surfaces as ErrConflict (see DescribeConflict for the reason).
+func (r *TenantStore) CreateTenantTx(ctx context.Context, tx *ent.Tx, p CreateTenantParams) (*Tenant, error) {
+	create := tx.Tenant.Create().SetAlias(NormalizeAlias(p.Alias)).SetName(p.Name)
+	if p.ID != "" {
+		create.SetID(p.ID)
+	}
+	if p.IsNative {
+		create.SetNativeSlot(1)
+	}
+
+	t, err := create.Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return nil, fmt.Errorf("%w: tenant alias or native tenant already exists: %v", ErrConflict, err)
+		}
+		return nil, fmt.Errorf("failed to create tenant: %w", err)
+	}
+	return tenantFromEnt(t), nil
+}
+
+// DescribeConflict explains why creating a tenant with this alias failed. It
+// reads outside any transaction (a failed write poisons the transaction on some
+// backends), so call it after rollback, on the failure path only.
+func (r *TenantStore) DescribeConflict(ctx context.Context, alias string, isNative bool) string {
+	if taken, err := r.db.Tenant.Query().Where(tenant.AliasEQ(NormalizeAlias(alias))).Exist(ctx); err == nil && taken {
+		return fmt.Sprintf("a tenant with alias '%s' already exists", NormalizeAlias(alias))
+	}
+	if isNative {
+		if has, err := r.HasNativeTenant(ctx); err == nil && has {
+			return "a native cluster tenant already exists"
+		}
+	}
+	return "tenant already exists"
+}
+
+// GetTenant returns a tenant by ID.
+func (r *TenantStore) GetTenant(ctx context.Context, id string) (*Tenant, error) {
+	t, err := r.db.Tenant.Get(ctx, id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: tenant", ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to fetch tenant: %w", err)
+	}
+	return tenantFromEnt(t), nil
+}
+
+// HasNativeTenant reports whether the native (cluster) tenant exists.
 func (r *TenantStore) HasNativeTenant(ctx context.Context) (bool, error) {
-	var hasNative bool
-	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, "MATCH (t:Tenant {isNative: true}) RETURN t IS NOT NULL AS exists LIMIT 1", nil)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-		if res.Next() {
-			var check struct {
-				Exists bool `json:"exists"`
-			}
-			if err := res.Scan(&check); err != nil {
-				return err
-			}
-			hasNative = check.Exists
-		}
-		return nil
-	})
-	return hasNative, err
+	return r.db.Tenant.Query().Where(tenant.NativeSlotNotNil()).Exist(ctx)
 }
 
-// GetTenantCount returns the total number of Tenant nodes in the graph.
+// GetTenantCount returns the total number of tenants.
 func (r *TenantStore) GetTenantCount(ctx context.Context) (int64, error) {
-	var count int64
-	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, "MATCH (t:Tenant) RETURN count(t) AS count", nil)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-		if res.Next() {
-			var row struct {
-				Count int64 `json:"count"`
-			}
-			if err := res.Scan(&row); err != nil {
-				return err
-			}
-			count = row.Count
-		}
-		return nil
-	})
-	return count, err
+	n, err := r.db.Tenant.Query().Count(ctx)
+	return int64(n), err
 }
 
 // PublicIdpProvider represents the public metadata for an Identity Provider.
@@ -88,82 +131,32 @@ type PublicTenantAuthConfig struct {
 }
 
 // GetPublicTenantAuthConfig returns public tenant auth details by alias.
-// If alias is empty (""), it looks up the native default tenant (isNative: true).
+// If alias is empty (""), it looks up the native default tenant.
 func (r *TenantStore) GetPublicTenantAuthConfig(ctx context.Context, alias string) (*PublicTenantAuthConfig, error) {
-	var query string
-	var params map[string]any
-
+	q := r.db.Tenant.Query().WithIdpProviders(func(iq *ent.IdpProviderQuery) {
+		iq.Order(ent.Asc(idpprovider.FieldCreatedAt), ent.Asc(idpprovider.FieldID))
+	})
 	if alias == "" {
-		query = `
-			MATCH (t:Tenant {isNative: true})
-			OPTIONAL MATCH (t)-[:USES_IDP]->(i:IdpProvider)
-			RETURN t.id AS tenant_id, t.name AS name, t.alias AS alias, i.id AS idp_id, i.name AS idp_name, i.type AS idp_type
-		`
-		params = nil
+		q = q.Where(tenant.NativeSlotNotNil())
 	} else {
-		query = `
-			MATCH (t:Tenant {alias: $alias})
-			OPTIONAL MATCH (t)-[:USES_IDP]->(i:IdpProvider)
-			RETURN t.id AS tenant_id, t.name AS name, t.alias AS alias, i.id AS idp_id, i.name AS idp_name, i.type AS idp_type
-		`
-		params = map[string]any{"alias": alias}
+		q = q.Where(tenant.AliasEQ(NormalizeAlias(alias)))
 	}
 
-	var tenantID, name string
-	var tenantAlias *string
-	var providers []*PublicIdpProvider
-	found := false
-
-	err := r.store.ReadTx(ctx, func(tx graph.Tx) error {
-		res, err := tx.Query(ctx, query, params)
-		if err != nil {
-			return err
-		}
-		defer res.Close()
-
-		for res.Next() {
-			var row struct {
-				TenantID string  `json:"tenant_id"`
-				Name     string  `json:"name"`
-				Alias    *string `json:"alias"`
-				IDPID    *string `json:"idp_id"`
-				IDPName  *string `json:"idp_name"`
-				IDPType  *string `json:"idp_type"`
-			}
-			if err := res.Scan(&row); err != nil {
-				return err
-			}
-
-			found = true
-			tenantID = row.TenantID
-			name = row.Name
-			if row.Alias != nil {
-				tenantAlias = row.Alias
-			}
-
-			if row.IDPID != nil && row.IDPName != nil && row.IDPType != nil {
-				providers = append(providers, &PublicIdpProvider{
-					ID:   *row.IDPID,
-					Name: *row.IDPName,
-					Type: *row.IDPType,
-				})
-			}
-		}
-		return nil
-	})
-
+	t, err := q.Only(ctx)
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("tenant not found")
+		}
 		return nil, fmt.Errorf("failed to query tenant auth config: %w", err)
 	}
 
-	if !found {
-		return nil, fmt.Errorf("tenant not found")
+	cfg := &PublicTenantAuthConfig{
+		TenantID: t.ID,
+		Name:     t.Name,
+		Alias:    &t.Alias,
 	}
-
-	return &PublicTenantAuthConfig{
-		TenantID:  tenantID,
-		Name:      name,
-		Alias:     tenantAlias,
-		Providers: providers,
-	}, nil
+	for _, i := range t.Edges.IdpProviders {
+		cfg.Providers = append(cfg.Providers, &PublicIdpProvider{ID: i.ID, Name: i.Name, Type: string(i.Type)})
+	}
+	return cfg, nil
 }

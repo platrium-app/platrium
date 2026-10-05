@@ -33,7 +33,7 @@ func (o *Orchestrator) Bootstrap(ctx context.Context) error {
 
 	// If we successfully found the native tenant ID, we're done.
 	if hasNative {
-		log.Println("Setup: Native Tenant verified in GraphDB")
+		log.Println("Setup: Native Tenant verified in database")
 		return nil
 	}
 

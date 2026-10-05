@@ -1,0 +1,342 @@
+package sqlauthz_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"platrium/internal/authz"
+	"platrium/internal/infra/db/ent/grant"
+)
+
+func TestGrantRequiresShare(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	in := authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.carol), Role: authz.RoleViewer}
+
+	// Bob can see docs but is only a content manager: no SHARE.
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)
+	if _, err := e.az.Grant(ctx, s.pb, in); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("a content manager cannot share: %v", err)
+	}
+	// Carol cannot even see the item: it does not exist as far as she knows.
+	if _, err := e.az.Grant(ctx, s.pc, in); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("an invisible item must read as not found: %v", err)
+	}
+	if _, err := e.az.Grant(ctx, authz.Anonymous(), in); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("anonymous cannot share: %v", err)
+	}
+}
+
+func TestManagersCanShareFurther(t *testing.T) {
+	e := newEnv(t)
+	s := newScene(t, e)
+	e.seedGrant(t, s.docs, userSubject(s.bob), authz.RoleDriveAdmin) // someone holding SHARE
+
+	g := e.share(t, s.pb, s.docs, userSubject(s.carol), authz.RoleFullEditor)
+	if g.CreatedBy != s.bob || g.Role != authz.RoleFullEditor {
+		t.Fatalf("unexpected grant: %+v", g)
+	}
+	if got := e.caps(t, s.pc, s.spec); !got.Has(authz.CapEdit) {
+		t.Fatalf("carol caps = %s", got)
+	}
+}
+
+// Nobody can hand out more than they hold.
+func TestCannotGrantMoreThanYouHold(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+
+	// A custom grant that can share but not edit.
+	limited := authz.Normalize(authz.CapView | authz.CapShare)
+	if err := e.db.Grant.Create().SetTenantID(s.tn.id).SetDriveID(s.drive).SetResourceID(s.docs).
+		SetSubjectType("USER").SetSubjectID(s.bob).SetRole("CUSTOM").SetCaps(int64(limited)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := e.az.Grant(ctx, s.pb, authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.carol), Role: authz.RoleFullEditor})
+	if !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("escalation must be refused: %v", err)
+	}
+}
+
+func TestGrantReplacesEarlierGrant(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+
+	first := e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor)
+	soon := time.Now().Add(time.Hour)
+	second, err := e.az.Grant(ctx, s.pa, authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.bob), Role: authz.RoleViewer, ExpiresAt: &soon})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID || second.Role != authz.RoleViewer || second.ExpiresAt == nil {
+		t.Fatalf("sharing again must replace the grant: %+v -> %+v", first, second)
+	}
+	if n, _ := e.db.Grant.Query().Where(grant.ResourceID(s.docs)).Count(ctx); n != 1 {
+		t.Fatalf("expected one grant, got %d", n)
+	}
+	if got := e.caps(t, s.pb, s.docs); got.Has(authz.CapEdit) {
+		t.Fatalf("the downgrade must take effect, got %s", got)
+	}
+
+	third := e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer) // no expiry now
+	if third.ExpiresAt != nil {
+		t.Fatalf("re-sharing without an expiry clears it: %+v", third)
+	}
+}
+
+func TestGrantValidation(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	other := e.tenant(t, "other")
+	stranger := e.user(t, other, "stranger")
+	foreignGroup := e.group(t, other, "foreign")
+	past := time.Now().Add(-time.Hour)
+
+	cases := []struct {
+		name string
+		in   authz.GrantInput
+		want error
+	}{
+		{"owner is not grantable", authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.bob), Role: authz.RoleOwner}, authz.ErrInvalid},
+		{"custom is not grantable", authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.bob), Role: authz.RoleCustom}, authz.ErrInvalid},
+		{"unknown role", authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.bob), Role: "BOSS"}, authz.ErrInvalid},
+		{"expiry in the past", authz.GrantInput{ItemID: s.docs, Subject: userSubject(s.bob), Role: authz.RoleViewer, ExpiresAt: &past}, authz.ErrInvalid},
+		{"unknown subject type", authz.GrantInput{ItemID: s.docs, Subject: authz.Subject{Type: "ROBOT", ID: "x"}, Role: authz.RoleViewer}, authz.ErrInvalid},
+		{"user from another tenant", authz.GrantInput{ItemID: s.docs, Subject: userSubject(stranger), Role: authz.RoleViewer}, authz.ErrNotFound},
+		{"group from another tenant", authz.GrantInput{ItemID: s.docs, Subject: groupSubject(foreignGroup), Role: authz.RoleViewer}, authz.ErrNotFound},
+		{"missing user", authz.GrantInput{ItemID: s.docs, Subject: userSubject("nobody"), Role: authz.RoleViewer}, authz.ErrNotFound},
+		{"another tenant as subject", authz.GrantInput{ItemID: s.docs, Subject: authz.Subject{Type: authz.SubjectTenant, ID: other.id}, Role: authz.RoleViewer}, authz.ErrInvalid},
+		{"public with a made-up id", authz.GrantInput{ItemID: s.docs, Subject: authz.Subject{Type: authz.SubjectPublic, ID: "everyone"}, Role: authz.RoleViewer}, authz.ErrInvalid},
+	}
+	for _, c := range cases {
+		if _, err := e.az.Grant(ctx, s.pa, c.in); !errors.Is(err, c.want) {
+			t.Errorf("%s: got %v, want %v", c.name, err, c.want)
+		}
+	}
+	if n, _ := e.db.Grant.Query().Count(ctx); n != 0 {
+		t.Errorf("rejected grants must leave nothing behind, found %d", n)
+	}
+}
+
+func TestRevoke(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	other := e.tenant(t, "other")
+	outsider := e.principal(t, other, e.user(t, other, "outsider"))
+
+	g := e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
+	if e.caps(t, s.pb, s.docs) == 0 {
+		t.Fatal("setup")
+	}
+
+	if err := e.az.Revoke(ctx, s.pb, g.ID); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("a viewer cannot revoke: %v", err)
+	}
+	if err := e.az.Revoke(ctx, outsider, g.ID); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("another tenant cannot see the grant: %v", err)
+	}
+	if err := e.az.Revoke(ctx, s.pa, "missing"); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("missing grant: %v", err)
+	}
+
+	if err := e.az.Revoke(ctx, s.pa, g.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.caps(t, s.pb, s.docs); got != 0 {
+		t.Fatalf("revocation must take effect immediately, got %s", got)
+	}
+}
+
+func TestListGrants(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
+	e.share(t, s.pa, s.docs, tenantSubject(s.tn), authz.RoleViewer)
+	e.share(t, s.pa, s.private, userSubject(s.carol), authz.RoleViewer)
+
+	grants, err := e.az.ListGrants(ctx, s.pa, s.docs)
+	if err != nil || len(grants) != 2 {
+		t.Fatalf("grants on docs: %v %v", grants, err)
+	}
+	for _, g := range grants {
+		if g.ItemID != s.docs || g.DriveID != s.drive || g.TenantID != s.tn.id {
+			t.Errorf("unexpected grant: %+v", g)
+		}
+	}
+	if _, err := e.az.ListGrants(ctx, s.pb, s.docs); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("only sharers see who has access: %v", err)
+	}
+}
+
+func TestSetInheritance(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleFullEditor) // can share, cannot manage
+	e.seedGrant(t, s.docs, userSubject(s.carol), authz.RoleDriveAdmin) // can manage
+
+	if err := e.az.SetInheritance(ctx, s.pb, s.specs, false); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("an editor cannot restrict: %v", err)
+	}
+	if err := e.az.SetInheritance(ctx, s.pa, s.drive, false); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("a private drive root cannot be managed: %v", err)
+	}
+
+	// A manager who restricts an item keeps access to it, with no grant added.
+	if err := e.az.SetInheritance(ctx, s.pc, s.specs, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.caps(t, s.pc, s.spec); !got.Has(authz.CapManage) {
+		t.Fatalf("the manager must not lock themselves out, got %s", got)
+	}
+	if got := e.caps(t, s.pb, s.spec); got != 0 {
+		t.Fatalf("bob loses inherited access, got %s", got)
+	}
+
+	// The owner needs no compensating grant.
+	if err := e.az.SetInheritance(ctx, s.pa, s.private, false); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.db.Grant.Query().Where(grant.ResourceID(s.private)).Count(ctx); n != 0 {
+		t.Errorf("owners get no extra grant, found %d", n)
+	}
+	// Setting the current value again is a no-op.
+	if err := e.az.SetInheritance(ctx, s.pa, s.private, false); err != nil {
+		t.Errorf("idempotent: %v", err)
+	}
+}
+
+func TestItemAccess(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
+
+	access, err := e.az.ItemAccess(ctx, s.pa, s.docs)
+	if err != nil || access.ItemID != s.docs || !access.InheritsPermissions || len(access.Grants) != 1 {
+		t.Fatalf("access = %+v, %v", access, err)
+	}
+
+	if err := e.az.SetInheritance(ctx, s.pa, s.docs, false); err != nil {
+		t.Fatal(err)
+	}
+	access, _ = e.az.ItemAccess(ctx, s.pa, s.docs)
+	if access.InheritsPermissions {
+		t.Error("must report restricted")
+	}
+
+	if _, err := e.az.ItemAccess(ctx, s.pb, s.docs); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("a viewer cannot read the sharing list: %v", err)
+	}
+	if _, err := e.az.ItemAccess(ctx, s.pc, s.docs); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("an invisible item reads as missing: %v", err)
+	}
+}
+
+func TestItemAccessReportsTheOwner(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+
+	access, err := e.az.ItemAccess(ctx, s.pa, s.docs)
+	if err != nil || access.OwnerUserID != s.alice {
+		t.Fatalf("a private drive is owned by its user: %+v %v", access, err)
+	}
+}
+
+func TestGrantInitial(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	other := e.tenant(t, "other")
+	stranger := e.user(t, other, "stranger")
+
+	// No actor: trusted server code seeds the first administrator.
+	if err := e.az.GrantInitial(ctx, s.tn.id, s.docs, s.bob, authz.RoleDriveAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.caps(t, s.pb, s.docs); !got.Has(authz.CapDeleteDrive) || !got.Has(authz.CapShare) {
+		t.Fatalf("caps = %s", got)
+	}
+	// Idempotent: calling again changes nothing and does not duplicate.
+	if err := e.az.GrantInitial(ctx, s.tn.id, s.docs, s.bob, authz.RoleDriveAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.db.Grant.Query().Where(grant.ResourceID(s.docs)).Count(ctx); n != 1 {
+		t.Fatalf("grants = %d", n)
+	}
+
+	for name, call := range map[string]func() error{
+		"another tenant's user":  func() error { return e.az.GrantInitial(ctx, s.tn.id, s.docs, stranger, authz.RoleViewer) },
+		"missing item":           func() error { return e.az.GrantInitial(ctx, s.tn.id, "nope", s.bob, authz.RoleViewer) },
+		"item of another tenant": func() error { return e.az.GrantInitial(ctx, other.id, s.docs, stranger, authz.RoleViewer) },
+		"owner role":             func() error { return e.az.GrantInitial(ctx, s.tn.id, s.docs, s.bob, authz.RoleOwner) },
+	} {
+		if err := call(); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+}
+
+// Which roles an item offers depends on what it is: a file or folder is shared
+// as a Viewer or an Editor, while a shared drive's members get the full ladder.
+func TestRolesDependOnWhatIsShared(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	shared := e.sharedDrive(t, s.tn, "Finance", s.carol)
+	inShared := e.folder(t, s.tn, shared, shared, "reports")
+	carol := e.principal(t, s.tn, s.carol) // a Drive Admin there
+	bob := userSubject(s.bob)
+
+	try := func(actor authz.Principal, item string, role authz.Role) error {
+		_, err := e.az.Grant(ctx, actor, authz.GrantInput{ItemID: item, Subject: bob, Role: role})
+		return err
+	}
+
+	// A file or folder: Viewer and Editor only.
+	for _, c := range []struct {
+		role authz.Role
+		ok   bool
+	}{
+		{authz.RoleViewer, true},
+		{authz.RoleFullEditor, true},
+		{authz.RoleCommenter, false},
+		{authz.RoleRestrictedEditor, false},
+		{authz.RoleDriveAdmin, false},
+	} {
+		for name, item := range map[string]string{"folder": s.docs, "file": s.spec} {
+			err := try(s.pa, item, c.role)
+			if (err == nil) != c.ok || (err != nil && !errors.Is(err, authz.ErrInvalid)) {
+				t.Errorf("%s as %s: %v, want ok = %v", name, c.role, err, c.ok)
+			}
+		}
+	}
+
+	// A shared drive's root: the whole ladder.
+	for _, role := range []authz.Role{authz.RoleViewer, authz.RoleCommenter, authz.RoleRestrictedEditor, authz.RoleFullEditor, authz.RoleDriveAdmin} {
+		if err := try(carol, shared, role); err != nil {
+			t.Errorf("shared drive root as %s: %v", role, err)
+		}
+	}
+	if err := try(carol, shared, authz.RoleOwner); !errors.Is(err, authz.ErrInvalid) {
+		t.Errorf("owner is never grantable: %v", err)
+	}
+
+	// Anything inside a shared drive is an ordinary item again.
+	if err := try(carol, inShared, authz.RoleDriveAdmin); !errors.Is(err, authz.ErrInvalid) {
+		t.Errorf("a folder inside a shared drive offers Viewer and Editor: %v", err)
+	}
+	if err := try(carol, inShared, authz.RoleFullEditor); err != nil {
+		t.Errorf("editor on a folder inside a shared drive: %v", err)
+	}
+}

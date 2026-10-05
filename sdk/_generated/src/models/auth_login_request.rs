@@ -15,17 +15,17 @@ use serde::{Deserialize, Serialize};
 pub struct AuthLoginRequest {
     #[serde(rename = "idp_id")]
     pub idp_id: String,
-    #[serde(rename = "username")]
-    pub username: String,
+    #[serde(rename = "email")]
+    pub email: String,
     #[serde(rename = "password", skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
 }
 
 impl AuthLoginRequest {
-    pub fn new(idp_id: String, username: String) -> AuthLoginRequest {
+    pub fn new(idp_id: String, email: String) -> AuthLoginRequest {
         AuthLoginRequest {
             idp_id,
-            username,
+            email,
             password: None,
         }
     }

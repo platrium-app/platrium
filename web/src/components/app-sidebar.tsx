@@ -7,6 +7,7 @@ import { graphql } from "@/graphql"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -17,6 +18,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import {
+
   ChevronRight,
   ChevronDown,
   Home,
@@ -29,8 +31,11 @@ import {
   CircleAlertIcon,
 } from "lucide-react"
 import { FilesystemTree } from "@/components/custom/FilesystemTreeView.tsx"
+import { NavUser } from "@/components/custom/SignedInUserControl.tsx"
 import PlatriumLogo from "../assets/PlatriumLogo.tsx"
 import { Spinner } from "./ui/spinner.tsx"
+import { useAuth } from "@/contexts/AuthContext.tsx"
+import { GET_DRIVES } from "@/pages/drives/driveQueries"
 
 // --- TYPES ---
 export type StaticNavItem = {
@@ -52,33 +57,12 @@ export type FolderNode = {
 // --- STUB DATA ---
 const TOP_NAV_ITEMS: StaticNavItem[] = [
   { id: "home", label: "Home", icon: Home, path: "/home" },
-  {
-    id: "projects",
-    label: "Projects",
-    icon: LayoutDashboard,
-    path: "/projects",
-  },
-]
-
-const BOTTOM_NAV_ITEMS: StaticNavItem[] = [
   { id: "shared", label: "Shared with me", icon: Users, path: "/shared" },
   { id: "recent", label: "Recent", icon: Clock, path: "/recent" },
   { id: "starred", label: "Starred", icon: Star, path: "/starred" },
 ]
 
 /* Graph QL Queries */
-const GET_DRIVES = graphql(`
-  query GetDrives {
-    drives {
-      id
-      name
-      driveMetadata {
-        driveType
-      }
-    }
-  }
-`)
-
 const GET_SUBFOLDERS = graphql(`
   query GetSubfoldersSidebar($folderId: ID!) {
     folderContents(folderId: $folderId, first: 100) {
@@ -93,6 +77,8 @@ const GET_SUBFOLDERS = graphql(`
   }
 `)
 
+const SHARED_DRIVES_PATH = "/shared-drives"
+
 // --- COMPONENTS ---
 
 function StaticNavSection({ items }: { items: StaticNavItem[] }) {
@@ -102,7 +88,7 @@ function StaticNavSection({ items }: { items: StaticNavItem[] }) {
   return (
     <SidebarMenu>
       {items.map((item) => {
-        const isActive = location.pathname.startsWith(item.path)
+        const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
         const Icon = item.icon
 
         return (
@@ -124,6 +110,7 @@ function StaticNavSection({ items }: { items: StaticNavItem[] }) {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user: authUser } = useAuth()
 
   const [expandedSharedDrives, setExpandedSharedDrives] = React.useState(true)
 
@@ -161,16 +148,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       })
 
       const children: FolderNode[] = []
-      ;(result.data as any).folderContents?.edges?.forEach((edge: any) => {
-        if (edge?.node && edge.node.type === "FOLDER") {
-          children.push({
-            id: edge.node.id,
-            parentId,
-            name: edge.node.name,
-            hasChildren: true, // We don't know, so assume true to show chevron
-          })
-        }
-      })
+        ; (result.data as any).folderContents?.edges?.forEach((edge: any) => {
+          if (edge?.node && edge.node.type === "FOLDER") {
+            children.push({
+              id: edge.node.id,
+              parentId,
+              name: edge.node.name,
+              hasChildren: true, // We don't know, so assume true to show chevron
+            })
+          }
+        })
       return children
     } catch (err) {
       console.error("Failed to fetch subfolders", err)
@@ -227,52 +214,70 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 />
               )}
 
-              {/* 2. Shared Drives (Conditional) */}
-              {sharedDrives.length > 0 && (
-                <>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      onClick={() => setExpandedSharedDrives((prev) => !prev)}
-                      style={{ paddingLeft: "8px" }}
-                    >
-                      {expandedSharedDrives ? (
-                        <ChevronDown className="size-4 flex-shrink-0 cursor-pointer" />
-                      ) : (
-                        <ChevronRight className="size-4 flex-shrink-0 cursor-pointer" />
-                      )}
-                      <BookUser className="size-4 flex-shrink-0" />
-                      <span className="truncate">Shared Drives</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  {expandedSharedDrives && (
-                    <ul className="relative flex w-full min-w-0 flex-col gap-0.5">
-                      <div
-                        className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-sidebar-border opacity-0 transition-opacity duration-200 group-hover/tree:opacity-100"
-                        style={{ left: "16px" }}
-                      />
-                      <FilesystemTree
-                        nodes={sharedDrives}
-                        getChildren={getChildren}
-                        activeId={location.pathname.split("/").pop()}
-                        onSelect={(id) => navigate(`/folder/${id}`)}
-                        level={1}
-                      />
-                    </ul>
-                  )}
-                </>
+              {/* 2. Shared Drives: always shown; the label opens the list, the chevron expands it */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location.pathname === SHARED_DRIVES_PATH}
+                  onClick={() => {
+                    setExpandedSharedDrives(true)
+                    navigate(SHARED_DRIVES_PATH)
+                  }}
+                  style={{ paddingLeft: "8px" }}
+                >
+                  <span
+                    role="button"
+                    aria-label={expandedSharedDrives ? "Collapse shared drives" : "Expand shared drives"}
+                    className="flex-shrink-0 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setExpandedSharedDrives((prev) => !prev)
+                    }}
+                  >
+                    {expandedSharedDrives ? (
+                      <ChevronDown className="size-4" />
+                    ) : (
+                      <ChevronRight className="size-4" />
+                    )}
+                  </span>
+                  <BookUser className="size-4 flex-shrink-0" />
+                  <span className="truncate">Shared Drives</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {expandedSharedDrives && sharedDrives.length > 0 && (
+                <ul className="relative flex w-full min-w-0 flex-col gap-0.5">
+                  <div
+                    className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-sidebar-border opacity-0 transition-opacity duration-200 group-hover/tree:opacity-100"
+                    style={{ left: "16px" }}
+                  />
+                  <FilesystemTree
+                    nodes={sharedDrives}
+                    getChildren={getChildren}
+                    activeId={location.pathname.split("/").pop()}
+                    onSelect={(id) => navigate(`/folder/${id}`)}
+                    level={1}
+                  />
+                </ul>
               )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Bottom Static Links */}
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <StaticNavSection items={BOTTOM_NAV_ITEMS} />
-          </SidebarGroupContent>
-        </SidebarGroup>
+
       </SidebarContent>
+      <SidebarFooter>
+        {authUser && (
+          <NavUser
+            user={{
+              name: authUser.email.split("@")[0] || "User",
+              email: authUser.email,
+              avatar: "",
+            }}
+          />
+        )}
+      </SidebarFooter>
       <SidebarRail />
+
     </Sidebar>
   )
 }
+

@@ -1,0 +1,120 @@
+---
+title: Relational Database
+description: How Platrium stores identities and file trees in plain old SQL, and why that is the boring (good) choice.
+---
+
+Platrium keeps its structure (tenants, users, IdPs, drives, folders, files) in a **relational database**, accessed through [ent](https://entgo.io). Bytes live in the [storage engine](../storage-engine/chunks), and small hot key-value data (chunk metadata, manifests, instance config) lives in the KV store. Everything that has relationships, uniqueness rules or needs a transaction lives here.
+
+:::info
+Platrium originally modeled this layer as a graph database. We moved to SQL and ent because every enterprise already runs, backs up, and monitors a SQL database. Our "graph" was essentially a tree plus a handful of one-hop relationships, which SQL handles with equal or better performance.
+:::
+
+## Supported Databases
+
+| Database | Minimum | Notes |
+|---|---|---|
+| PostgreSQL | 14 | Reference backend. Aurora, RDS, Cloud SQL, AlloyDB and Azure Database for PostgreSQL work unchanged. |
+| MySQL | 8.0 | Needs recursive CTEs. Aurora MySQL, RDS and Cloud SQL work unchanged. |
+| MariaDB | 10.5 | Same dialect as MySQL. |
+| SQLite | any | Development and tests only. |
+
+The engine is configured with two required environment variables:
+
+```bash
+DB_DRIVER=postgres   # postgres | mysql | mariadb | sqlite
+DB_DSN="postgres://user:pass@localhost:5432/platrium?sslmode=disable"
+```
+
+Pool tuning (`DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME`) and `DB_AUTO_MIGRATE` (default `true`) are optional.
+
+:::warning
+`DB_AUTO_MIGRATE` creates and alters tables on startup. It is convenient for development, but production deployments should move to reviewed, versioned migrations and set it to `false`.
+:::
+
+## Code Layout
+
+```
+engine/internal/infra/db/
+├── db.go          Open(), WithTx(), WithTxOpts(), RowLocks(), Rebind()
+├── schema/        hand-written entity definitions (this is where you edit)
+├── ent/           generated client, never edited, not committed
+└── dbtest/        isolated databases for tests
+```
+
+`ent/` is generated from `schema/` and is **not committed**. Run the Nx target after a fresh clone or a schema change:
+
+```bash
+./nx run engine:_generate_ent
+```
+
+`build`, `serve` and `test` depend on it, so they regenerate automatically.
+
+## Stores Own the Queries
+
+Domain packages keep their own stores (`identity.TenantStore`, `fsops.FSOps`, `auth.IdpStore`, ...) and their own domain structs. The `infra/db` layer only provides the client. Two rules keep this clean:
+
+1. **Ent types never leave a store.** Stores map `*ent.DriveItem` into `fsops.DriveItemRecord` (and so on), so resolvers, handlers and orchestrators never import ent.
+2. **Queries live in the store, not in resolvers.** Tenant scoping is applied in one place.
+
+## Portability Rules
+
+The schema and queries are written to run unchanged on every supported database:
+
+- Use ent builders for everything. Raw SQL is limited to the ancestor CTE and uses `db.Rebind()` for placeholders.
+- IDs are application-generated strings, never `AUTO_INCREMENT`.
+- **ID columns are binary-collated** (`utf8mb4_bin` on MySQL/MariaDB, `ucs_basic` on Postgres). MySQL defaults to case-insensitive collations, which would make IDs differing only by case collide, and Postgres sorts by locale, which would break keyset pagination.
+- Timestamps are UTC, set by the application. MySQL uses `datetime(6)` to keep microseconds.
+- No JSON querying, arrays, partial indexes or engine-specific types. JSON columns are opaque blobs.
+- Quote identifiers in raw SQL. `groups` is a reserved word in MySQL 8.
+
+## Testing
+
+```go
+d := dbtest.New(t) // isolated in-memory SQLite database
+```
+
+By default tests run on in-memory SQLite. Set `TEST_DB_DRIVER` and `TEST_DB_DSN` to run the same suites against a real database:
+
+```bash
+TEST_DB_DRIVER=postgres TEST_DB_DSN="postgres://postgres:pw@localhost:5432/test?sslmode=disable" \
+  go test -p 1 ./internal/...
+```
+
+Run with `-p 1` against a shared real database, since packages share the same tables. Tables are wiped before each test.
+
+:::info
+Run the suites on Postgres, MySQL and MariaDB before changing the schema or any locking logic. SQLite hides isolation and collation differences, and both of those have already caught real bugs.
+:::
+
+## Transactions and Concurrency
+
+Everything that must be atomic runs in one transaction through `db.WithTx`:
+
+```go
+err := database.WithTx(ctx, func(tx *ent.Tx) error {
+    t, err := tenantStore.CreateTenantTx(ctx, tx, params)
+    if err != nil {
+        return err // rolls back
+    }
+    // pass tx down to other stores, they all join the same transaction
+    return nil
+})
+```
+
+It commits on success and rolls back on any error or panic. Stores expose `...Tx` methods that take the `*ent.Tx`, which is how orchestrators bind several domains into one atomic unit (see [Cluster Initial Setup](../../e2e-flows/initial-setup)).
+
+Slow work such as password hashing happens **before** the transaction opens, so no database connection is held while it runs.
+
+### Locking a Parent Row
+
+Structural changes to a drive's tree (currently `MoveItem`) take a row lock on the **drive** (`SELECT ... FOR UPDATE`) before reading the tree. This prevents two moves that are each valid alone (A into B while B into A) from combining into a cycle.
+
+Row locking is available on all supported production databases. SQLite has no row locks but serializes writers on its own, so `db.RowLocks()` skips it there.
+
+### Isolation Level
+
+Moves run at **READ COMMITTED** (`db.WithTxOpts`). MySQL and MariaDB default to REPEATABLE READ, where reads after the lock would still see the snapshot taken before it. At READ COMMITTED, every statement sees the latest committed data, so a second move's cycle check correctly catches tree changes.
+
+:::warning
+Any new operation that takes a row lock and then reads related rows must use `WithTxOpts` with `sql.LevelReadCommitted`. Passing the default isolation will pass tests on SQLite and Postgres and break on MySQL and MariaDB.
+:::
