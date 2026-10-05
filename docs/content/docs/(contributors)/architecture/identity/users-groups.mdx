@@ -5,26 +5,30 @@ description: Who is allowed to do what, and why we don't care about their phone 
 
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 
-Users and Groups are the foundational identities within Platrium. Unlike rigid relational databases, Platrium uses a Graph Database (Neo4j/Memgraph) to model these identities, allowing for flexible, heavily-connected authorization structures and rapid edge traversals.
+Users and Groups are the foundational identities within Platrium. They are stored in the [relational database](../database/overview), where uniqueness, referential integrity and transactions are enforced by the schema itself.
 
 ## The User Model
 
-Every user in Platrium is represented by a `User` node, and they inherently belong to a Tenant.
+Every user in Platrium is a row in the `users` table, and they belong to exactly one Tenant.
 
 ```json
 {
-  "id": "usr_123xyz",
-  "idpId": "idp_google_1",
+  "id": "V1StGXR8_Z5jdHi6B-myT",
+  "tenantId": "k8Gq2Zr0oXb4TnE1cU7aW",
+  "idpId": "Pq3VnHs9LmA2eDyR6tXzJ",
   "externalId": "104293847291",
   "email": "admin@acme.com",
   "displayName": "Admin",
-  "createdAt": 1727670000
+  "role": "SUPER_ADMIN",
+  "createdAt": "2026-10-03T14:20:00Z"
 }
 ```
 
+A user is identified on the platform by the pair `(idpId, externalId)`: the IdP that authenticated them and their subject at that IdP. A unique constraint guarantees one user per pair. External IDs are compared byte-for-byte, because identity providers treat them as case-sensitive.
+
 ### Minimal Profile Data Design
 
-You might notice that the `User` node is extremely lightweight. We deliberately only store `email` and `displayName`, ignoring extended profile data like phone numbers, physical addresses, or job titles.
+You might notice that the `User` row is extremely lightweight. We deliberately only store `email` and `displayName`, ignoring extended profile data like phone numbers, physical addresses, or job titles.
 
 <Accordions>
   <Accordion title="Why keep the user profile so minimal?">
@@ -40,18 +44,23 @@ You might notice that the `User` node is extremely lightweight. We deliberately 
 
 ## The Group Model
 
-Groups are structural collections that users can be assigned to for bulk authorization (e.g., granting folder access to an entire team).
+Groups are collections that users can be assigned to for bulk authorization (e.g., granting folder access to an entire team). A group mirrors a group from an IdP, so it is unique per `(idpId, externalId)` and belongs to one tenant.
 
 ```json
 {
-  "id": "grp_marketing",
-  "tenantId": "tnt_acme",
+  "id": "Zk4PqW7nB2xRtYc9LdMeH",
+  "tenantId": "k8Gq2Zr0oXb4TnE1cU7aW",
+  "idpId": "Pq3VnHs9LmA2eDyR6tXzJ",
+  "externalId": "marketing",
   "name": "Marketing Team",
-  "createdAt": 1727670000
+  "createdAt": "2026-10-03T14:20:00Z"
 }
 ```
 
-In the Graph Database, Groups act as authorization hubs. A Tenant owns the Group, Users are members of the Group, and the Group is granted access to Files/Folders.
+:::info
+**Planned**
+Group membership and access grants (who is in a group, and what a group may edit) are part of the upcoming authorization work and are not implemented yet. The diagram below shows the intended shape: memberships and grants become rows in association tables.
+:::
 
 ```mermaid
 flowchart TD
@@ -66,66 +75,59 @@ flowchart TD
     G["Group (Marketing)"]:::group
     F["Folder (Campaign Assets)"]:::folder
 
-    T -->|":HAS_GROUP"| G
-    U1 -->|":MEMBER_OF"| G
-    U2 -->|":MEMBER_OF"| G
-    G -->|":CAN_EDIT"| F
+    T -->|"owns"| G
+    U1 -->|"member of (planned)"| G
+    U2 -->|"member of (planned)"| G
+    G -->|"can edit (planned)"| F
 ```
 
 ## IdP Linking (Single Source of Truth)
 
-Notice that the `User` node explicitly contains an `idpId` property. This property maps the user back to the specific Identity Provider (like Google Workspace, Okta, or Local Auth) that controls their authentication.
+The `users` table has an `idp_id` column that maps the user back to the specific Identity Provider (like Google Workspace, Okta, or Local Auth) that controls their authentication. It is a **foreign key** to `idp_providers`, with a unique index on `(idp_id, external_id)`.
 
 <Accordions>
-  <Accordion title="Why use a property instead of a Graph Edge for IdPs?">
-    During early architectural planning, we considered drawing a direct `[:AUTHENTICATES_VIA]` edge between the User and the IdP. 
-    
-    We had three options:
-    1. **Only use an Edge**: This provides blazing fast `O(K)` lookups for migrations, but it means every single daily login and API request would require a graph join just to figure out which IdP the user belongs to, slowing down the most frequent operations.
-    2. **Use Both (Edge + Property)**: This optimizes both migrations and daily logins, but creates a massive **split-brain risk**. If a company migrates IdPs, a developer might update the JSON property but forget to redraw the graph edge in a batch script, irreparably breaking the user's state.
-    3. **Only use a Property (Our Choice)**: By enforcing the `idpId` JSON property as the *only* link and placing a B-Tree index on it (`CREATE INDEX ON :User(idpId)`), we completely eliminate the split-brain risk and heavily optimize daily logins (`O(log N)` lookup).
+  <Accordion title="Why a foreign key with an index?">
+    The link is stored exactly once, as a column. There is no second copy that could drift out of sync (for example a separate "authenticates via" relationship that a migration script forgets to update).
 
-    While Graph edges are computationally superior for finding all users during a rare Tenant IdP migration or IdP deletion, those operations are incredibly infrequent. We chose to take the index lookup hit in a background batch job for those rare events, aggressively prioritizing the performance and integrity of the infinitely more frequent daily logins.
+    The foreign key makes the database guarantee that every user points at a real IdP, and that an IdP cannot be deleted while users still reference it (`RESTRICT`). The index makes the most frequent operation, a login looking up `(idp_id, external_id)`, a single indexed lookup. Finding all users of an IdP (needed for the rare IdP migration or deletion) uses the same index.
   </Accordion>
 </Accordions>
 
 ## The User Orchestrator
 
-Because Platrium spans a Graph Database, a KV Store (AuthN Secrets), and a distributed storage engine (Files), users cannot just be written to the database with a raw SQL/Cypher insert. 
-
-All user provisioning and deprovisioning is heavily guarded by the **`UserOrchestrator`** (located in `core/internal/orchestrators/user.go`).
+Because a user spans several domains (identity, credentials, storage), users are not just inserted into a table. All user provisioning and deprovisioning is guarded by the **`UserOrchestrator`** (located in `engine/internal/orchestrator/user.go`).
 
 ### Provisioning Flow
 
-When a new user is created (either via Admin invite or JIT SCIM provisioning), the `UserOrchestrator` coordinates across multiple domains within a single, monolithic database transaction.
+When a new user is created (either via Admin invite or JIT SCIM provisioning), the `UserOrchestrator` coordinates across multiple domains within a single database transaction.
 
 ```mermaid
 sequenceDiagram
     participant API as HTTP Handler
     participant UO as UserOrchestrator
-    participant Graph as GraphDB (Neo4j)
+    participant DB as Database
     participant FS as FSOps
 
-    API->>UO: ProvisionUserTx()
-    Note over UO,Graph: Opens unified tx graph.Tx
-    UO->>Graph: Create (u:User) Node
+    API->>UO: ProvisionUserTx(tx)
+    Note over UO,DB: Runs inside the caller's transaction
+    UO->>DB: Insert User
     UO->>FS: CreateDriveTx(tx, user.ID)
-    FS->>Graph: Create (d:Folder {type: "PRIVATE"})
-    FS->>Graph: Create (u)-[:OWNS]->(d) edge
-    Note over UO,Graph: tx.Commit() 
+    FS->>DB: Insert Drive (PRIVATE, owner = user)
+    FS->>DB: Insert root folder (same ID as the drive)
+    Note over UO,DB: Caller commits
     UO-->>API: Returns *User
 ```
 
-By explicitly passing the `tx graph.Tx` pointer down into the Storage engine (`FSOps`), we guarantee that the User's identity and their underlying storage architecture are created atomically. If the drive fails to provision, the user account creation completely rolls back.
+By explicitly passing the `*ent.Tx` down into the Storage engine (`FSOps`), we guarantee that the User's identity and their underlying storage structure are created atomically. If the drive fails to provision, the user account creation completely rolls back. Creating a drive also verifies the owner belongs to the same tenant as the drive.
 
 ### Deprovisioning & Background Deletes
 
-If a Tenant Admin deletes an IdP connection (e.g., removing a legacy Okta integration), we **do not** use a database-level cascading `DETACH DELETE` to wipe out the users. 
+If a Tenant Admin deletes an IdP connection (e.g., removing a legacy Okta integration), we **do not** rely on a database-level cascading delete to wipe out the users. Foreign keys are `RESTRICT`, so the database refuses to delete an IdP that still has users.
 
-Because a User is a distributed entity, a blind database delete would leave gigabytes of orphaned zombie data in the object storage and KV stores.
+Because a User is a distributed entity, a blind cascade would leave gigabytes of orphaned zombie data in the object storage and KV stores.
 
 Instead, when an IdP is deleted:
-1. The system queries the B-Tree index for all associated users (`MATCH (u:User {idpId: $idpId})`).
+1. The system queries the index for all associated users (`WHERE idp_id = ?`).
 2. It pushes those user IDs into a background worker queue.
 3. The background worker calls the `UserOrchestrator.DeprovisionUser()` workflow.
-4. The Orchestrator systematically tears down their KV secrets, triggers the Storage Engine to aggressively garbage-collect their drives, and *finally* deletes the Graph node.
+4. The Orchestrator systematically tears down their credentials, triggers the Storage Engine to aggressively garbage-collect their drives, and *finally* deletes the user row. Once no users remain, the IdP itself can be removed.

@@ -21,10 +21,11 @@ function enumerateGQLDefinitions(dir: string): string[] {
 
 const files = enumerateGQLDefinitions(graphqlDir);
 
-// note: this is a server-side API
 export const graphql = createGraphQL({
   // the GraphQL schema, it accepts:
   // SDL files/URLs (including `extend type`), SDL text,
   // introspection results, and `GraphQLSchema` instances.
-  input: files,
+  input: {
+    platrium: files,
+  },
 });

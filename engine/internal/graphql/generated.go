@@ -40,20 +40,31 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	AccessGrant struct {
-		Capabilities func(childComplexity int) int
-		CreatedAt    func(childComplexity int) int
-		ExpiresAt    func(childComplexity int) int
-		ID           func(childComplexity int) int
-		NoDownload   func(childComplexity int) int
-		Role         func(childComplexity int) int
-		SubjectID    func(childComplexity int) int
-		SubjectName  func(childComplexity int) int
-		SubjectType  func(childComplexity int) int
+		Capabilities  func(childComplexity int) int
+		CreatedAt     func(childComplexity int) int
+		ExpiresAt     func(childComplexity int) int
+		ID            func(childComplexity int) int
+		InheritedFrom func(childComplexity int) int
+		IsYou         func(childComplexity int) int
+		NoDownload    func(childComplexity int) int
+		Role          func(childComplexity int) int
+		SubjectID     func(childComplexity int) int
+		SubjectName   func(childComplexity int) int
+		SubjectType   func(childComplexity int) int
+	}
+
+	AccessLevelOption struct {
+		Blurb          func(childComplexity int) int
+		Label          func(childComplexity int) int
+		Level          func(childComplexity int) int
+		Roles          func(childComplexity int) int
+		SupportsExpiry func(childComplexity int) int
 	}
 
 	DirectorySubject struct {
 		Email func(childComplexity int) int
 		ID    func(childComplexity int) int
+		IsYou func(childComplexity int) int
 		Name  func(childComplexity int) int
 		Type  func(childComplexity int) int
 	}
@@ -131,9 +142,15 @@ type ComplexityRoot struct {
 	ItemAccess struct {
 		GeneralAccess       func(childComplexity int) int
 		Grants              func(childComplexity int) int
+		Inherited           func(childComplexity int) int
 		InheritsPermissions func(childComplexity int) int
 		ItemID              func(childComplexity int) int
 		Owner               func(childComplexity int) int
+	}
+
+	ItemRef struct {
+		ID   func(childComplexity int) int
+		Name func(childComplexity int) int
 	}
 
 	Mutation struct {
@@ -159,6 +176,7 @@ type ComplexityRoot struct {
 		CanCreateSharedDrive func(childComplexity int) int
 		Drives               func(childComplexity int) int
 		FolderContents       func(childComplexity int, folderID string, first *int, after *string) int
+		GeneralAccessOptions func(childComplexity int, itemID string) int
 		GetChanges           func(childComplexity int, folderID string, since time.Time) int
 		Item                 func(childComplexity int, id string) int
 		ItemAccess           func(childComplexity int, itemID string) int
@@ -171,10 +189,11 @@ type ComplexityRoot struct {
 	}
 
 	RoleOption struct {
-		Capabilities func(childComplexity int) int
-		Description  func(childComplexity int) int
-		Label        func(childComplexity int) int
-		Role         func(childComplexity int) int
+		Capabilities     func(childComplexity int) int
+		Description      func(childComplexity int) int
+		DownloadOptional func(childComplexity int) int
+		Label            func(childComplexity int) int
+		Role             func(childComplexity int) int
 	}
 
 	ServerInfo struct {
@@ -244,6 +263,7 @@ type QueryResolver interface {
 	GetChanges(ctx context.Context, folderID string, since time.Time) ([]*DriveItemEvent, error)
 	ServerInfo(ctx context.Context) (*ServerInfo, error)
 	ShareRoles(ctx context.Context, itemID string) ([]*RoleOption, error)
+	GeneralAccessOptions(ctx context.Context, itemID string) ([]*AccessLevelOption, error)
 	SearchDirectory(ctx context.Context, query string, first *int, excludeAccessToItemID *string) ([]*DirectorySubject, error)
 	ItemAccess(ctx context.Context, itemID string) (*ItemAccess, error)
 	SharedWithMe(ctx context.Context, first *int, after *string) (*SharedItemConnection, error)
@@ -295,6 +315,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AccessGrant.ID(childComplexity), true
+	case "AccessGrant.inheritedFrom":
+		if e.ComplexityRoot.AccessGrant.InheritedFrom == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessGrant.InheritedFrom(childComplexity), true
+	case "AccessGrant.isYou":
+		if e.ComplexityRoot.AccessGrant.IsYou == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessGrant.IsYou(childComplexity), true
 	case "AccessGrant.noDownload":
 		if e.ComplexityRoot.AccessGrant.NoDownload == nil {
 			break
@@ -326,6 +358,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.AccessGrant.SubjectType(childComplexity), true
 
+	case "AccessLevelOption.blurb":
+		if e.ComplexityRoot.AccessLevelOption.Blurb == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessLevelOption.Blurb(childComplexity), true
+	case "AccessLevelOption.label":
+		if e.ComplexityRoot.AccessLevelOption.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessLevelOption.Label(childComplexity), true
+	case "AccessLevelOption.level":
+		if e.ComplexityRoot.AccessLevelOption.Level == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessLevelOption.Level(childComplexity), true
+	case "AccessLevelOption.roles":
+		if e.ComplexityRoot.AccessLevelOption.Roles == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessLevelOption.Roles(childComplexity), true
+	case "AccessLevelOption.supportsExpiry":
+		if e.ComplexityRoot.AccessLevelOption.SupportsExpiry == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AccessLevelOption.SupportsExpiry(childComplexity), true
+
 	case "DirectorySubject.email":
 		if e.ComplexityRoot.DirectorySubject.Email == nil {
 			break
@@ -338,6 +401,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DirectorySubject.ID(childComplexity), true
+	case "DirectorySubject.isYou":
+		if e.ComplexityRoot.DirectorySubject.IsYou == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DirectorySubject.IsYou(childComplexity), true
 	case "DirectorySubject.name":
 		if e.ComplexityRoot.DirectorySubject.Name == nil {
 			break
@@ -630,6 +699,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ItemAccess.Grants(childComplexity), true
+	case "ItemAccess.inherited":
+		if e.ComplexityRoot.ItemAccess.Inherited == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ItemAccess.Inherited(childComplexity), true
 	case "ItemAccess.inheritsPermissions":
 		if e.ComplexityRoot.ItemAccess.InheritsPermissions == nil {
 			break
@@ -648,6 +723,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ItemAccess.Owner(childComplexity), true
+
+	case "ItemRef.id":
+		if e.ComplexityRoot.ItemRef.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ItemRef.ID(childComplexity), true
+	case "ItemRef.name":
+		if e.ComplexityRoot.ItemRef.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ItemRef.Name(childComplexity), true
 
 	case "Mutation.copyFile":
 		if e.ComplexityRoot.Mutation.CopyFile == nil {
@@ -807,6 +895,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.FolderContents(childComplexity, args["folderId"].(string), args["first"].(*int), args["after"].(*string)), true
+	case "Query.generalAccessOptions":
+		if e.ComplexityRoot.Query.GeneralAccessOptions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_generalAccessOptions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.GeneralAccessOptions(childComplexity, args["itemId"].(string)), true
 	case "Query.getChanges":
 		if e.ComplexityRoot.Query.GetChanges == nil {
 			break
@@ -905,6 +1004,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RoleOption.Description(childComplexity), true
+	case "RoleOption.downloadOptional":
+		if e.ComplexityRoot.RoleOption.DownloadOptional == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RoleOption.DownloadOptional(childComplexity), true
 	case "RoleOption.label":
 		if e.ComplexityRoot.RoleOption.Label == nil {
 			break
@@ -1287,6 +1392,17 @@ type AccessGrant {
   capabilities: [String!]!
   expiresAt: DateTime
   createdAt: DateTime!
+  "True when this grant is to the signed-in user. Clients should show it as \"You\" and not offer to change or remove it."
+  isYou: Boolean!
+  "Set on access that comes from a folder or drive above the item. It cannot be changed from the item; change it where it was granted."
+  inheritedFrom: ItemRef
+}
+
+"A reference to an item, for saying where access comes from."
+type ItemRef {
+  "Null when the signed-in user cannot open the item."
+  id: ID
+  name: String!
 }
 
 "Who else can open an item beyond the people and groups added by name."
@@ -1304,6 +1420,8 @@ type DirectorySubject {
   id: ID!
   name: String!
   email: String
+  "True when this is the signed-in user."
+  isYou: Boolean!
 }
 
 "A role as it should be shown when choosing one."
@@ -1312,6 +1430,19 @@ type RoleOption {
   label: String!
   description: String!
   capabilities: [String!]!
+  "False for roles that edit: they need the content, so download cannot be withheld."
+  downloadOptional: Boolean!
+}
+
+"A general-access level that can be chosen for an item, as the server defines it."
+type AccessLevelOption {
+  level: String!
+  label: String!
+  "One line saying who can open the item at this level."
+  blurb: String!
+  "The roles this level may carry; empty when it takes none (RESTRICTED)."
+  roles: [String!]!
+  supportsExpiry: Boolean!
 }
 
 type ItemAccess {
@@ -1323,6 +1454,8 @@ type ItemAccess {
   generalAccess: GeneralAccess!
   "People and groups added by name. General access is reported separately."
   grants: [AccessGrant!]!
+  "Access that reaches the item from folders and the drive above, nearest first. Read-only here: each entry says where it comes from. Above a restriction only drive admins appear, since they keep access through it."
+  inherited: [AccessGrant!]!
 }
 
 type SharedItem {
@@ -1362,6 +1495,8 @@ input GeneralAccessInput {
 extend type Query {
   "The roles to offer when sharing an item: Viewer and Editor for a file or folder, the full ladder for a shared drive's root."
   shareRoles(itemId: ID!): [RoleOption!]!
+  "The general-access levels that can be chosen for an item, narrowest first. Requires permission to share it."
+  generalAccessOptions(itemId: ID!): [AccessLevelOption!]!
   "Find people and groups in the organization by name or email, for the people picker."
   searchDirectory(query: String!, first: Int, excludeAccessToItemId: ID): [DirectorySubject!]!
   "Who has access to an item. Requires permission to share it."
@@ -1425,8 +1560,28 @@ func (ec *executionContext) childFields_AccessGrant(ctx context.Context, field g
 		return ec.fieldContext_AccessGrant_expiresAt(ctx, field)
 	case "createdAt":
 		return ec.fieldContext_AccessGrant_createdAt(ctx, field)
+	case "isYou":
+		return ec.fieldContext_AccessGrant_isYou(ctx, field)
+	case "inheritedFrom":
+		return ec.fieldContext_AccessGrant_inheritedFrom(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type AccessGrant", field.Name)
+}
+
+func (ec *executionContext) childFields_AccessLevelOption(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "level":
+		return ec.fieldContext_AccessLevelOption_level(ctx, field)
+	case "label":
+		return ec.fieldContext_AccessLevelOption_label(ctx, field)
+	case "blurb":
+		return ec.fieldContext_AccessLevelOption_blurb(ctx, field)
+	case "roles":
+		return ec.fieldContext_AccessLevelOption_roles(ctx, field)
+	case "supportsExpiry":
+		return ec.fieldContext_AccessLevelOption_supportsExpiry(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AccessLevelOption", field.Name)
 }
 
 func (ec *executionContext) childFields_DirectorySubject(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1439,6 +1594,8 @@ func (ec *executionContext) childFields_DirectorySubject(ctx context.Context, fi
 		return ec.fieldContext_DirectorySubject_name(ctx, field)
 	case "email":
 		return ec.fieldContext_DirectorySubject_email(ctx, field)
+	case "isYou":
+		return ec.fieldContext_DirectorySubject_isYou(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type DirectorySubject", field.Name)
 }
@@ -1595,8 +1752,20 @@ func (ec *executionContext) childFields_ItemAccess(ctx context.Context, field gr
 		return ec.fieldContext_ItemAccess_generalAccess(ctx, field)
 	case "grants":
 		return ec.fieldContext_ItemAccess_grants(ctx, field)
+	case "inherited":
+		return ec.fieldContext_ItemAccess_inherited(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ItemAccess", field.Name)
+}
+
+func (ec *executionContext) childFields_ItemRef(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_ItemRef_id(ctx, field)
+	case "name":
+		return ec.fieldContext_ItemRef_name(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ItemRef", field.Name)
 }
 
 func (ec *executionContext) childFields_PageInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1619,6 +1788,8 @@ func (ec *executionContext) childFields_RoleOption(ctx context.Context, field gr
 		return ec.fieldContext_RoleOption_description(ctx, field)
 	case "capabilities":
 		return ec.fieldContext_RoleOption_capabilities(ctx, field)
+	case "downloadOptional":
+		return ec.fieldContext_RoleOption_downloadOptional(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type RoleOption", field.Name)
 }
@@ -2045,6 +2216,20 @@ func (ec *executionContext) field_Query_folderContents_args(ctx context.Context,
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_generalAccessOptions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "itemId",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["itemId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_getChanges_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2428,6 +2613,176 @@ func (ec *executionContext) fieldContext_AccessGrant_createdAt(_ context.Context
 	return graphql.NewScalarFieldContext("AccessGrant", field, false, false, errors.New("field of type DateTime does not have child fields"))
 }
 
+func (ec *executionContext) _AccessGrant_isYou(ctx context.Context, field graphql.CollectedField, obj *AccessGrant) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessGrant_isYou(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsYou, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AccessGrant_isYou(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AccessGrant", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _AccessGrant_inheritedFrom(ctx context.Context, field graphql.CollectedField, obj *AccessGrant) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessGrant_inheritedFrom(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.InheritedFrom, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *ItemRef) graphql.Marshaler {
+			return ec.marshalOItemRef2ᚖplatriumᚋinternalᚋgraphqlᚐItemRef(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_AccessGrant_inheritedFrom(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AccessGrant",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ItemRef(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AccessLevelOption_level(ctx context.Context, field graphql.CollectedField, obj *AccessLevelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessLevelOption_level(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Level, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AccessLevelOption_level(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AccessLevelOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AccessLevelOption_label(ctx context.Context, field graphql.CollectedField, obj *AccessLevelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessLevelOption_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AccessLevelOption_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AccessLevelOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AccessLevelOption_blurb(ctx context.Context, field graphql.CollectedField, obj *AccessLevelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessLevelOption_blurb(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Blurb, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AccessLevelOption_blurb(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AccessLevelOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AccessLevelOption_roles(ctx context.Context, field graphql.CollectedField, obj *AccessLevelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessLevelOption_roles(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Roles, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AccessLevelOption_roles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AccessLevelOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AccessLevelOption_supportsExpiry(ctx context.Context, field graphql.CollectedField, obj *AccessLevelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AccessLevelOption_supportsExpiry(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SupportsExpiry, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AccessLevelOption_supportsExpiry(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AccessLevelOption", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _DirectorySubject_type(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2518,6 +2873,29 @@ func (ec *executionContext) _DirectorySubject_email(ctx context.Context, field g
 }
 func (ec *executionContext) fieldContext_DirectorySubject_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _DirectorySubject_isYou(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DirectorySubject_isYou(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsYou, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DirectorySubject_isYou(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DirectorySubject", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _DriveItemConnection_edges(ctx context.Context, field graphql.CollectedField, obj *DriveItemConnection) (ret graphql.Marshaler) {
@@ -3723,6 +4101,84 @@ func (ec *executionContext) fieldContext_ItemAccess_grants(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _ItemAccess_inherited(ctx context.Context, field graphql.CollectedField, obj *ItemAccess) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ItemAccess_inherited(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Inherited, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*AccessGrant) graphql.Marshaler {
+			return ec.marshalNAccessGrant2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAccessGrantᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ItemAccess_inherited(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ItemAccess",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AccessGrant(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ItemRef_id(ctx context.Context, field graphql.CollectedField, obj *ItemRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ItemRef_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOID2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ItemRef_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ItemRef", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _ItemRef_name(ctx context.Context, field graphql.CollectedField, obj *ItemRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ItemRef_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ItemRef_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ItemRef", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Mutation_createFolder(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4548,6 +5004,50 @@ func (ec *executionContext) fieldContext_Query_shareRoles(ctx context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_generalAccessOptions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_generalAccessOptions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().GeneralAccessOptions(ctx, fc.Args["itemId"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*AccessLevelOption) graphql.Marshaler {
+			return ec.marshalNAccessLevelOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAccessLevelOptionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_generalAccessOptions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AccessLevelOption(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_generalAccessOptions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_searchDirectory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4878,6 +5378,29 @@ func (ec *executionContext) _RoleOption_capabilities(ctx context.Context, field 
 }
 func (ec *executionContext) fieldContext_RoleOption_capabilities(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _RoleOption_downloadOptional(ctx context.Context, field graphql.CollectedField, obj *RoleOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RoleOption_downloadOptional(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DownloadOptional, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RoleOption_downloadOptional(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RoleOption", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _ServerInfo_version(ctx context.Context, field graphql.CollectedField, obj *ServerInfo) (ret graphql.Marshaler) {
@@ -6576,6 +7099,74 @@ func (ec *executionContext) _AccessGrant(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "isYou":
+			out.Values[i] = ec._AccessGrant_isYou(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inheritedFrom":
+			out.Values[i] = ec._AccessGrant_inheritedFrom(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var accessLevelOptionImplementors = []string{"AccessLevelOption"}
+
+func (ec *executionContext) _AccessLevelOption(ctx context.Context, sel ast.SelectionSet, obj *AccessLevelOption) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, accessLevelOptionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AccessLevelOption")
+		case "level":
+			out.Values[i] = ec._AccessLevelOption_level(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._AccessLevelOption_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "blurb":
+			out.Values[i] = ec._AccessLevelOption_blurb(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "roles":
+			out.Values[i] = ec._AccessLevelOption_roles(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "supportsExpiry":
+			out.Values[i] = ec._AccessLevelOption_supportsExpiry(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6627,6 +7218,11 @@ func (ec *executionContext) _DirectorySubject(ctx context.Context, sel ast.Selec
 		case "email":
 			out.Values[i] = ec._DirectorySubject_email(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "isYou":
+			out.Values[i] = ec._DirectorySubject_isYou(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		default:
@@ -7265,6 +7861,54 @@ func (ec *executionContext) _ItemAccess(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "inherited":
+			out.Values[i] = ec._ItemAccess_inherited(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var itemRefImplementors = []string{"ItemRef"}
+
+func (ec *executionContext) _ItemRef(ctx context.Context, sel ast.SelectionSet, obj *ItemRef) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, itemRefImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ItemRef")
+		case "id":
+			out.Values[i] = ec._ItemRef_id(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._ItemRef_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7643,6 +8287,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "generalAccessOptions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_generalAccessOptions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "searchDirectory":
 			field := field
 
@@ -7795,6 +8461,11 @@ func (ec *executionContext) _RoleOption(ctx context.Context, sel ast.SelectionSe
 			}
 		case "capabilities":
 			out.Values[i] = ec._RoleOption_capabilities(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "downloadOptional":
+			out.Values[i] = ec._RoleOption_downloadOptional(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -8495,6 +9166,32 @@ func (ec *executionContext) marshalNAccessGrant2ᚖplatriumᚋinternalᚋgraphql
 		return graphql.Null
 	}
 	return ec._AccessGrant(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAccessLevelOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAccessLevelOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*AccessLevelOption) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAccessLevelOption2ᚖplatriumᚋinternalᚋgraphqlᚐAccessLevelOption(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAccessLevelOption2ᚖplatriumᚋinternalᚋgraphqlᚐAccessLevelOption(ctx context.Context, sel ast.SelectionSet, v *AccessLevelOption) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AccessLevelOption(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
@@ -9256,6 +9953,13 @@ func (ec *executionContext) marshalOInt642ᚖint64(ctx context.Context, sel ast.
 	_ = ctx
 	res := graphql.MarshalInt64(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOItemRef2ᚖplatriumᚋinternalᚋgraphqlᚐItemRef(ctx context.Context, sel ast.SelectionSet, v *ItemRef) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ItemRef(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {

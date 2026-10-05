@@ -12,75 +12,73 @@ The orchestration flows documented here are actively being developed and refined
 
 When a completely fresh instance of Platrium is booted for the very first time, the cluster is effectively a blank slate. It has absolutely no data, no authentication boundaries, and no users. 
 
-To bring the cluster online and make it usable, the system automatically triggers the **Initial Setup Flow** via the API. This flow is strictly orchestrated by the `TenantOrchestrator` and is responsible for provisioning the foundational "Native Tenant" alongside the overarching cluster Super Admin.
+To bring the cluster online and make it usable, the engine automatically runs the **Initial Setup Flow** at startup. This flow is strictly orchestrated by the `TenantOrchestrator` and is responsible for provisioning the foundational "Native Tenant" alongside the overarching cluster Super Admin.
 
-## The Dual-Write Orchestration Flow
+## One Transaction to Rule Them All
 
-Because Platrium spans a Graph Database (AuthZ & Structure), a KV Store (AuthN Passwords), and a Distributed File System (Storage), creating the very first workspace is not a simple SQL `INSERT`. It is a complex, multi-system orchestration.
+Creating the very first workspace touches several domains: tenants, identity providers, users, local credentials and the storage tree. They all live in the same [relational database](../architecture/database/overview), so the whole flow is **one database transaction**. If any step fails (a constraint is violated, the drive can't be created, the process crashes), everything rolls back and nothing is left behind.
 
-We leverage an atomic pattern to ensure that if any step fails (e.g., the DB crashes mid-setup, or the storage engine is offline), the entire cluster safely rolls back without leaving behind orphaned, unmanageable data.
+### Step 1: Hash the Password
 
-### Step 1: Pre-provision the KV Secrets
-
-The absolute first action is interacting with the `LocalUserStore` (the KV Store) to hash the Super Admin's password. 
-
-Instead of writing this permanently and risking an orphaned hash if the Graph DB fails, the orchestrator creates a **Temporary User** with a strict 10-minute Time-To-Live (TTL):
+The first action is hashing the Super Admin's password with bcrypt. This happens **before** the transaction opens: bcrypt is deliberately slow, and we don't want to hold a database connection while it runs.
 
 ```go
-m.localUserStore.CreateTemporaryUser(ctx, userId, adminPassword, 10*time.Minute)
+passwordHash, err := local.HashPassword(adminPassword)
 ```
 
-If the setup crashes here, or anywhere downstream, this temporary hash will silently evaporate on its own.
+Nothing has been written anywhere yet, so there is nothing to clean up if this fails.
 
-### Step 2: The Monolithic Graph Transaction
+### Step 2: Open the Transaction
 
-Next, the orchestrator opens a single, monolithic `WriteTx` network connection to the Graph Database. **All** subsequent structural changes happen deep inside this isolated transaction bubble.
+The orchestrator opens a single transaction with `db.WithTx`. **All** subsequent changes happen inside it.
 
-1. **Create the Native Tenant Node:** The `Tenant` node is provisioned and explicitly flagged as `isNative: true`.
-2. **Create the Local IdP:** A default `IdpProvider` node is created, representing the Platrium Local Authentication system.
-3. **Link the Tenant to the IdP:** The system draws the `(t)-[:USES_IDP]->(i)` edge, establishing the authorization baseline.
+1. **Create the Native Tenant:** The `Tenant` row is created and flagged as native. A unique constraint guarantees only one native tenant can ever exist, even if two instances race to create it.
+2. **Create the Local IdP:** A default `LOCAL` `IdpProvider` row is created for the tenant, representing the Platrium Local Authentication system.
 
 ### Step 3: The User Orchestrator Handoff
 
-Still deep inside that exact same Graph transaction, the `TenantOrchestrator` delegates control to the [User Orchestrator](../architecture/identity/users-groups).
+Still inside that same transaction, the `TenantOrchestrator` delegates to the [User Orchestrator](../architecture/identity/users-groups).
 
 ```mermaid
 sequenceDiagram
-    participant API as Setup Wizard
+    participant API as Engine Startup
     participant TO as Tenant Orchestrator
     participant UO as User Orchestrator
     participant FS as FSOps (Storage)
+    participant LU as LocalUserStore
 
     API->>TO: ProvisionNewTenant()
-    Note over TO: Opens tx graph.Tx
+    Note over TO: Hash password (outside the tx)
+    Note over TO: Opens db.WithTx
     
+    TO->>TO: Create Tenant + Local IdP
     TO->>UO: ProvisionUserTx(tx)
-    UO->>UO: Create Super Admin Node
+    UO->>UO: Create Super Admin user
     
     UO->>FS: CreateDriveTx(tx)
-    Note over FS: Provisions My Drive Folder
+    Note over FS: Creates the drive and its root folder
     FS-->>UO: Returns Drive
     
     UO-->>TO: Returns User
-    Note over TO: Commits graph.Tx
+    TO->>LU: CreateTx(tx, passwordHash)
+    Note over TO: Commits
 ```
 
-4. **Create the Super Admin User:** The `UserOrchestrator` provisions the `User` node and assigns its `idpId` property to the newly created Local IdP.
-5. **Create the Private Drive:** The `UserOrchestrator` interfaces directly with the `FSOps` engine (`o.fsOps.CreateDriveTx()`), passing the *exact same transaction pointer*. It creates the root "My Drive" folder node for the Super Admin and flawlessly draws the `[:OWNS]` edge.
-6. **Elevate to Super Admin:** Finally, control unwinds back to the Tenant Orchestrator, which draws the absolute highest authorization edge in the system: `(t)-[:HAS_USER {role: "SUPER_ADMIN"}]->(u)`.
+3. **Create the Super Admin User:** The `UserOrchestrator` creates the `User` row, bound to the new Local IdP, with the `SUPER_ADMIN` role set from the start.
+4. **Create the Private Drive:** The `UserOrchestrator` calls `FSOps.CreateDriveTx()` with the *exact same transaction*. It creates the `Drive` (owned by the Super Admin) and its root "My Drive" folder.
+5. **Store the Password:** Finally, the `LocalUserStore` writes the bcrypt hash as a `LocalCredential` row, in the same transaction.
 
 <Accordions>
-  <Accordion title="Why pass the Transaction pointer down the chain?">
-    By explicitly passing the `tx graph.Tx` pointer from the `TenantOrchestrator`, down to the `UserOrchestrator`, and finally down to `FSOps`, we bind three entirely separate domain boundaries into a single atomic block. 
+  <Accordion title="Why pass the transaction down the chain?">
+    By explicitly passing the `*ent.Tx` from the `TenantOrchestrator`, down to the `UserOrchestrator`, and finally down to `FSOps` and the `LocalUserStore`, we bind separate domain boundaries into a single atomic block. 
     
-    If the Storage engine fails to create the Private Drive, it returns an error. This error ripples up the chain, causing the `WriteTx` wrapper to instantly issue a native `ROLLBACK` command to the GraphDB. The Tenant, IdP, and User nodes are wiped from memory as if they never existed!
+    If any of them fails, the error ripples up the chain, causing `WithTx` to issue a native `ROLLBACK`. The Tenant, IdP, User, Drive and password are all gone as if they never existed.
+  </Accordion>
+  <Accordion title="What does a failure look like?">
+    Uniqueness is enforced by the database schema, so a duplicate alias (or a second native tenant) surfaces as `identity.ErrConflict`. After the rollback, the orchestrator reads why (alias taken vs native tenant exists) and returns a specific message.
   </Accordion>
 </Accordions>
 
-### Step 4: Finalize the User
+## Done
 
-If the Graph Database successfully commits the massive transaction, the orchestrator's final action is to lock in the password.
-
-It calls `m.localUserStore.FinalizeTemporaryUser(ctx, userId)`. This reaches back into the KV Store, strips the 10-minute TTL off the initial password hash, and writes it back to disk permanently. 
-
-The Native Tenant is now fully online, the Super Admin can seamlessly log in, and the cluster is officially ready for production traffic!
+When the transaction commits, the Native Tenant is fully online, the Super Admin can immediately log in (their password committed together with their account), and the cluster is ready for production traffic. There is no "finalize" step and no temporary state to expire.

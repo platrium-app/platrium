@@ -1,3 +1,9 @@
 {
-    "title": "Authorization"
+    "title": "Authorization",
+    "pages": [
+        "overview",
+        "sharing",
+        "scaling-and-openfga",
+        "security-backlog"
+    ]
 }

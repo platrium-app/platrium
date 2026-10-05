@@ -35,6 +35,21 @@ type AccessGrant struct {
 	Capabilities []string   `json:"capabilities"`
 	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
 	CreatedAt    time.Time  `json:"createdAt"`
+	// True when this grant is to the signed-in user. Clients should show it as "You" and not offer to change or remove it.
+	IsYou bool `json:"isYou"`
+	// Set on access that comes from a folder or drive above the item. It cannot be changed from the item; change it where it was granted.
+	InheritedFrom *ItemRef `json:"inheritedFrom,omitempty"`
+}
+
+// A general-access level that can be chosen for an item, as the server defines it.
+type AccessLevelOption struct {
+	Level string `json:"level"`
+	Label string `json:"label"`
+	// One line saying who can open the item at this level.
+	Blurb string `json:"blurb"`
+	// The roles this level may carry; empty when it takes none (RESTRICTED).
+	Roles          []string `json:"roles"`
+	SupportsExpiry bool     `json:"supportsExpiry"`
 }
 
 // A person, group or organization shown in a picker or on an access list.
@@ -44,6 +59,8 @@ type DirectorySubject struct {
 	ID    string  `json:"id"`
 	Name  string  `json:"name"`
 	Email *string `json:"email,omitempty"`
+	// True when this is the signed-in user.
+	IsYou bool `json:"isYou"`
 }
 
 type DriveItemConnection struct {
@@ -195,6 +212,15 @@ type ItemAccess struct {
 	GeneralAccess       *GeneralAccess `json:"generalAccess"`
 	// People and groups added by name. General access is reported separately.
 	Grants []*AccessGrant `json:"grants"`
+	// Access that reaches the item from folders and the drive above, nearest first. Read-only here: each entry says where it comes from. Above a restriction only drive admins appear, since they keep access through it.
+	Inherited []*AccessGrant `json:"inherited"`
+}
+
+// A reference to an item, for saying where access comes from.
+type ItemRef struct {
+	// Null when the signed-in user cannot open the item.
+	ID   *string `json:"id,omitempty"`
+	Name string  `json:"name"`
 }
 
 type Mutation struct {
@@ -214,6 +240,8 @@ type RoleOption struct {
 	Label        string   `json:"label"`
 	Description  string   `json:"description"`
 	Capabilities []string `json:"capabilities"`
+	// False for roles that edit: they need the content, so download cannot be withheld.
+	DownloadOptional bool `json:"downloadOptional"`
 }
 
 type ServerInfo struct {

@@ -67,11 +67,6 @@ export function NamePromptModal({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-2">
           <div className="flex flex-col gap-2">
-            {fieldLabel && (
-              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                {fieldLabel}
-              </label>
-            )}
             <Input
               value={value}
               onChange={(e) => setValue(e.target.value)}

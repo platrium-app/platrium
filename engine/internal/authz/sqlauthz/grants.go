@@ -68,13 +68,9 @@ func (a *Authorizer) Grant(ctx context.Context, actor authz.Principal, in authz.
 	if err != nil {
 		return nil, err
 	}
-	// Nobody can hand out more than they hold.
-	if !caps.SubsetOf(actorCaps) {
-		return nil, fmt.Errorf("%w: cannot grant capabilities you do not hold", authz.ErrForbidden)
-	}
 
 	var result *ent.Grant
-	err = a.db.WithTx(ctx, func(tx *ent.Tx) error {
+	err = a.changeTx(ctx, func(tx *ent.Tx) error {
 		item, err := tx.DriveItem.Query().
 			Where(driveitem.ID(in.ItemID), driveitem.TenantID(actor.TenantID)).
 			Only(ctx)
@@ -84,10 +80,20 @@ func (a *Authorizer) Grant(ctx context.Context, actor authz.Principal, in authz.
 			}
 			return err
 		}
-		if err := a.validateRole(ctx, tx, item, in.Role); err != nil {
+		if err := a.validateSubject(ctx, tx, actor.TenantID, in.Subject); err != nil {
 			return err
 		}
-		if err := a.validateSubject(ctx, tx, actor.TenantID, in.Subject); err != nil {
+		d, err := a.lockDrive(ctx, tx, item.DriveID)
+		if err != nil {
+			return err
+		}
+		err = a.checkChange(ctx, tx, pending{
+			op: authz.OpGrant, actor: actor, actorCaps: actorCaps, item: item, drive: d,
+			after: func(before []authz.Grant) []authz.Grant {
+				return withGrant(before, authz.Grant{Subject: in.Subject, Role: in.Role, Caps: caps, ExpiresAt: in.ExpiresAt})
+			},
+		})
+		if err != nil {
 			return err
 		}
 		result, err = upsertGrant(ctx, tx, item, in.Subject, in.Role, caps, in.ExpiresAt, actor.UserID)
@@ -115,21 +121,9 @@ func roleContext(ctx context.Context, tx *ent.Tx, item *ent.DriveItem) (authz.Ro
 	return authz.ContextItemShare, nil
 }
 
-// validateRole refuses a role the item does not offer, such as Drive Admin on
-// a single file.
-func (a *Authorizer) validateRole(ctx context.Context, tx *ent.Tx, item *ent.DriveItem, role authz.Role) error {
-	rc, err := roleContext(ctx, tx, item)
-	if err != nil {
-		return err
-	}
-	if !rc.Offers(role) {
-		return fmt.Errorf("%w: role %q is not available for this item", authz.ErrInvalid, role)
-	}
-	return nil
-}
-
-// validateSubject checks the subject exists in the actor's tenant. Grants never
-// cross tenants.
+// validateSubject checks the subject is well formed and exists in the actor's
+// tenant. Grants never cross tenants. Whether the actor may grant to it is for
+// the rules in authz.
 func (a *Authorizer) validateSubject(ctx context.Context, tx *ent.Tx, tenantID string, s authz.Subject) error {
 	switch s.Type {
 	case authz.SubjectUser:
@@ -156,7 +150,6 @@ func (a *Authorizer) validateSubject(ctx context.Context, tx *ent.Tx, tenantID s
 		if s.ID != authz.PublicSubjectID {
 			return fmt.Errorf("%w: a public grant uses subject %q", authz.ErrInvalid, authz.PublicSubjectID)
 		}
-		return a.requirePublicAllowed(ctx, tx, tenantID)
 	default:
 		return fmt.Errorf("%w: unknown subject type %q", authz.ErrInvalid, s.Type)
 	}
@@ -219,10 +212,29 @@ func (a *Authorizer) Revoke(ctx context.Context, actor authz.Principal, grantID 
 		}
 		return err
 	}
-	if _, err := a.require(ctx, actor, g.ResourceID, authz.CapShare); err != nil {
+	actorCaps, err := a.require(ctx, actor, g.ResourceID, authz.CapShare)
+	if err != nil {
 		return err
 	}
-	return a.db.Grant.DeleteOneID(g.ID).Exec(ctx)
+	return a.changeTx(ctx, func(tx *ent.Tx) error {
+		item, err := tx.DriveItem.Get(ctx, g.ResourceID)
+		if err != nil {
+			return err
+		}
+		d, err := a.lockDrive(ctx, tx, item.DriveID)
+		if err != nil {
+			return err
+		}
+		gone := authz.Subject{Type: authz.SubjectType(g.SubjectType), ID: g.SubjectID}
+		err = a.checkChange(ctx, tx, pending{
+			op: authz.OpRevoke, actor: actor, actorCaps: actorCaps, item: item, drive: d,
+			after: func(before []authz.Grant) []authz.Grant { return withoutSubject(before, gone) },
+		})
+		if err != nil {
+			return err
+		}
+		return tx.Grant.DeleteOneID(g.ID).Exec(ctx)
+	})
 }
 
 // ListGrants returns the grants on an item, oldest first. Requires CapShare.
@@ -263,7 +275,11 @@ func (a *Authorizer) ItemAccess(ctx context.Context, actor authz.Principal, item
 	if err != nil {
 		return nil, fmt.Errorf("failed to load drive: %w", err)
 	}
-	access := &authz.ItemAccess{ItemID: itemID, InheritsPermissions: item.InheritPerms, Grants: grants}
+	inherited, err := a.inheritedGrants(ctx, actor, itemID)
+	if err != nil {
+		return nil, err
+	}
+	access := &authz.ItemAccess{ItemID: itemID, InheritsPermissions: item.InheritPerms, Grants: grants, Inherited: inherited}
 	if d.OwnerID != nil {
 		access.OwnerUserID = *d.OwnerID
 	}
@@ -279,7 +295,7 @@ func (a *Authorizer) GrantInitial(ctx context.Context, tenantID, itemID, userID 
 	}
 	caps = authz.Normalize(caps)
 
-	return a.db.WithTx(ctx, func(tx *ent.Tx) error {
+	return a.changeTx(ctx, func(tx *ent.Tx) error {
 		item, err := tx.DriveItem.Query().
 			Where(driveitem.ID(itemID), driveitem.TenantID(tenantID)).
 			Only(ctx)
@@ -293,6 +309,19 @@ func (a *Authorizer) GrantInitial(ctx context.Context, tenantID, itemID, userID 
 		if err := a.validateSubject(ctx, tx, tenantID, subject); err != nil {
 			return err
 		}
+		d, err := a.lockDrive(ctx, tx, item.DriveID)
+		if err != nil {
+			return err
+		}
+		err = a.checkChange(ctx, tx, pending{
+			op: authz.OpInitial, item: item, drive: d,
+			after: func(before []authz.Grant) []authz.Grant {
+				return withGrant(before, authz.Grant{Subject: subject, Role: role, Caps: caps})
+			},
+		})
+		if err != nil {
+			return err
+		}
 		_, err = upsertGrant(ctx, tx, item, subject, role, caps, nil, userID)
 		return err
 	})
@@ -300,11 +329,12 @@ func (a *Authorizer) GrantInitial(ctx context.Context, tenantID, itemID, userID 
 
 // SetInheritance stops or resumes an item inheriting its ancestors' grants.
 func (a *Authorizer) SetInheritance(ctx context.Context, actor authz.Principal, itemID string, inherit bool) error {
-	if _, err := a.require(ctx, actor, itemID, authz.CapManage); err != nil {
+	actorCaps, err := a.require(ctx, actor, itemID, authz.CapManage)
+	if err != nil {
 		return err
 	}
 
-	return a.db.WithTx(ctx, func(tx *ent.Tx) error {
+	return a.changeTx(ctx, func(tx *ent.Tx) error {
 		item, err := tx.DriveItem.Query().
 			Where(driveitem.ID(itemID), driveitem.TenantID(actor.TenantID)).
 			Only(ctx)
@@ -320,24 +350,20 @@ func (a *Authorizer) SetInheritance(ctx context.Context, actor authz.Principal, 
 		if item.InheritPerms == inherit {
 			return nil
 		}
-		if err := tx.DriveItem.UpdateOne(item).SetInheritPerms(inherit).Exec(ctx); err != nil {
-			return err
-		}
-		if inherit {
-			return nil
-		}
-
-		// Keep the actor's access: unless they own the drive, give them a direct
-		// manager grant so restricting an item cannot lock them out of it.
-		d, err := tx.Drive.Query().Where(drive.ID(item.DriveID)).Only(ctx)
+		d, err := a.lockDrive(ctx, tx, item.DriveID)
 		if err != nil {
 			return err
 		}
-		if d.OwnerID != nil && *d.OwnerID == actor.UserID {
-			return nil
+
+		// No grant is added to keep the actor in: the drive's managers keep access
+		// through a restriction, and a private drive's owner always has it.
+		err = a.checkChange(ctx, tx, pending{
+			op: authz.OpInheritance, actor: actor, actorCaps: actorCaps, item: item, drive: d,
+			after: func(before []authz.Grant) []authz.Grant { return before },
+		})
+		if err != nil {
+			return err
 		}
-		managerCaps, _ := authz.RoleDriveAdmin.Caps()
-		_, err = upsertGrant(ctx, tx, item, authz.Subject{Type: authz.SubjectUser, ID: actor.UserID}, authz.RoleDriveAdmin, managerCaps, nil, actor.UserID)
-		return err
+		return tx.DriveItem.UpdateOne(item).SetInheritPerms(inherit).Exec(ctx)
 	})
 }

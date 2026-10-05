@@ -22,6 +22,17 @@ type AccessGrant {
   capabilities: [String!]!
   expiresAt: DateTime
   createdAt: DateTime!
+  "True when this grant is to the signed-in user. Clients should show it as \"You\" and not offer to change or remove it."
+  isYou: Boolean!
+  "Set on access that comes from a folder or drive above the item. It cannot be changed from the item; change it where it was granted."
+  inheritedFrom: ItemRef
+}
+
+"A reference to an item, for saying where access comes from."
+type ItemRef {
+  "Null when the signed-in user cannot open the item."
+  id: ID
+  name: String!
 }
 
 "Who else can open an item beyond the people and groups added by name."
@@ -39,6 +50,8 @@ type DirectorySubject {
   id: ID!
   name: String!
   email: String
+  "True when this is the signed-in user."
+  isYou: Boolean!
 }
 
 "A role as it should be shown when choosing one."
@@ -47,6 +60,19 @@ type RoleOption {
   label: String!
   description: String!
   capabilities: [String!]!
+  "False for roles that edit: they need the content, so download cannot be withheld."
+  downloadOptional: Boolean!
+}
+
+"A general-access level that can be chosen for an item, as the server defines it."
+type AccessLevelOption {
+  level: String!
+  label: String!
+  "One line saying who can open the item at this level."
+  blurb: String!
+  "The roles this level may carry; empty when it takes none (RESTRICTED)."
+  roles: [String!]!
+  supportsExpiry: Boolean!
 }
 
 type ItemAccess {
@@ -58,6 +84,8 @@ type ItemAccess {
   generalAccess: GeneralAccess!
   "People and groups added by name. General access is reported separately."
   grants: [AccessGrant!]!
+  "Access that reaches the item from folders and the drive above, nearest first. Read-only here: each entry says where it comes from. Above a restriction only drive admins appear, since they keep access through it."
+  inherited: [AccessGrant!]!
 }
 
 type SharedItem {
@@ -97,6 +125,8 @@ input GeneralAccessInput {
 extend type Query {
   "The roles to offer when sharing an item: Viewer and Editor for a file or folder, the full ladder for a shared drive's root."
   shareRoles(itemId: ID!): [RoleOption!]!
+  "The general-access levels that can be chosen for an item, narrowest first. Requires permission to share it."
+  generalAccessOptions(itemId: ID!): [AccessLevelOption!]!
   "Find people and groups in the organization by name or email, for the people picker."
   searchDirectory(query: String!, first: Int, excludeAccessToItemId: ID): [DirectorySubject!]!
   "Who has access to an item. Requires permission to share it."

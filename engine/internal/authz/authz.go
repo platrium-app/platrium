@@ -26,7 +26,8 @@ type Authorizer interface {
 	SharedWithMe(ctx context.Context, p Principal, limit int, after string) ([]SharedItem, error)
 	// ListGrants returns the grants on an item. Requires CapShare.
 	ListGrants(ctx context.Context, actor Principal, itemID string) ([]Grant, error)
-	// ItemAccess returns an item's grants and whether it inherits. Requires CapShare.
+	// ItemAccess returns an item's grants, whether it inherits, and the access
+	// that reaches it from ancestors. Requires CapShare.
 	ItemAccess(ctx context.Context, actor Principal, itemID string) (*ItemAccess, error)
 
 	// Grant shares an item. The actor needs CapShare and cannot hand out
@@ -45,10 +46,15 @@ type Authorizer interface {
 	// the link. It replaces any earlier general access in one step. Requires
 	// CapShare; public access also needs the tenant to allow it.
 	SetGeneralAccess(ctx context.Context, actor Principal, in GeneralAccessInput) error
+	// GeneralAccessOptions lists the levels that can be chosen for an item right
+	// now, narrowest first. A level the tenant does not allow, such as public
+	// links when it has turned them off, is left out. Requires CapShare.
+	GeneralAccessOptions(ctx context.Context, actor Principal, itemID string) ([]LevelDef, error)
 	// SetInheritance stops (false) or resumes (true) an item inheriting its
-	// ancestors' grants. Requires CapManage. Breaking inheritance keeps the
-	// actor's own access with a direct manager grant so they cannot lock
-	// themselves out.
+	// ancestors' grants. Requires CapManage. It changes no grants. A restricted
+	// item hides ancestors' grants from everyone except managers: a grant that
+	// carries MANAGE, a Drive Admin's, still applies, so restricting cannot lock
+	// a drive's admins out.
 	SetInheritance(ctx context.Context, actor Principal, itemID string, inherit bool) error
 
 	// AddMember and RemoveMember maintain group membership. They are

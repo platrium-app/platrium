@@ -2,6 +2,7 @@ package sqlauthz_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -42,11 +43,33 @@ func newScene(t *testing.T, e *env) scene {
 func TestOwnerHoldsEverything(t *testing.T) {
 	e := newEnv(t)
 	s := newScene(t, e)
-	for _, id := range []string{s.drive, s.docs, s.spec, s.private} {
+	for _, id := range []string{s.docs, s.spec, s.private} {
 		if got := e.caps(t, s.pa, id); got != authz.AllCaps {
 			t.Errorf("owner caps on %s = %s", id, got)
 		}
 	}
+}
+
+// A private drive is its owner's alone: everything but opening it to others.
+func TestPrivateDriveRootCannotBeShared(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+
+	want := authz.AllCaps.Without(authz.CapShare | authz.CapManage)
+	if got := e.caps(t, s.pa, s.drive); got != want {
+		t.Fatalf("owner caps on a private drive root = %s, want %s", got, want)
+	}
+
+	if _, err := e.az.Grant(ctx, s.pa, authz.GrantInput{ItemID: s.drive, Subject: userSubject(s.bob), Role: authz.RoleViewer}); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("granting on a private drive root: %v", err)
+	}
+	if err := e.az.SetInheritance(ctx, s.pa, s.drive, false); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("managing a private drive root: %v", err)
+	}
+
+	// What is inside it is still the owner's to share.
+	e.share(t, s.pa, s.docs, userSubject(s.bob), authz.RoleViewer)
 }
 
 func TestNoGrantsNoAccess(t *testing.T) {
@@ -335,5 +358,64 @@ func TestUnknownCapabilityBitsSurvive(t *testing.T) {
 	got := e.caps(t, s.pb, s.docs)
 	if got.Unknown() != future || !got.Has(authz.CapView) {
 		t.Fatalf("caps = %s", got)
+	}
+}
+
+// A restriction hides ancestors' grants from everyone but managers: a grant
+// that carries MANAGE still applies in full, however many restrictions lie
+// between it and the item.
+func TestRestrictionStopsMembersButNotManagers(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+	e.seedGrant(t, s.docs, userSubject(s.bob), authz.RoleFullEditor)
+	e.seedGrant(t, s.docs, userSubject(s.carol), authz.RoleDriveAdmin)
+	e.seedGrant(t, s.docs, publicSubject(), authz.RoleViewer)
+
+	if got := e.caps(t, s.pb, s.spec); !got.Has(authz.CapEdit) {
+		t.Fatalf("before restricting, bob edits through the folder above: %s", got)
+	}
+	if err := e.az.SetInheritance(ctx, s.pa, s.specs, false); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, id := range []string{s.specs, s.spec} {
+		if got := e.caps(t, s.pb, id); got != 0 {
+			t.Errorf("a member loses %s under a restriction, has %s", id, got)
+		}
+		if got := e.caps(t, authz.Anonymous(), id); got != 0 {
+			t.Errorf("a public grant above the restriction does not reach %s, has %s", id, got)
+		}
+		if got := e.caps(t, s.pc, id); !got.Has(authz.CapManage) || !got.Has(authz.CapEdit) {
+			t.Errorf("a manager keeps %s, has %s", id, got)
+		}
+	}
+
+	// The restricted item's own grants still apply, to it and below.
+	e.seedGrant(t, s.specs, userSubject(s.bob), authz.RoleViewer)
+	if got := e.caps(t, s.pb, s.spec); !got.Has(authz.CapView) || got.Has(authz.CapEdit) {
+		t.Errorf("bob's grant on the restricted folder applies below it: %s", got)
+	}
+
+	// A second restriction below the first changes nothing for the manager.
+	if err := e.az.SetInheritance(ctx, s.pa, s.spec, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.caps(t, s.pc, s.spec); !got.Has(authz.CapManage) {
+		t.Errorf("a manager keeps access through two restrictions: %s", got)
+	}
+	if got := e.caps(t, s.pb, s.spec); got != 0 {
+		t.Errorf("bob's folder grant stops at the second restriction: %s", got)
+	}
+
+	// Resuming puts everything back.
+	if err := e.az.SetInheritance(ctx, s.pa, s.specs, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.az.SetInheritance(ctx, s.pa, s.spec, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.caps(t, s.pb, s.spec); !got.Has(authz.CapEdit) {
+		t.Errorf("after resuming, bob edits again: %s", got)
 	}
 }

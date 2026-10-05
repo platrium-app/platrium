@@ -61,7 +61,8 @@ func TestSharedWithMeMergesAndFilters(t *testing.T) {
 
 	// Items in the principal's own drive are not "shared with" them.
 	bobDrive := e.drive(t, s.tn, s.bob)
-	e.share(t, pb, bobDrive, userSubject(s.bob), authz.RoleViewer)
+	bobFolder := e.folder(t, s.tn, bobDrive, bobDrive, "mine")
+	e.seedGrant(t, bobFolder, userSubject(s.bob), authz.RoleViewer) // a stray self-grant, which writers now refuse
 	if got, _ := e.az.SharedWithMe(ctx, pb, 50, ""); len(got) != 1 {
 		t.Fatalf("own drive must be excluded, got %+v", got)
 	}

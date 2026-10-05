@@ -26,3 +26,11 @@ export function hasCapability(caps: readonly string[] | null | undefined, cap: C
 export function allCan(items: readonly Capable[], cap: Capability): boolean {
   return items.length > 0 && items.every((i) => hasCapability(i.capabilities, cap))
 }
+
+/**
+ * A drive's root that can be shared is a shared drive: the server never lets a
+ * private drive be opened to others. Sharing it means managing its members.
+ */
+export function isSharedDriveRoot(item: { parentId?: string | null } | null | undefined): boolean {
+  return !!item && !item.parentId
+}

@@ -187,11 +187,11 @@ func TestSetInheritance(t *testing.T) {
 	if err := e.az.SetInheritance(ctx, s.pb, s.specs, false); !errors.Is(err, authz.ErrForbidden) {
 		t.Errorf("an editor cannot restrict: %v", err)
 	}
-	if err := e.az.SetInheritance(ctx, s.pa, s.drive, false); !errors.Is(err, authz.ErrInvalid) {
-		t.Errorf("a drive root has nothing to inherit: %v", err)
+	if err := e.az.SetInheritance(ctx, s.pa, s.drive, false); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("a private drive root cannot be managed: %v", err)
 	}
 
-	// A manager who restricts an item keeps access to it through a direct grant.
+	// A manager who restricts an item keeps access to it, with no grant added.
 	if err := e.az.SetInheritance(ctx, s.pc, s.specs, false); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestRolesDependOnWhatIsShared(t *testing.T) {
 		{authz.RoleRestrictedEditor, false},
 		{authz.RoleDriveAdmin, false},
 	} {
-		for name, item := range map[string]string{"folder": s.docs, "file": s.spec, "private drive root": s.drive} {
+		for name, item := range map[string]string{"folder": s.docs, "file": s.spec} {
 			err := try(s.pa, item, c.role)
 			if (err == nil) != c.ok || (err != nil && !errors.Is(err, authz.ErrInvalid)) {
 				t.Errorf("%s as %s: %v, want ok = %v", name, c.role, err, c.ok)

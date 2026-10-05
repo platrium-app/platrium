@@ -9,6 +9,7 @@ import { PlaceholderView } from "./components/custom/PlaceholderView"
 import DownloadFallbackView from "./pages/DownloadFallbackView"
 
 import HomeView from "./pages/HomeView"
+import SharedDrivesView from "./pages/drives/SharedDrivesView"
 import { FilePreviewView } from "./pages/filepreview/FilePreviewCore"
 
 import LoginView from "./pages/LoginView"
@@ -46,6 +47,7 @@ export function App() {
               }>
                 <Route index element={<Navigate to="/home" replace />} />
                 <Route path="home" element={<HomeView />} />
+                <Route path="shared-drives" element={<SharedDrivesView />} />
                 <Route
                   path="rawcontent/*"
                   element={<DownloadFallbackView />}

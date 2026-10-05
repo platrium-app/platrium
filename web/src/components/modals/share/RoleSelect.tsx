@@ -1,10 +1,12 @@
-import { NativeSelect } from "@/components/ui/native-select"
+import { OptionMenu } from "./OptionMenu"
 import { humanizeRole } from "./shareUtils"
 
 export interface RoleChoice {
   role: string
   label: string
   description?: string
+  /** A grant of this role may withhold download. */
+  downloadOptional?: boolean
 }
 
 interface RoleSelectProps {
@@ -13,7 +15,6 @@ interface RoleSelectProps {
   onChange: (role: string) => void
   disabled?: boolean
   label: string
-  className?: string
 }
 
 /**
@@ -27,23 +28,19 @@ export function RoleSelect({
   onChange,
   disabled,
   label,
-  className,
 }: RoleSelectProps) {
   const known = choices.some((c) => c.role === value)
+  const options = [
+    ...(known ? [] : [{ value, label: humanizeRole(value) }]),
+    ...choices.map((c) => ({ value: c.role, label: c.label })),
+  ]
   return (
-    <NativeSelect
-      aria-label={label}
+    <OptionMenu
+      label={label}
       value={value}
+      options={options}
       disabled={disabled}
-      className={className}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {!known && <option value={value}>{humanizeRole(value)}</option>}
-      {choices.map((c) => (
-        <option key={c.role} value={c.role} title={c.description}>
-          {c.label}
-        </option>
-      ))}
-    </NativeSelect>
+      onChange={onChange}
+    />
   )
 }

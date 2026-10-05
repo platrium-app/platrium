@@ -374,24 +374,24 @@ func TestSharingWithGroupsAndTheOrganization(t *testing.T) {
 
 func TestInheritanceMutation(t *testing.T) {
 	h := newHarness(t)
-	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.drive, SubjectType: "USER", SubjectID: h.bob, Role: "VIEWER"}); err != nil {
+	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "USER", SubjectID: h.bob, Role: "VIEWER"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.q().Item(h.as(h.bob), h.docs); err != nil {
+	if _, err := h.q().Item(h.as(h.bob), h.file); err != nil {
 		t.Fatal(err)
 	}
 
-	if ok, err := h.m().SetInheritance(h.as(h.alice), h.docs, false); err != nil || !ok {
+	if ok, err := h.m().SetInheritance(h.as(h.alice), h.file, false); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	if _, err := h.q().Item(h.as(h.bob), h.docs); code(err) != "NOT_FOUND" {
-		t.Fatalf("docs is restricted now: %v", err)
+	if _, err := h.q().Item(h.as(h.bob), h.file); code(err) != "NOT_FOUND" {
+		t.Fatalf("the file is restricted now: %v", err)
 	}
-	access, _ := h.q().ItemAccess(h.as(h.alice), h.docs)
+	access, _ := h.q().ItemAccess(h.as(h.alice), h.file)
 	if access.InheritsPermissions {
 		t.Fatal("must report that it no longer inherits")
 	}
-	if _, err := h.m().SetInheritance(h.as(h.bob), h.docs, true); code(err) != "NOT_FOUND" {
+	if _, err := h.m().SetInheritance(h.as(h.bob), h.file, true); code(err) != "NOT_FOUND" {
 		t.Fatalf("bob cannot even see it: %v", err)
 	}
 }
@@ -516,5 +516,40 @@ func TestSearchDirectory(t *testing.T) {
 	// Other tenants are not searchable, and signed-out callers cannot search.
 	if _, err := h.q().SearchDirectory(anonymous(), "bob", nil, nil); !errors.Is(err, actor.ErrUnauthenticated) {
 		t.Fatalf("signed out: %v", err)
+	}
+}
+
+func TestAccessListMarksYouAndShowsInheritedAccess(t *testing.T) {
+	h := newHarness(t)
+	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.docs, SubjectType: "user", SubjectID: h.bob, Role: "full_editor"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The owner sees themselves marked, and bob's access from the folder above.
+	access, err := h.q().ItemAccess(h.as(h.alice), h.file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !access.Owner.IsYou {
+		t.Errorf("the owner's own row must be marked: %+v", access.Owner)
+	}
+	if len(access.Grants) != 0 || len(access.Inherited) != 1 {
+		t.Fatalf("the file has no grants of its own and bob's from docs: %+v", access)
+	}
+	got := access.Inherited[0]
+	if got.SubjectID != h.bob || got.IsYou || got.InheritedFrom == nil || got.InheritedFrom.Name != "docs" || got.InheritedFrom.ID == nil || *got.InheritedFrom.ID != h.docs {
+		t.Errorf("bob's grant should say it comes from docs: %+v from %+v", got, got.InheritedFrom)
+	}
+
+	// A grant made on the file itself is direct, and not alice's.
+	if _, err := h.m().ShareItem(h.as(h.alice), ShareInput{ItemID: h.file, SubjectType: "user", SubjectID: h.carol, Role: "viewer"}); err != nil {
+		t.Fatal(err)
+	}
+	direct, err := h.q().ItemAccess(h.as(h.alice), h.file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(direct.Grants) != 1 || direct.Grants[0].IsYou || direct.Grants[0].InheritedFrom != nil {
+		t.Errorf("a direct grant is not inherited and not alice: %+v", direct.Grants)
 	}
 }

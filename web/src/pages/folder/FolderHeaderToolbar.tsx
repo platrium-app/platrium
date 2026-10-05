@@ -7,6 +7,7 @@ import {
   X,
   Download,
   Share2,
+  UserCog,
   Pencil,
   Trash2,
   LayoutGridIcon,
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useUpload } from "@/contexts/UploadContext"
 import type { SortField, SortDirection, ViewMode, DriveItemNode, DriveOperation } from "./FolderViewTypes"
-import { allCan, hasCapability } from "@/lib/capabilities"
+import { allCan, hasCapability, isSharedDriveRoot } from "@/lib/capabilities"
 import { cn, triggerFileDownload } from "@/lib/utils"
 
 export interface FolderHeaderToolbarProps {
@@ -71,6 +72,7 @@ export function FolderHeaderToolbar({
   const hasSelection = selectedCount > 0
   const canCreateHere = hasCapability(folderCapabilities, "CREATE")
   const canShareFolder = !!currentFolder && hasCapability(folderCapabilities, "SHARE")
+  const sharedDriveRoot = isSharedDriveRoot(currentFolder)
   const canDownload = allCan(selectedItems, "DOWNLOAD")
   const canShareSelection = selectedCount === 1 && allCan(selectedItems, "SHARE")
   const canRename = selectedCount === 1 && allCan(selectedItems, "EDIT")
@@ -115,13 +117,12 @@ export function FolderHeaderToolbar({
           {canShareFolder && (
             <Button
               variant="outline"
-              size="sm"
               className="gap-1.5"
-              title="Share this folder"
+              title={sharedDriveRoot ? "Manage access to this drive" : "Share this folder"}
               onClick={() => onOperation?.("SHARE", [currentFolder!])}
             >
-              <Share2 className="size-3.5" />
-              <span className="hidden sm:inline">Share</span>
+              {sharedDriveRoot ? <UserCog className="size-4" /> : <Share2 className="size-4" />}
+              <span className="hidden sm:inline">{sharedDriveRoot ? "Manage access" : "Share"}</span>
             </Button>
           )}
         </div>

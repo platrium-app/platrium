@@ -1,7 +1,8 @@
 import * as React from "react"
 import { useMutation, useQuery } from "@apollo/client/react"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, Link2 } from "lucide-react"
 
+import { isSharedDriveRoot } from "@/lib/capabilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
@@ -21,6 +22,13 @@ import { PeoplePicker } from "./share/PeoplePicker"
 import { PeopleWithAccess, type AccessGrantRow } from "./share/PeopleWithAccess"
 import { RoleSelect } from "./share/RoleSelect"
 import {
+  type Busy,
+  dialogReducer,
+  initialDialogState,
+  phaseOf,
+} from "./share/ShareDialogState"
+import {
+  GENERAL_ACCESS_OPTIONS,
   ITEM_ACCESS,
   REVOKE_ACCESS,
   SET_GENERAL_ACCESS,
@@ -86,38 +94,51 @@ function ShareItemBody({
     variables: { itemId },
     fetchPolicy: "network-only",
   })
+  const levelsQuery = useQuery(GENERAL_ACCESS_OPTIONS, {
+    variables: { itemId },
+    fetchPolicy: "network-only",
+  })
 
   const [shareItem] = useMutation(SHARE_ITEM)
   const [revokeAccess] = useMutation(REVOKE_ACCESS)
   const [setGeneralAccess] = useMutation(SET_GENERAL_ACCESS)
   const [setInheritance] = useMutation(SET_INHERITANCE)
 
-  const [recipients, setRecipients] = React.useState<Subject[]>([])
-  const [newRole, setNewRole] = React.useState("")
-  const [newExpiry, setNewExpiry] = React.useState("")
-  const [sharing, setSharing] = React.useState(false)
-  const [busyId, setBusyId] = React.useState<string | null>(null)
-  const [generalBusy, setGeneralBusy] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [copied, setCopied] = React.useState(false)
+  const [state, dispatch] = React.useReducer(dialogReducer, initialDialogState)
+  const { recipients, expiry, busy, error, copied } = state
 
   const roles = React.useMemo(
     () => rolesQuery.data?.shareRoles ?? [],
     [rolesQuery.data]
   )
+  const levels = React.useMemo(
+    () => levelsQuery.data?.generalAccessOptions ?? [],
+    [levelsQuery.data]
+  )
 
   // Default to the first (least privileged) role the server offers, until the user picks one.
-  const activeRole = roles.some((r) => r.role === newRole)
-    ? newRole
+  const activeRole = roles.some((r) => r.role === state.role)
+    ? (state.role as string)
     : (roles[0]?.role ?? "")
 
   const data = access.data?.itemAccess
-  const denied = access.error
-    ? ["FORBIDDEN", "NOT_FOUND"].includes(errorCode(access.error) ?? "")
-    : false
-  const loading =
-    (access.loading && !data) || (rolesQuery.loading && roles.length === 0)
+  const phase = phaseOf({
+    loading:
+      access.loading || (rolesQuery.loading && roles.length === 0) || levelsQuery.loading,
+    hasData: !!data && levels.length > 0,
+    denied: access.error
+      ? ["FORBIDDEN", "NOT_FOUND"].includes(errorCode(access.error) ?? "")
+      : false,
+  })
   const kind = item.type === "FOLDER" ? "folder" : "file"
+  const inherited = React.useMemo<AccessGrantRow[]>(
+    () =>
+      (data?.inherited ?? []).map((g) => ({
+        ...g,
+        expiresAt: asIso(g.expiresAt),
+      })),
+    [data]
+  )
   const grants = React.useMemo<AccessGrantRow[]>(
     () =>
       (data?.grants ?? []).map((g) => ({
@@ -126,21 +147,23 @@ function ShareItemBody({
       })),
     [data]
   )
+  const idle = busy.kind === "idle"
 
-  const run = async (fn: () => Promise<unknown>) => {
-    setError(null)
+  /** Run one write, holding the dialog busy until it and the refresh finish. */
+  const run = async (b: Exclude<Busy, { kind: "idle" }>, fn: () => Promise<unknown>) => {
+    dispatch({ type: "start", busy: b })
     try {
       await fn()
       await access.refetch()
+      dispatch({ type: "done" })
     } catch (err) {
-      setError(friendlyError(err))
+      dispatch({ type: "done", error: friendlyError(err) })
     }
   }
 
   const handleShare = async () => {
     if (recipients.length === 0) return
-    setSharing(true)
-    setError(null)
+    dispatch({ type: "start", busy: { kind: "sharing" } })
     const failed: Subject[] = []
     let lastError: unknown = null
     for (const r of recipients) {
@@ -153,7 +176,7 @@ function ShareItemBody({
               subjectId: r.id,
               role: activeRole,
               noDownload: false,
-              expiresAt: endOfDayIso(newExpiry),
+              expiresAt: endOfDayIso(expiry),
             },
           },
         })
@@ -162,94 +185,88 @@ function ShareItemBody({
         lastError = err
       }
     }
-    setSharing(false)
-    setRecipients(failed) // keep only the ones that did not go through
-    if (failed.length > 0) setError(friendlyError(lastError))
-    else setNewExpiry("")
     await access.refetch()
+    dispatch({
+      type: "done",
+      keep: failed,
+      error: failed.length > 0 ? friendlyError(lastError) : null,
+    })
   }
 
   const handleChangeRole = (g: AccessGrantRow, role: string) =>
-    run(async () => {
-      setBusyId(g.id)
-      try {
-        await shareItem({
-          variables: {
-            input: {
-              itemId,
-              subjectType: g.subjectType,
-              subjectId: g.subjectId,
-              role,
-              noDownload: role === "VIEWER" ? g.noDownload : false,
-              expiresAt: g.expiresAt ?? null,
-            },
+    run({ kind: "grant", id: g.id }, () =>
+      shareItem({
+        variables: {
+          input: {
+            itemId,
+            subjectType: g.subjectType,
+            subjectId: g.subjectId,
+            role,
+            noDownload: roles.find((r) => r.role === role)?.downloadOptional
+              ? g.noDownload
+              : false,
+            expiresAt: g.expiresAt ?? null,
           },
-        })
-      } finally {
-        setBusyId(null)
-      }
-    })
+        },
+      })
+    )
 
   const handleRemove = (g: AccessGrantRow) =>
-    run(async () => {
-      setBusyId(g.id)
-      try {
-        await revokeAccess({ variables: { grantId: g.id } })
-      } finally {
-        setBusyId(null)
-      }
-    })
+    run({ kind: "grant", id: g.id }, () =>
+      revokeAccess({ variables: { grantId: g.id } })
+    )
 
   const handleGeneral = (change: GeneralAccessChange) =>
-    run(async () => {
-      setGeneralBusy(true)
-      try {
-        await setGeneralAccess({
-          variables: {
-            input: {
-              itemId,
-              level: change.level,
-              role:
-                change.level === "RESTRICTED"
-                  ? null
-                  : (change.role ?? "VIEWER"),
-              noDownload: change.noDownload ?? false,
-              expiresAt: change.expiresAt ?? null,
-            },
+    run({ kind: "general" }, () =>
+      setGeneralAccess({
+        variables: {
+          input: {
+            itemId,
+            level: change.level,
+            role: change.role ?? null,
+            noDownload: change.noDownload ?? false,
+            expiresAt: change.expiresAt ?? null,
           },
-        })
-      } finally {
-        setGeneralBusy(false)
-      }
-    })
+        },
+      })
+    )
 
   const handleInheritance = (inherit: boolean) =>
-    run(() => setInheritance({ variables: { itemId, inherit } }))
+    run({ kind: "inheritance" }, () =>
+      setInheritance({ variables: { itemId, inherit } })
+    )
 
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(itemLink(item.id, item.type))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      dispatch({ type: "copied", copied: true })
+      setTimeout(() => dispatch({ type: "copied", copied: false }), 2000)
     } catch {
-      setError("Could not copy the link. Copy it from the address bar instead.")
+      dispatch({
+        type: "error",
+        message: "Could not copy the link. Copy it from the address bar instead.",
+      })
     }
   }
 
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="truncate">Share “{item.name}”</DialogTitle>
+        <DialogTitle className="truncate">
+          {isSharedDriveRoot(item) ? "Manage access to" : "Share"} “{item.name}”
+        </DialogTitle>
         <DialogDescription className="sr-only">
           Choose who can open this {kind} and what they can do.
         </DialogDescription>
       </DialogHeader>
 
-      {loading ? (
+      {phase === "loading" && (
         <div className="flex items-center justify-center py-10">
           <Spinner className="size-6 text-muted-foreground" />
         </div>
-      ) : denied || !data ? (
+      )}
+
+      {phase === "denied" && (
         <div className="flex items-start gap-3 rounded-2xl bg-muted/60 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p>
@@ -258,15 +275,16 @@ function ShareItemBody({
             access.
           </p>
         </div>
-      ) : (
-        <div className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto pr-1">
-          {/* Add people */}
-          <section className="flex flex-col gap-2" aria-label="Add people">
+      )}
+
+      {phase === "ready" && data && (
+        <div className="-m-1 flex max-h-[70vh] flex-col gap-5 overflow-y-auto p-1">
+          <section className="flex flex-col gap-3" aria-label="Add people">
             <PeoplePicker
               itemId={itemId}
               selected={recipients}
-              onChange={setRecipients}
-              disabled={sharing}
+              onChange={(next) => dispatch({ type: "recipients", recipients: next })}
+              disabled={busy.kind === "sharing"}
             />
             {recipients.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
@@ -274,42 +292,48 @@ function ShareItemBody({
                   label="Role for the people you are adding"
                   value={activeRole}
                   choices={roles}
-                  onChange={setNewRole}
+                  onChange={(role) => dispatch({ type: "role", role })}
                 />
-                <label className="flex items-center gap-2 text-xs">
-                  Expires
-                  <Input
-                    type="date"
-                    aria-label="Expiry date for the new access"
-                    className="h-8 w-40 text-xs"
-                    value={newExpiry}
-                    onChange={(e) => setNewExpiry(e.target.value)}
-                  />
-                </label>
+                <Input
+                  type="date"
+                  aria-label="Expiry date for the new access"
+                  className="w-auto"
+                  value={expiry}
+                  onChange={(e) =>
+                    dispatch({ type: "expiry", expiry: e.target.value })
+                  }
+                />
                 <Button
                   type="button"
                   className="ml-auto"
-                  disabled={sharing || !activeRole}
+                  disabled={!idle || !activeRole}
                   onClick={handleShare}
                 >
-                  {sharing ? <Spinner /> : null}
+                  {busy.kind === "sharing" ? <Spinner /> : null}
                   Share
                 </Button>
               </div>
             )}
           </section>
 
-          {/* People with access */}
           <section
             className="flex flex-col gap-2"
             aria-label="People with access"
           >
-            <h3 className="text-sm font-medium">People with access</h3>
+            <div className="flex flex-col gap-0.5">
+              <h3 className="text-sm font-medium">People with access</h3>
+              {grants.length === 0 && inherited.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Only the owner can open this. Add people below to share it.
+                </p>
+              )}
+            </div>
             <PeopleWithAccess
               owner={data.owner}
               grants={grants}
+              inherited={inherited}
               roles={roles}
-              busyId={busyId}
+              busyId={busy.kind === "grant" ? busy.id : null}
               canManage
               onChangeRole={handleChangeRole}
               onRemove={handleRemove}
@@ -321,20 +345,19 @@ function ShareItemBody({
               ...data.generalAccess,
               expiresAt: asIso(data.generalAccess.expiresAt),
             }}
+            levels={levels}
             roles={roles}
             canManage
-            busy={generalBusy}
+            busy={!idle}
             onChange={handleGeneral}
-            onCopyLink={copyLink}
-            copied={copied}
           />
 
           {item.parentId ? (
             <section
-              className="flex items-start justify-between gap-3 rounded-2xl bg-muted/40 p-3"
+              className="flex items-center justify-between gap-4 rounded-2xl bg-muted/40 p-4"
               aria-label="Inherited access"
             >
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {data.inheritsPermissions
                   ? `People with access to the folder above can also open this ${kind}.`
                   : `Only the people listed here can open this ${kind}. Access from the folder above doesn't apply.`}
@@ -342,13 +365,11 @@ function ShareItemBody({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 className="shrink-0"
+                disabled={!idle}
                 onClick={() => handleInheritance(!data.inheritsPermissions)}
               >
-                {data.inheritsPermissions
-                  ? "Restrict access"
-                  : "Inherit access"}
+                {data.inheritsPermissions ? "Restrict access" : "Inherit access"}
               </Button>
             </section>
           ) : null}
@@ -364,7 +385,15 @@ function ShareItemBody({
         </div>
       )}
 
-      <DialogFooter>
+      <DialogFooter className="sm:justify-between">
+        {phase === "ready" ? (
+          <Button type="button" variant="outline" onClick={copyLink}>
+            <Link2 />
+            {copied ? "Copied" : "Copy link"}
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button type="button" onClick={onClose}>
           Done
         </Button>

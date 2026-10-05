@@ -1,9 +1,9 @@
 ---
 title: End-to-End Download Sessions
-description: The highly efficient, zero-graph protocol powering Platrium's downloads.
+description: The highly efficient, zero-lookup protocol powering Platrium's downloads.
 ---
 
-Downloading a file efficiently at scale is just as complex as uploading. You need to stream massive files, support pausing/resuming, and securely route requests to potentially different storage backends—all without crushing the primary Graph database.
+Downloading a file efficiently at scale is just as complex as uploading. You need to stream massive files, support pausing/resuming, and securely route requests to potentially different storage backends—all without crushing the primary database.
 
 To achieve this, Platrium uses a **Download Session Flow** powered by intelligent JWT passports and a highly optimized index-to-hash mapping engine.
 
@@ -25,7 +25,7 @@ sequenceDiagram
 
     note over C, A: Stage 1: Initialize Session
     C->>A: POST /api/files/downloadsession/init (FileId)
-    A->>A: Fetch File Node & InlineChunks from Graph
+    A->>A: Fetch file row & inline_chunks from the database
     A-->>C: 200 OK (Returns JWT Passport with File Geometry)
     
     note over C, S3: Stage 2: Batch Presigning (up to 512 chunks)
@@ -49,9 +49,9 @@ sequenceDiagram
 
 When a client wants to download a file, they hit `POST /api/files/downloadsession/init` with the `file_id`. 
 
-To initiate the download, the backend queries the Neo4j Graph Database to find the file. Because 99% of normal user files are under 16MB (4 chunks), Platrium natively stores the file's geometry (the array of chunk hashes) directly on the File Node property as an `InlineChunks` array.
+To initiate the download, the backend loads the file's row from the database (`drive_items`). Because 99% of normal user files are under 16MB (4 chunks), Platrium natively stores the file's geometry (the array of chunk hashes) directly on the row, in the `inline_chunks` column, exposed as an `InlineChunks` array.
 
-Instead of keeping this connection open or forcing the client to query the graph database for every chunk, the backend mints a **Download Session Passport**—a cryptographically signed JSON Web Token (JWT) containing the `InlineChunks` array:
+Instead of keeping this connection open or forcing the client to query the database for every chunk, the backend mints a **Download Session Passport**—a cryptographically signed JSON Web Token (JWT) containing the `InlineChunks` array:
 
 ```go
 type DownloadSessionPassportClaims struct {
@@ -66,18 +66,18 @@ The client receives this JWT and uses it for the rest of the download lifecycle.
 
 :::info
 **Files > 16MB (Manifest Repo)**
-If a file is larger than 4 chunks, Neo4j will store `[]` (an empty array), and the JWT will simply be minted with a `null` value for `inline_chunks`. In Stage 2, the backend will dynamically fallback to reading the structural geometry from the high-performance `ManifestRepo` instead!
+If a file is larger than 4 chunks, `inline_chunks` is left `NULL` in the database, and the JWT will simply be minted with a `null` value for `inline_chunks`. In Stage 2, the backend will dynamically fallback to reading the structural geometry from the high-performance `ManifestRepo` instead!
 :::
 
 ## Stage 2: Batch Presigning & Index Mapping
 
 The client needs to download chunks sequentially to reconstruct the file. It sends a batch of requested indices (e.g., `{"indices": [0, 1, 2]}`) along with the JWT passport to `POST /api/files/downloadsession/chunks`.
 
-### 1. Zero-Graph Resolution
+### 1. Zero-Database Resolution
 The backend verifies the JWT and decodes the payload. It extracts the client's requested indices and maps them directly to the `InlineChunks` array embedded in the token. 
 *Example: Index `0` -> `hashA`, Index `1` -> `hashB`.*
 
-Because the data is securely sealed in the JWT, **the backend never queries the Graph database!**
+Because the data is securely sealed in the JWT, **the backend never queries the database for chunk geometry!**
 
 ### 2. Algorithmic Deduplication
 Files are often heavily deduplicated. It's very possible that index `0` and index `50` in the same file are the exact same chunk hash. 

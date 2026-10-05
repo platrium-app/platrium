@@ -3,40 +3,26 @@ package sqlauthz
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"platrium/internal/authz"
 	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/driveitem"
 	"platrium/internal/infra/db/ent/grant"
-	"platrium/internal/infra/db/ent/tenant"
 )
 
-// generalRoles are the roles general access may carry.
-var generalRoles = map[authz.GeneralAccessLevel][]authz.Role{
-	authz.AccessTenant: {authz.RoleViewer, authz.RoleFullEditor}, // Viewer or Editor
-	authz.AccessPublic: {authz.RoleViewer},
-}
-
-func roleAllowed(level authz.GeneralAccessLevel, role authz.Role) bool {
-	for _, r := range generalRoles[level] {
-		if r == role {
-			return true
-		}
-	}
-	return false
-}
-
 // SetGeneralAccess sets an item's general access, replacing whatever it was.
-// An item has at most one general-access grant: a TENANT grant or a PUBLIC one.
+// An item has at most one general-access grant, whose kind is the level's
+// subject. Levels are defined in authz.Levels; nothing here names one.
 func (a *Authorizer) SetGeneralAccess(ctx context.Context, actor authz.Principal, in authz.GeneralAccessInput) error {
+	def, ok := authz.LevelOf(in.Level)
+	if !ok {
+		return fmt.Errorf("%w: unknown access level %q", authz.ErrInvalid, in.Level)
+	}
+
 	var caps authz.Capability
-	switch in.Level {
-	case authz.AccessRestricted:
-	case authz.AccessTenant, authz.AccessPublic:
-		if !roleAllowed(in.Level, in.Role) {
-			return fmt.Errorf("%w: role %q is not available for %s access", authz.ErrInvalid, in.Role, in.Level)
-		}
+	if def.Stored() {
 		c, err := authz.GrantCaps(in.Role, in.NoDownload)
 		if err != nil {
 			return fmt.Errorf("%w: role %q cannot be granted", authz.ErrInvalid, in.Role)
@@ -45,19 +31,23 @@ func (a *Authorizer) SetGeneralAccess(ctx context.Context, actor authz.Principal
 		if in.ExpiresAt != nil && !in.ExpiresAt.After(time.Now()) {
 			return fmt.Errorf("%w: expiry must be in the future", authz.ErrInvalid)
 		}
-	default:
-		return fmt.Errorf("%w: unknown access level %q", authz.ErrInvalid, in.Level)
 	}
 
 	actorCaps, err := a.require(ctx, actor, in.ItemID, authz.CapShare)
 	if err != nil {
 		return err
 	}
-	if !caps.SubsetOf(actorCaps) {
-		return fmt.Errorf("%w: cannot grant capabilities you do not hold", authz.ErrForbidden)
+
+	// Every stored level keeps its grant under its own subject kind; setting one
+	// level removes the others'.
+	var kinds []string
+	for _, l := range authz.Levels() {
+		if l.Stored() {
+			kinds = append(kinds, string(l.Subject))
+		}
 	}
 
-	return a.db.WithTx(ctx, func(tx *ent.Tx) error {
+	return a.changeTx(ctx, func(tx *ent.Tx) error {
 		item, err := tx.DriveItem.Query().
 			Where(driveitem.ID(in.ItemID), driveitem.TenantID(actor.TenantID)).
 			Only(ctx)
@@ -67,42 +57,56 @@ func (a *Authorizer) SetGeneralAccess(ctx context.Context, actor authz.Principal
 			}
 			return err
 		}
-
-		// Remove the general-access grants that no longer apply.
-		var drop []string
-		switch in.Level {
-		case authz.AccessRestricted:
-			drop = []string{string(authz.SubjectTenant), string(authz.SubjectPublic)}
-		case authz.AccessTenant:
-			drop = []string{string(authz.SubjectPublic)}
-		case authz.AccessPublic:
-			drop = []string{string(authz.SubjectTenant)}
-			if err := a.requirePublicAllowed(ctx, tx, actor.TenantID); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.Grant.Delete().Where(grant.ResourceID(item.ID), grant.SubjectTypeIn(drop...)).Exec(ctx); err != nil {
+		d, err := a.lockDrive(ctx, tx, item.DriveID)
+		if err != nil {
 			return err
 		}
 
-		switch in.Level {
-		case authz.AccessTenant:
-			_, err = upsertGrant(ctx, tx, item, authz.Subject{Type: authz.SubjectTenant, ID: actor.TenantID}, in.Role, caps, in.ExpiresAt, actor.UserID)
-		case authz.AccessPublic:
-			_, err = upsertGrant(ctx, tx, item, authz.Subject{Type: authz.SubjectPublic, ID: authz.PublicSubjectID}, in.Role, caps, in.ExpiresAt, actor.UserID)
+		err = a.checkChange(ctx, tx, pending{
+			op: authz.OpGeneralAccess, actor: actor, actorCaps: actorCaps, item: item, drive: d,
+			after: func(before []authz.Grant) []authz.Grant {
+				out := make([]authz.Grant, 0, len(before)+1)
+				for _, g := range before {
+					if !slices.Contains(kinds, string(g.Subject.Type)) {
+						out = append(out, g)
+					}
+				}
+				if def.Stored() {
+					out = append(out, authz.Grant{Subject: def.SubjectFor(actor.TenantID), Role: in.Role, Caps: caps, ExpiresAt: in.ExpiresAt})
+				}
+				return out
+			},
+		})
+		if err != nil {
+			return err
 		}
+
+		if _, err := tx.Grant.Delete().Where(grant.ResourceID(item.ID), grant.SubjectTypeIn(kinds...)).Exec(ctx); err != nil {
+			return err
+		}
+		if !def.Stored() {
+			return nil
+		}
+		_, err = upsertGrant(ctx, tx, item, def.SubjectFor(actor.TenantID), in.Role, caps, in.ExpiresAt, actor.UserID)
 		return err
 	})
 }
 
-// requirePublicAllowed fails unless the tenant permits public sharing.
-func (a *Authorizer) requirePublicAllowed(ctx context.Context, tx *ent.Tx, tenantID string) error {
-	t, err := tx.Tenant.Query().Where(tenant.ID(tenantID)).Only(ctx)
+// GeneralAccessOptions lists the levels the actor can choose for an item.
+func (a *Authorizer) GeneralAccessOptions(ctx context.Context, actor authz.Principal, itemID string) ([]authz.LevelDef, error) {
+	if _, err := a.require(ctx, actor, itemID, authz.CapShare); err != nil {
+		return nil, err
+	}
+	publicOK, err := a.publicAllowed(ctx, map[string]bool{}, actor.TenantID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !t.AllowPublicSharing {
-		return fmt.Errorf("%w: your organization does not allow public sharing", authz.ErrForbidden)
+	var out []authz.LevelDef
+	for _, d := range authz.Levels() {
+		if d.RequiresPublicSharing && !publicOK {
+			continue
+		}
+		out = append(out, d)
 	}
-	return nil
+	return out, nil
 }

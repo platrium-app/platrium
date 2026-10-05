@@ -39,7 +39,7 @@ func (r *mutationResolver) ShareItem(ctx context.Context, input ShareInput) (*Ac
 	if err != nil {
 		return nil, err
 	}
-	return mapGrant(*g, names), nil
+	return mapGrant(*g, names, p.UserID), nil
 }
 
 // RevokeAccess is the resolver for the revokeAccess field.
@@ -116,7 +116,28 @@ func (r *queryResolver) ShareRoles(ctx context.Context, itemID string) ([]*RoleO
 	options := authz.RoleOptions(context)
 	out := make([]*RoleOption, 0, len(options))
 	for _, o := range options {
-		out = append(out, &RoleOption{Role: string(o.Role), Label: o.Label, Description: o.Description, Capabilities: o.Caps.Verbs()})
+		out = append(out, &RoleOption{Role: string(o.Role), Label: o.Label, Description: o.Description, Capabilities: o.Caps.Verbs(), DownloadOptional: o.DownloadOptional})
+	}
+	return out, nil
+}
+
+// GeneralAccessOptions is the resolver for the generalAccessOptions field.
+func (r *queryResolver) GeneralAccessOptions(ctx context.Context, itemID string) ([]*AccessLevelOption, error) {
+	p, err := actor.Principal(ctx, r.Authz)
+	if err != nil {
+		return nil, err
+	}
+	levels, err := r.Authz.GeneralAccessOptions(ctx, p, itemID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*AccessLevelOption, 0, len(levels))
+	for _, l := range levels {
+		roles := make([]string, 0, len(l.Roles))
+		for _, role := range l.Roles {
+			roles = append(roles, string(role))
+		}
+		out = append(out, &AccessLevelOption{Level: string(l.Level), Label: l.Label, Blurb: l.Blurb, Roles: roles, SupportsExpiry: l.SupportsExpiry})
 	}
 	return out, nil
 }
@@ -198,12 +219,17 @@ func (r *queryResolver) ItemAccess(ctx context.Context, itemID string) (*ItemAcc
 	if err != nil {
 		return nil, err
 	}
-	names, err := r.subjectNames(ctx, p.TenantID, access.Grants)
+	// Names for the direct and the inherited grants in one batched lookup.
+	all := append([]authz.Grant(nil), access.Grants...)
+	for _, ig := range access.Inherited {
+		all = append(all, ig.Grant)
+	}
+	names, err := r.subjectNames(ctx, p.TenantID, all)
 	if err != nil {
 		return nil, err
 	}
 
-	owner, err := r.ownerSubject(ctx, p.TenantID, access.OwnerUserID)
+	owner, err := r.ownerSubject(ctx, p.TenantID, access.OwnerUserID, p.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,13 +241,17 @@ func (r *queryResolver) ItemAccess(ctx context.Context, itemID string) (*ItemAcc
 		InheritsPermissions: access.InheritsPermissions,
 		GeneralAccess:       mapGeneralAccess(level, general),
 		Grants:              []*AccessGrant{},
+		Inherited:           []*AccessGrant{},
 	}
 	for _, g := range access.Grants {
 		// General access is reported on its own, above the named grants.
 		if g.Subject.Type == authz.SubjectTenant || g.Subject.Type == authz.SubjectPublic {
 			continue
 		}
-		out.Grants = append(out.Grants, mapGrant(g, names))
+		out.Grants = append(out.Grants, mapGrant(g, names, p.UserID))
+	}
+	for _, g := range access.Inherited {
+		out.Inherited = append(out.Inherited, mapInheritedGrant(g, names, p.UserID))
 	}
 	return out, nil
 }

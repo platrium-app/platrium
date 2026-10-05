@@ -14,9 +14,6 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-    "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n": typeof types.GetDrivesDocument,
-    "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n": typeof types.CanCreateSharedDriveDocument,
-    "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.CreateSharedDriveDocument,
     "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": typeof types.GetSubfoldersSidebarDocument,
     "\n  query GetAuthConfig {\n    tenantAuthConfig {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": typeof types.GetAuthConfigDocument,
     "\n  mutation CreateFolder($parentId: ID!, $name: String!) {\n    createFolder(parentId: $parentId, name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.CreateFolderDocument,
@@ -25,8 +22,9 @@ type Documents = {
     "\n  mutation CopyFile($fileId: ID!, $newParentId: ID!, $newName: String!) {\n    copyFile(fileId: $fileId, newParentId: $newParentId, newName: $newName) {\n      id\n      name\n      parentId\n    }\n  }\n": typeof types.CopyFileDocument,
     "\n  query GetDrivesForPicker {\n    drives {\n      id\n      name\n    }\n  }\n": typeof types.GetDrivesForPickerDocument,
     "\n  query GetSubfoldersPicker($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": typeof types.GetSubfoldersPickerDocument,
-    "\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n      }\n    }\n  }\n": typeof types.ItemAccessDocument,
-    "\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n    }\n  }\n": typeof types.ShareRolesDocument,
+    "\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n        isYou\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n      }\n      inherited {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n        inheritedFrom {\n          id\n          name\n        }\n      }\n    }\n  }\n": typeof types.ItemAccessDocument,
+    "\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n      downloadOptional\n    }\n  }\n": typeof types.ShareRolesDocument,
+    "\n  query GeneralAccessOptions($itemId: ID!) {\n    generalAccessOptions(itemId: $itemId) {\n      level\n      label\n      blurb\n      roles\n      supportsExpiry\n    }\n  }\n": typeof types.GeneralAccessOptionsDocument,
     "\n  query SearchDirectory($query: String!, $first: Int, $exclude: ID) {\n    searchDirectory(\n      query: $query\n      first: $first\n      excludeAccessToItemId: $exclude\n    ) {\n      type\n      id\n      name\n      email\n    }\n  }\n": typeof types.SearchDirectoryDocument,
     "\n  mutation ShareItem($input: ShareInput!) {\n    shareItem(input: $input) {\n      id\n      subjectType\n      subjectId\n      subjectName\n      role\n      noDownload\n      capabilities\n      expiresAt\n    }\n  }\n": typeof types.ShareItemDocument,
     "\n  mutation RevokeAccess($grantId: ID!) {\n    revokeAccess(grantId: $grantId)\n  }\n": typeof types.RevokeAccessDocument,
@@ -34,13 +32,13 @@ type Documents = {
     "\n  mutation SetInheritance($itemId: ID!, $inherit: Boolean!) {\n    setInheritance(itemId: $itemId, inherit: $inherit)\n  }\n": typeof types.SetInheritanceDocument,
     "\n  query GetEEAuthConfig($alias: String!) {\n    tenantAuthConfigByAlias(alias: $alias) {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": typeof types.GetEeAuthConfigDocument,
     "\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n": typeof types.DriveItemChangedDocument,
+    "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n": typeof types.GetDrivesDocument,
+    "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n": typeof types.CanCreateSharedDriveDocument,
+    "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.CreateSharedDriveDocument,
     "\n  query GetFolderInfo($id: ID!) {\n    item(id: $id) {\n      id\n      parentId\n      name\n      type\n      myCapabilities\n      path {\n        id\n        name\n      }\n    }\n  }\n": typeof types.GetFolderInfoDocument,
     "\n  query GetFolderContents($folderId: ID!, $first: Int, $after: String) {\n    folderContents(folderId: $folderId, first: $first, after: $after) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          parentId\n          name\n          type\n          myCapabilities\n          createdAt\n          updatedAt\n          ... on File {\n            size\n            mimeType\n          }\n        }\n      }\n    }\n  }\n": typeof types.GetFolderContentsDocument,
 };
 const documents: Documents = {
-    "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n": types.GetDrivesDocument,
-    "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n": types.CanCreateSharedDriveDocument,
-    "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n": types.CreateSharedDriveDocument,
     "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": types.GetSubfoldersSidebarDocument,
     "\n  query GetAuthConfig {\n    tenantAuthConfig {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": types.GetAuthConfigDocument,
     "\n  mutation CreateFolder($parentId: ID!, $name: String!) {\n    createFolder(parentId: $parentId, name: $name) {\n      id\n      name\n    }\n  }\n": types.CreateFolderDocument,
@@ -49,8 +47,9 @@ const documents: Documents = {
     "\n  mutation CopyFile($fileId: ID!, $newParentId: ID!, $newName: String!) {\n    copyFile(fileId: $fileId, newParentId: $newParentId, newName: $newName) {\n      id\n      name\n      parentId\n    }\n  }\n": types.CopyFileDocument,
     "\n  query GetDrivesForPicker {\n    drives {\n      id\n      name\n    }\n  }\n": types.GetDrivesForPickerDocument,
     "\n  query GetSubfoldersPicker($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": types.GetSubfoldersPickerDocument,
-    "\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n      }\n    }\n  }\n": types.ItemAccessDocument,
-    "\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n    }\n  }\n": types.ShareRolesDocument,
+    "\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n        isYou\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n      }\n      inherited {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n        inheritedFrom {\n          id\n          name\n        }\n      }\n    }\n  }\n": types.ItemAccessDocument,
+    "\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n      downloadOptional\n    }\n  }\n": types.ShareRolesDocument,
+    "\n  query GeneralAccessOptions($itemId: ID!) {\n    generalAccessOptions(itemId: $itemId) {\n      level\n      label\n      blurb\n      roles\n      supportsExpiry\n    }\n  }\n": types.GeneralAccessOptionsDocument,
     "\n  query SearchDirectory($query: String!, $first: Int, $exclude: ID) {\n    searchDirectory(\n      query: $query\n      first: $first\n      excludeAccessToItemId: $exclude\n    ) {\n      type\n      id\n      name\n      email\n    }\n  }\n": types.SearchDirectoryDocument,
     "\n  mutation ShareItem($input: ShareInput!) {\n    shareItem(input: $input) {\n      id\n      subjectType\n      subjectId\n      subjectName\n      role\n      noDownload\n      capabilities\n      expiresAt\n    }\n  }\n": types.ShareItemDocument,
     "\n  mutation RevokeAccess($grantId: ID!) {\n    revokeAccess(grantId: $grantId)\n  }\n": types.RevokeAccessDocument,
@@ -58,6 +57,9 @@ const documents: Documents = {
     "\n  mutation SetInheritance($itemId: ID!, $inherit: Boolean!) {\n    setInheritance(itemId: $itemId, inherit: $inherit)\n  }\n": types.SetInheritanceDocument,
     "\n  query GetEEAuthConfig($alias: String!) {\n    tenantAuthConfigByAlias(alias: $alias) {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": types.GetEeAuthConfigDocument,
     "\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n": types.DriveItemChangedDocument,
+    "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n": types.GetDrivesDocument,
+    "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n": types.CanCreateSharedDriveDocument,
+    "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n": types.CreateSharedDriveDocument,
     "\n  query GetFolderInfo($id: ID!) {\n    item(id: $id) {\n      id\n      parentId\n      name\n      type\n      myCapabilities\n      path {\n        id\n        name\n      }\n    }\n  }\n": types.GetFolderInfoDocument,
     "\n  query GetFolderContents($folderId: ID!, $first: Int, $after: String) {\n    folderContents(folderId: $folderId, first: $first, after: $after) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          parentId\n          name\n          type\n          myCapabilities\n          createdAt\n          updatedAt\n          ... on File {\n            size\n            mimeType\n          }\n        }\n      }\n    }\n  }\n": types.GetFolderContentsDocument,
 };
@@ -76,18 +78,6 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n"): (typeof documents)["\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n"): (typeof documents)["\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -123,11 +113,15 @@ export function graphql(source: "\n  query GetSubfoldersPicker($folderId: ID!) {
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n      }\n    }\n  }\n"): (typeof documents)["\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n      }\n    }\n  }\n"];
+export function graphql(source: "\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n        isYou\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n      }\n      inherited {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n        inheritedFrom {\n          id\n          name\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query ItemAccess($itemId: ID!) {\n    itemAccess(itemId: $itemId) {\n      itemId\n      inheritsPermissions\n      owner {\n        type\n        id\n        name\n        email\n        isYou\n      }\n      generalAccess {\n        level\n        role\n        noDownload\n        expiresAt\n      }\n      grants {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n      }\n      inherited {\n        id\n        subjectType\n        subjectId\n        subjectName\n        role\n        noDownload\n        capabilities\n        expiresAt\n        isYou\n        inheritedFrom {\n          id\n          name\n        }\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n    }\n  }\n"): (typeof documents)["\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n    }\n  }\n"];
+export function graphql(source: "\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n      downloadOptional\n    }\n  }\n"): (typeof documents)["\n  query ShareRoles($itemId: ID!) {\n    shareRoles(itemId: $itemId) {\n      role\n      label\n      description\n      capabilities\n      downloadOptional\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query GeneralAccessOptions($itemId: ID!) {\n    generalAccessOptions(itemId: $itemId) {\n      level\n      label\n      blurb\n      roles\n      supportsExpiry\n    }\n  }\n"): (typeof documents)["\n  query GeneralAccessOptions($itemId: ID!) {\n    generalAccessOptions(itemId: $itemId) {\n      level\n      label\n      blurb\n      roles\n      supportsExpiry\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -156,6 +150,18 @@ export function graphql(source: "\n  query GetEEAuthConfig($alias: String!) {\n 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n"): (typeof documents)["\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n"): (typeof documents)["\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n"): (typeof documents)["\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

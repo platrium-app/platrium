@@ -10,6 +10,7 @@ export const ITEM_ACCESS = graphql(`
         id
         name
         email
+        isYou
       }
       generalAccess {
         level
@@ -26,6 +27,22 @@ export const ITEM_ACCESS = graphql(`
         noDownload
         capabilities
         expiresAt
+        isYou
+      }
+      inherited {
+        id
+        subjectType
+        subjectId
+        subjectName
+        role
+        noDownload
+        capabilities
+        expiresAt
+        isYou
+        inheritedFrom {
+          id
+          name
+        }
       }
     }
   }
@@ -38,6 +55,19 @@ export const SHARE_ROLES = graphql(`
       label
       description
       capabilities
+      downloadOptional
+    }
+  }
+`)
+
+export const GENERAL_ACCESS_OPTIONS = graphql(`
+  query GeneralAccessOptions($itemId: ID!) {
+    generalAccessOptions(itemId: $itemId) {
+      level
+      label
+      blurb
+      roles
+      supportsExpiry
     }
   }
 `)

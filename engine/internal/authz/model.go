@@ -107,27 +107,45 @@ type GeneralAccessInput struct {
 // GeneralAccessOf reads an item's general access from its grants. It returns
 // the level and the grant behind it (nil when restricted).
 func GeneralAccessOf(grants []Grant) (GeneralAccessLevel, *Grant) {
-	var tenant *Grant
-	for i := range grants {
-		switch grants[i].Subject.Type {
-		case SubjectPublic:
-			return AccessPublic, &grants[i]
-		case SubjectTenant:
-			tenant = &grants[i]
+	// The widest level present wins.
+	for i := len(levels) - 1; i >= 0; i-- {
+		if !levels[i].Stored() {
+			continue
 		}
-	}
-	if tenant != nil {
-		return AccessTenant, tenant
+		for j := range grants {
+			if grants[j].Subject.Type == levels[i].Subject {
+				return levels[i].Level, &grants[j]
+			}
+		}
 	}
 	return AccessRestricted, nil
 }
 
-// ItemAccess is everything that decides who can open an item beyond its
-// ancestors: whether it inherits, and the grants placed on it directly.
+// ItemRef names an item, for saying where access comes from.
+type ItemRef struct {
+	// ID is empty when the viewer cannot open the item, so a name they could not
+	// otherwise see is not given away either.
+	ID   string
+	Name string
+}
+
+// InheritedGrant is a grant that applies to an item because of a folder or
+// drive above it.
+type InheritedGrant struct {
+	Grant
+	From ItemRef
+}
+
+// ItemAccess is who can open an item: whether it inherits, the grants placed on
+// it directly, and the access that reaches it from above.
 type ItemAccess struct {
 	ItemID              string
 	InheritsPermissions bool
 	Grants              []Grant
+	// Inherited is the access that comes from ancestors, nearest first: every
+	// grant above an unrestricted item, and only managers' grants above a
+	// restriction. It is read-only here; it is changed where it was granted.
+	Inherited []InheritedGrant
 	// OwnerUserID is the user who owns the item's drive. Empty for shared
 	// drives, which belong to the tenant.
 	OwnerUserID string

@@ -98,7 +98,7 @@ func (r *Resolver) subjectNames(ctx context.Context, tenantID string, grants []a
 
 func subjectKey(t authz.SubjectType, id string) string { return string(t) + ":" + id }
 
-func mapGrant(g authz.Grant, names map[string]string) *AccessGrant {
+func mapGrant(g authz.Grant, names map[string]string, viewerID string) *AccessGrant {
 	role, noDownload := authz.Describe(g.Caps)
 
 	name := names[subjectKey(g.Subject.Type, g.Subject.ID)]
@@ -115,7 +115,20 @@ func mapGrant(g authz.Grant, names map[string]string) *AccessGrant {
 		Capabilities: g.Caps.Verbs(),
 		ExpiresAt:    g.ExpiresAt,
 		CreatedAt:    g.CreatedAt,
+		IsYou:        g.Subject.Type == authz.SubjectUser && g.Subject.ID == viewerID,
 	}
+}
+
+// mapInheritedGrant is mapGrant for access that comes from above the item.
+func mapInheritedGrant(g authz.InheritedGrant, names map[string]string, viewerID string) *AccessGrant {
+	out := mapGrant(g.Grant, names, viewerID)
+	ref := &ItemRef{Name: g.From.Name}
+	if g.From.ID != "" {
+		id := g.From.ID
+		ref.ID = &id
+	}
+	out.InheritedFrom = ref
+	return out
 }
 
 // mapGeneralAccess describes an item's general access from the grant behind it.
@@ -142,7 +155,7 @@ func parseRole(s string) (authz.Role, error) {
 
 // ownerSubject describes who owns a drive: a person for a private drive, or
 // the organization when ownerUserID is empty (a shared drive).
-func (r *Resolver) ownerSubject(ctx context.Context, tenantID, ownerUserID string) (*DirectorySubject, error) {
+func (r *Resolver) ownerSubject(ctx context.Context, tenantID, ownerUserID, viewerID string) (*DirectorySubject, error) {
 	if ownerUserID == "" {
 		t, err := r.TenantStore.GetTenant(ctx, tenantID)
 		if err != nil {
@@ -162,7 +175,7 @@ func (r *Resolver) ownerSubject(ctx context.Context, tenantID, ownerUserID strin
 	if name == "" {
 		name = email
 	}
-	return &DirectorySubject{Type: string(authz.SubjectUser), ID: u.ID, Name: name, Email: &email}, nil
+	return &DirectorySubject{Type: string(authz.SubjectUser), ID: u.ID, Name: name, Email: &email, IsYou: u.ID == viewerID}, nil
 }
 
 // creatorGroups lists the groups allowed to create shared drives, with names.

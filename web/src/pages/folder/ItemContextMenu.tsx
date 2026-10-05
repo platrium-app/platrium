@@ -1,5 +1,5 @@
 import React from "react"
-import { Download, Share2, Pencil, Trash2, Info, ArrowUpDown, FileUp } from "lucide-react"
+import { Download, Share2, UserCog, Pencil, Trash2, Info, ArrowUpDown, FileUp } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -8,7 +8,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import type { DriveItemNode, DriveOperation } from "./FolderViewTypes"
-import { allCan } from "@/lib/capabilities"
+import { allCan, isSharedDriveRoot } from "@/lib/capabilities"
 import { triggerFileDownload } from "@/lib/utils"
 
 export interface ItemContextMenuProps {
@@ -25,6 +25,7 @@ export function ItemContextMenu({ children, item, selectedItems = [item], onOper
   // What the server says this user may do. Hidden actions would be refused anyway.
   const canDownload = allCan(selectedItems, "DOWNLOAD")
   const canShare = !isMulti && allCan(selectedItems, "SHARE")
+  const manageAccess = canShare && isSharedDriveRoot(selectedItems[0])
   const canRename = !isMulti && allCan(selectedItems, "EDIT")
   const canMove = allCan(selectedItems, "MOVE")
   const canCopy = !isMulti && allFiles && canDownload
@@ -41,8 +42,8 @@ export function ItemContextMenu({ children, item, selectedItems = [item], onOper
         )}
         {canShare && (
           <ContextMenuItem onClick={() => onOperation?.("SHARE", selectedItems)}>
-            <Share2 className="size-4 text-muted-foreground" />
-            <span>Share</span>
+            {manageAccess ? <UserCog className="size-4 text-muted-foreground" /> : <Share2 className="size-4 text-muted-foreground" />}
+            <span>{manageAccess ? "Manage access" : "Share"}</span>
           </ContextMenuItem>
         )}
 

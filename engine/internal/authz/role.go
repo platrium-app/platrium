@@ -59,6 +59,9 @@ type RoleOption struct {
 	Label       string
 	Description string
 	Caps        Capability
+	// DownloadOptional says a grant of this role may withhold download. Roles
+	// that edit need the content, so only a read-only role offers it.
+	DownloadOptional bool
 }
 
 // RoleOptions lists the roles to offer in a context, least privileged first,
@@ -89,7 +92,7 @@ func RoleOptions(c RoleContext) []RoleOption {
 	out := make([]RoleOption, 0, len(roles))
 	for _, r := range roles {
 		caps, _ := r.Caps()
-		out = append(out, RoleOption{Role: r, Label: words[r].label, Description: words[r].description, Caps: caps})
+		out = append(out, RoleOption{Role: r, Label: words[r].label, Description: words[r].description, Caps: caps, DownloadOptional: r == RoleViewer})
 	}
 	return out
 }

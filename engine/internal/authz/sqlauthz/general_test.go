@@ -220,3 +220,40 @@ func TestPublicAccessNeverCrossesTenants(t *testing.T) {
 		t.Fatalf("anonymous access works, got %s", got)
 	}
 }
+
+// The options a client may choose come from the level registry, minus levels the
+// tenant has switched off, and are only shown to someone who can share the item.
+func TestGeneralAccessOptions(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	s := newScene(t, e)
+
+	levelsOf := func(p authz.Principal) []authz.GeneralAccessLevel {
+		t.Helper()
+		opts, err := e.az.GeneralAccessOptions(ctx, p, s.docs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []authz.GeneralAccessLevel
+		for _, o := range opts {
+			out = append(out, o.Level)
+		}
+		return out
+	}
+
+	got := levelsOf(s.pa)
+	if len(got) != 3 || got[0] != authz.AccessRestricted || got[2] != authz.AccessPublic {
+		t.Fatalf("all levels, narrowest first: %v", got)
+	}
+
+	if err := e.db.Tenant.Update().Where(enttenant.ID(s.tn.id)).SetAllowPublicSharing(false).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := levelsOf(s.pa); len(got) != 2 || got[1] != authz.AccessTenant {
+		t.Fatalf("public is left out when the tenant forbids it: %v", got)
+	}
+
+	if _, err := e.az.GeneralAccessOptions(ctx, s.pb, s.docs); !errors.Is(err, authz.ErrNotFound) && !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("someone who cannot share must not see the options: %v", err)
+	}
+}

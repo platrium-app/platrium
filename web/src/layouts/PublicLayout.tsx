@@ -2,6 +2,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { AppBreadcrumbs } from "@/components/custom/AppBreadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import PlatriumLogo from "@/assets/PlatriumLogo"
 
 // The frame for visitors who are not signed in and opened something shared with
 // them by link: no sidebar, just a way to sign in.
@@ -12,8 +13,11 @@ export default function PublicLayout() {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <span className="text-sm font-medium">Platrium</span>
-        <Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-6" />
+        <div className="flex items-center gap-2 py-2">
+          <PlatriumLogo className="size-6" />
+          <span className="text-sm font-medium">Platrium</span>
+        </div>
+        <Separator orientation="vertical" className="mx-2 !h-full" />
         <div className="min-w-0 flex-1">
           <AppBreadcrumbs />
         </div>

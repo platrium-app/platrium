@@ -7,6 +7,8 @@ export interface Subject {
   id: string
   name: string
   email?: string | null
+  /** True when this is the signed-in user, as the server reports it. */
+  isYou?: boolean
 }
 
 /** Up to two initials for an avatar. */
