@@ -60,8 +60,8 @@ flowchart TD
 
 When an event is published, the Broker only receives a list of `UserIDs`. But how does it know whether to send a WebSocket ping to Chrome or an Apple Push Notification (APN) to a Macbook?
 
-This is where the **Device Store** comes in. Every time a user logs into Platrium via the web or installs the macOS app, we register a `Device` record bound to their `UserID`. 
-- For macOS, the device stores the unique APNs Device Token.
+This is where the **Device Store** comes in. Every time a user signs a native app in (iOS, macOS, Android), we register a `Device` record bound to their `UserID`, created together with the token the app signs in with (see [Native Clients](/architecture/authn/native-clients)). The app then registers its APNs or FCM token against that device. 
+- For Apple platforms, the device stores the unique APNs token (`push_transport` = `APNS`, `push_token`).
 - For the Web, the GraphQL connection itself registers an ephemeral listener.
 
 When `Broker.Publish(ctx, userIDs, event)` is called, the Broker queries the `DeviceStore` to resolve exactly which physical devices belong to those users, and fans the event out accordingly.

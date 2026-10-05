@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tokens are encrypted with a device-bound key, so neither they nor the accounts that refer to them are backed up. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" />
+        <exclude domain="database" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" />
+        <exclude domain="database" />
+    </device-transfer>
+</data-extraction-rules>

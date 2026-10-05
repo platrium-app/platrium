@@ -1,11 +1,42 @@
+import PlatriumCore
 import SwiftUI
-import FileProvider
 
 struct MainAppView: View {
+    @Environment(AccountStore.self) private var store
     @State private var selection: SidebarSelection? = .home
     @State private var path = NavigationPath()
 
     var body: some View {
+        @Bindable var store = store
+
+        Group {
+            if let storageError = store.storageError {
+                ContentUnavailableView(
+                    "Can't Open Your Accounts",
+                    systemImage: "externaldrive.badge.exclamationmark",
+                    description: Text(storageError)
+                )
+            } else if store.accounts.isEmpty {
+                // First run, or a server was added but nobody signed in yet.
+                ServerSetupView()
+            } else if let account = store.activeAccount, let server = store.activeServer, account.status == .needsReauth {
+                SignedOutView(account: account, server: server)
+            } else {
+                content
+            }
+        }
+        .sheet(isPresented: $store.isShowingAccountSwitcher) {
+            AccountSwitcherSheet()
+        }
+        // Another account's drive and folder ids mean nothing here.
+        .onChange(of: store.activeAccount?.id) { _, _ in
+            selection = .home
+            path.removeLast(path.count)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         Group {
             #if os(iOS)
             if UIDevice.current.userInterfaceIdiom == .phone {
@@ -16,32 +47,6 @@ struct MainAppView: View {
             #else
             macOSOrPadSplitView
             #endif
-        }
-        .onAppear {
-            registerTestDrive()
-        }
-    }
-    private func registerTestDrive() {
-        Task {
-            do {
-                // 1. Fetch and remove all existing domains to clear the macOS cache
-                let existingDomains = try await NSFileProviderManager.domains()
-                for domain in existingDomains {
-                    try await NSFileProviderManager.remove(domain)
-                }
-                
-                // 2. Create a fresh domain with a random UUID to guarantee a clean slate
-                let randomSuffix = UUID().uuidString.prefix(4)
-                let newDomain = NSFileProviderDomain(
-                    identifier: NSFileProviderDomainIdentifier(rawValue: "platrium_dev_\(randomSuffix)"),
-                    displayName: "Platrium Dev \(randomSuffix)"
-                )
-                
-                try await NSFileProviderManager.add(newDomain)
-                print("Successfully nuked old drives and added fresh domain: '\(newDomain.displayName)'!")
-            } catch {
-                print("Failed to register test drive: \(error.localizedDescription)")
-            }
         }
     }
 
@@ -65,6 +70,11 @@ struct MainAppView: View {
                 }
             }
         }
+        #if os(macOS)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { AccountMenu() }
+        }
+        #endif
         .onChange(of: selection) { _, _ in
             path.removeLast(path.count)
         }
@@ -73,4 +83,5 @@ struct MainAppView: View {
 
 #Preview {
     MainAppView()
+        .environment(AccountStore())
 }

@@ -18,7 +18,7 @@ if ('serviceWorker' in navigator) {
 initWasm().then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <PlatriumSdkProvider defaultUrl="http://localhost:3000/api">
+      <PlatriumSdkProvider defaultUrl={`${window.location.origin}/api`}>
         <ThemeProvider>
           <TooltipProvider>
             <App />

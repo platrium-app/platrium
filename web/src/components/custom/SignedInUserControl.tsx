@@ -1,8 +1,10 @@
 "use client"
 
+import { useNavigate } from "react-router-dom"
 import {
   LogOutIcon,
   MoreVerticalIcon,
+  SmartphoneIcon,
 } from "lucide-react"
 
 import {
@@ -36,6 +38,7 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const navigate = useNavigate()
 
   const handleLogout = async () => {
     try {
@@ -94,6 +97,10 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => navigate("/settings/devices")}>
+                <SmartphoneIcon />
+                Devices &amp; Apps
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOutIcon />
                 Log out

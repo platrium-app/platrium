@@ -7,6 +7,7 @@
 
 import FileProvider
 import Apollo
+import PlatriumCore
 import PlatriumGraphQL
 import PlatriumSDK
 import os
@@ -38,23 +39,25 @@ extension ApolloClient {
 class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     
     let domainId: String
-    let serverId: String
-    let userId: String
-    let apollo: ApolloClient
-    
+    /// The account behind this domain, or why there isn't one. A domain without
+    /// a usable account answers every request with `notAuthenticated`.
+    private let sessionResult: Result<DomainSession, Error>
+
     required init(domain: NSFileProviderDomain) {
         self.domainId = domain.identifier.rawValue
-        
-        // TODO: Look these up from a shared SQLite DB using domainId
-        self.serverId = "dummy-server-id"
-        self.userId = "dummy-user-id"
-        
-        // Setup GraphQL Client (Fallback Auth for now)
-        let serverUrl = URL(string: "http://172.20.0.179:3000/graphql")! // Assume default dev server
-        self.apollo = ApolloClient(url: serverUrl)
+        self.sessionResult = Result { try DomainSession.open(domainIdentifier: domain.identifier.rawValue) }
         logger.info("FileProviderExtension initialized for Domain ID: \(self.domainId, privacy: .public)")
-        
+
         super.init()
+    }
+
+    private func session() throws -> DomainSession {
+        try sessionResult.get()
+    }
+
+    /// What to hand back to the system for a failure on this domain.
+    private func fileProviderError(_ error: Error) -> Error {
+        (try? session())?.fileProviderError(error) ?? NSFileProviderError(.notAuthenticated)
     }
     
     func invalidate() {
@@ -77,7 +80,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 completionHandler(item, nil)
             } catch {
                 logger.error("item(for:) failed for \(identifier.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                completionHandler(nil, error)
+                completionHandler(nil, (try? self.session())?.mapAuthentication(error) ?? NSFileProviderError(.notAuthenticated))
             }
         }
         
@@ -86,7 +89,8 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     
     /// Fetches a single item's metadata (including parentId) from GraphQL
     private func fetchItemInfo(id: String) async throws -> FSEGetItemInfoQuery.Data.Item {
-        try await withCheckedThrowingContinuation { continuation in
+        let apollo = try session().apollo
+        return try await withCheckedThrowingContinuation { continuation in
             apollo.fetch(query: FSEGetItemInfoQuery(id: id), cachePolicy: .fetchIgnoringCacheData) { result in
                 switch result {
                 case .success(let gqlResult):
@@ -105,10 +109,9 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     func fetchContents(for itemIdentifier: NSFileProviderItemIdentifier, version requestedVersion: NSFileProviderItemVersion?, request: NSFileProviderRequest, completionHandler: @escaping (URL?, NSFileProviderItem?, Error?) -> Void) -> Progress {
         logger.info("fetchContents (full) called for: \(itemIdentifier.rawValue, privacy: .public)")
         let progress = Progress(totalUnitCount: -1) // -1 signifies indeterminate progress initially
-        let utility = ContentTransferUtility.shared // Access synchronously!
-        
         Task {
             do {
+                let utility = try self.session().contentTransfer()
                 // Run download and metadata fetch concurrently
                 async let downloadResult = utility.download(
                     fileId: itemIdentifier.rawValue,
@@ -124,7 +127,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 completionHandler(url, item, nil)
             } catch {
                 logger.error("fetchContents (full) failed for: \(itemIdentifier.rawValue, privacy: .public) error: \(error.localizedDescription, privacy: .public)")
-                let nsError = NSError(domain: NSCocoaErrorDomain, code: NSFileProviderError.serverUnreachable.rawValue, userInfo: [NSUnderlyingErrorKey: error])
+                let nsError = self.fileProviderError(error)
                 completionHandler(nil, nil, nsError)
             }
         }
@@ -145,7 +148,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                         name: itemTemplate.filename
                     )
 
-                    let result = try await apollo.performAsync(mutation: mutation)
+                    let result = try await self.session().apollo.performAsync(mutation: mutation)
                     guard let newFolderId = result.createFolder.id as String? else {
                         throw NSError(domain: "FSErrorDomain", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse createFolder response"])
                     }
@@ -166,7 +169,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 
                 logger.info("createItem called for file: \(itemTemplate.filename, privacy: .public) in parent: \(itemTemplate.parentItemIdentifier.rawValue, privacy: .public)")
                 
-                let utility = ContentTransferUtility.shared
+                let utility = try self.session().contentTransfer()
                 let newFileId = try await utility.upload(
                     parentId: itemTemplate.parentItemIdentifier.rawValue,
                     fileName: itemTemplate.filename,
@@ -181,7 +184,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 completionHandler(item, [], false, nil)
             } catch {
                 logger.error("createItem failed for file: \(itemTemplate.filename, privacy: .public) error: \(error.localizedDescription, privacy: .public)")
-                let nsError = NSError(domain: NSCocoaErrorDomain, code: NSFileProviderError.serverUnreachable.rawValue, userInfo: [NSUnderlyingErrorKey: error])
+                let nsError = self.fileProviderError(error)
                 completionHandler(nil, [], false, nsError)
             }
         }
@@ -199,7 +202,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 if changedFields.contains(.filename) {
                     logger.info("Renaming item: \\(item.itemIdentifier.rawValue) to \\(item.filename)")
                     let mutation = FSERenameItemMutation(id: item.itemIdentifier.rawValue, newName: item.filename)
-                    let result = try await apollo.performAsync(mutation: mutation)
+                    let result = try await self.session().apollo.performAsync(mutation: mutation)
                     
                     if let _ = result.renameItem.id as String? {
                         let info = try await self.fetchItemInfo(id: item.itemIdentifier.rawValue)
@@ -212,7 +215,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 if changedFields.contains(.parentItemIdentifier) {
                     logger.info("Moving item: \\(item.itemIdentifier.rawValue) to \\(item.parentItemIdentifier.rawValue)")
                     let mutation = FSEMoveItemMutation(id: item.itemIdentifier.rawValue, newParentId: item.parentItemIdentifier.rawValue)
-                    let result = try await apollo.performAsync(mutation: mutation)
+                    let result = try await self.session().apollo.performAsync(mutation: mutation)
                     
                     if let _ = result.moveItem.id as String? {
                         let info = try await self.fetchItemInfo(id: item.itemIdentifier.rawValue)
@@ -229,7 +232,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
                 }
             } catch {
                 logger.error("modifyItem failed: \\(error.localizedDescription)")
-                completionHandler(nil, [], false, error)
+                completionHandler(nil, [], false, (try? self.session())?.mapAuthentication(error) ?? NSFileProviderError(.notAuthenticated))
             }
         }
         
@@ -243,12 +246,12 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
             do {
                 logger.info("Deleting item: \\(identifier.rawValue)")
                 let mutation = FSEDeleteItemMutation(id: identifier.rawValue)
-                let _ = try await apollo.performAsync(mutation: mutation)
+                let _ = try await self.session().apollo.performAsync(mutation: mutation)
                 
                 completionHandler(nil)
             } catch {
                 logger.error("deleteItem failed: \\(error.localizedDescription)")
-                completionHandler(error)
+                completionHandler((try? self.session())?.mapAuthentication(error) ?? NSFileProviderError(.notAuthenticated))
             }
         }
         
@@ -256,7 +259,7 @@ class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     }
     
     func enumerator(for containerItemIdentifier: NSFileProviderItemIdentifier, request: NSFileProviderRequest) throws -> NSFileProviderEnumerator {
-        return FileProviderEnumerator(enumeratedItemIdentifier: containerItemIdentifier, apollo: apollo)
+        return FileProviderEnumerator(enumeratedItemIdentifier: containerItemIdentifier, session: try session())
     }
 }
 
@@ -271,10 +274,9 @@ extension FileProviderExtension: NSFileProviderPartialContentFetching {
         
         logger.info("fetchPartialContents called for: \(itemIdentifier.rawValue, privacy: .public) minimalRange=\(requestedRange.location)-\(requestedRange.location + requestedRange.length) alignedRange=\(startByte)-\(alignedEndByte) alignment=\(alignment)")
         
-        let utility = ContentTransferUtility.shared // Access synchronously!
-        
         Task {
             do {
+                let utility = try self.session().contentTransfer()
                 // Run download and metadata fetch concurrently
                 async let downloadResult = utility.download(
                     fileId: itemIdentifier.rawValue,
@@ -292,7 +294,7 @@ extension FileProviderExtension: NSFileProviderPartialContentFetching {
                 completionHandler(url, item, fetchedRange, [], nil)
             } catch {
                 logger.error("fetchPartialContents failed for: \(itemIdentifier.rawValue, privacy: .public) error: \(error.localizedDescription, privacy: .public)")
-                let nsError = NSError(domain: NSCocoaErrorDomain, code: NSFileProviderError.serverUnreachable.rawValue, userInfo: [NSUnderlyingErrorKey: error])
+                let nsError = self.fileProviderError(error)
                 completionHandler(nil, nil, requestedRange, [], nsError)
             }
         }

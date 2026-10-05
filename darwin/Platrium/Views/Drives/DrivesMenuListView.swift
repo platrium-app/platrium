@@ -13,10 +13,10 @@ final class DrivesViewModel {
     private(set) var isLoading: Bool = false
     private(set) var errorMessage: String? = nil
 
-    func load(serverId: String, apollo: ApolloClient) async {
+    func load(apollo: ApolloClient) async {
         guard !isLoading else { return }
 
-        // Reset state for this server
+        // Reset state for this account
         reset()
         isLoading = true
 
@@ -142,7 +142,6 @@ struct DrivesMenuListView: View {
 // MARK: - Preview
 
 #Preview {
-    let store = ServerStore()
     List {
         DrivesMenuListView(
             viewModel: DrivesViewModel(),

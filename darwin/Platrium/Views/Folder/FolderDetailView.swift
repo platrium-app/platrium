@@ -1,3 +1,4 @@
+import PlatriumCore
 import PlatriumGraphQL
 import SwiftUI
 import Apollo
@@ -12,7 +13,7 @@ extension PlatriumGraphQL.GetFolderContentsQuery.Data.FolderContents.Edge.Node: 
 }
 
 struct FolderDetailView: View {
-    @Environment(ServerStore.self) private var serverStore
+    @Environment(AccountStore.self) private var store
     #if os(iOS)
     @Environment(\.editMode) private var editMode
     #endif
@@ -58,7 +59,7 @@ struct FolderDetailView: View {
                         .padding()
                     Button("Retry") {
                         Task {
-                            await viewModel.loadInitial(folderId: folderId, apollo: serverStore.apollo)
+                            if let apollo = store.apollo { await viewModel.loadInitial(folderId: folderId, apollo: apollo) }
                         }
                     }
                 }
@@ -156,9 +157,9 @@ struct FolderDetailView: View {
                 .menuIndicator(.hidden)
             }
         }
-        .task(id: folderId) {
+        .task(id: [folderId, store.activeAccount?.id ?? ""]) {
             // Reload if folder changes
-            await viewModel.loadInitial(folderId: folderId, apollo: serverStore.apollo)
+            if let apollo = store.apollo { await viewModel.loadInitial(folderId: folderId, apollo: apollo) }
         }
     }
     
@@ -203,7 +204,7 @@ struct FolderDetailView: View {
                     .padding()
                     .onAppear {
                         Task {
-                            await viewModel.loadMore(folderId: folderId, apollo: serverStore.apollo)
+                            if let apollo = store.apollo { await viewModel.loadMore(folderId: folderId, apollo: apollo) }
                         }
                     }
             }
@@ -251,7 +252,7 @@ struct FolderDetailView: View {
                     ProgressView()
                         .onAppear {
                             Task {
-                                await viewModel.loadMore(folderId: folderId, apollo: serverStore.apollo)
+                                if let apollo = store.apollo { await viewModel.loadMore(folderId: folderId, apollo: apollo) }
                             }
                         }
                     Spacer()

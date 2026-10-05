@@ -1,0 +1,111 @@
+fragment GrantFields on AccessGrant {
+  id
+  subjectType
+  subjectId
+  subjectName
+  role
+  noDownload
+  capabilities
+  expiresAt
+  isYou
+}
+
+query ItemAccess($itemId: ID!) {
+  itemAccess(itemId: $itemId) {
+    itemId
+    inheritsPermissions
+    owner {
+      type
+      id
+      name
+      email
+      isYou
+    }
+    generalAccess {
+      level
+      role
+      noDownload
+      expiresAt
+    }
+    grants {
+      ...GrantFields
+    }
+    inherited {
+      ...GrantFields
+      inheritedFrom {
+        id
+        name
+      }
+    }
+  }
+}
+
+query ShareRoles($itemId: ID!) {
+  shareRoles(itemId: $itemId) {
+    role
+    label
+    description
+    capabilities
+    downloadOptional
+  }
+}
+
+query GeneralAccessOptions($itemId: ID!) {
+  generalAccessOptions(itemId: $itemId) {
+    level
+    label
+    blurb
+    roles
+    supportsExpiry
+  }
+}
+
+query SearchDirectory($query: String!, $first: Int, $exclude: ID) {
+  searchDirectory(query: $query, first: $first, excludeAccessToItemId: $exclude) {
+    type
+    id
+    name
+    email
+  }
+}
+
+query SharedWithMe($first: Int, $after: String) {
+  sharedWithMe(first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      node {
+        role
+        capabilities
+        item {
+          ...ItemFields
+        }
+      }
+    }
+  }
+}
+
+mutation ShareItem($input: ShareInput!) {
+  shareItem(input: $input) {
+    ...GrantFields
+  }
+}
+
+mutation RevokeAccess($grantId: ID!) {
+  revokeAccess(grantId: $grantId)
+}
+
+mutation SetGeneralAccess($input: GeneralAccessInput!) {
+  setGeneralAccess(input: $input) {
+    level
+    role
+    noDownload
+    expiresAt
+  }
+}
+
+mutation SetInheritance($itemId: ID!, $inherit: Boolean!) {
+  setInheritance(itemId: $itemId, inherit: $inherit)
+}

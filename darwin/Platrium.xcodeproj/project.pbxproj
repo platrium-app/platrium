@@ -15,6 +15,8 @@
 		D97A923F30689E56007C41DB /* PlatriumSDK in Frameworks */ = {isa = PBXBuildFile; productRef = D97A923E30689E56007C41DB /* PlatriumSDK */; };
 		D97A92463068A8D7007C41DB /* PlatriumGraphQL in Frameworks */ = {isa = PBXBuildFile; productRef = D97A92453068A8D7007C41DB /* PlatriumGraphQL */; };
 		D97A92483068A8E5007C41DB /* PlatriumGraphQL in Frameworks */ = {isa = PBXBuildFile; productRef = D97A92473068A8E5007C41DB /* PlatriumGraphQL */; };
+		D97A93013068B000007C41DB /* PlatriumCore in Frameworks */ = {isa = PBXBuildFile; productRef = D97A93033068B000007C41DB /* PlatriumCore */; };
+		D97A93023068B000007C41DB /* PlatriumCore in Frameworks */ = {isa = PBXBuildFile; productRef = D97A93043068B000007C41DB /* PlatriumCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +91,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D97A92463068A8D7007C41DB /* PlatriumGraphQL in Frameworks */,
+				D97A93013068B000007C41DB /* PlatriumCore in Frameworks */,
 				D97A91713067A82C007C41DB /* PlatriumSDK in Frameworks */,
 				D97A917E30681DCF007C41DB /* Apollo in Frameworks */,
 			);
@@ -99,6 +102,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D97A92483068A8E5007C41DB /* PlatriumGraphQL in Frameworks */,
+				D97A93023068B000007C41DB /* PlatriumCore in Frameworks */,
 				D97A923F30689E56007C41DB /* PlatriumSDK in Frameworks */,
 				D97A922B3068953A007C41DB /* UniformTypeIdentifiers.framework in Frameworks */,
 				D97A923D30689E52007C41DB /* Apollo in Frameworks */,
@@ -162,6 +166,7 @@
 				D97A91703067A82C007C41DB /* PlatriumSDK */,
 				D97A917D30681DCF007C41DB /* Apollo */,
 				D97A92453068A8D7007C41DB /* PlatriumGraphQL */,
+				D97A93033068B000007C41DB /* PlatriumCore */,
 			);
 			productName = Platrium;
 			productReference = D90B27B630679E4500DE31DB /* Platrium.app */;
@@ -187,6 +192,7 @@
 				D97A923C30689E52007C41DB /* Apollo */,
 				D97A923E30689E56007C41DB /* PlatriumSDK */,
 				D97A92473068A8E5007C41DB /* PlatriumGraphQL */,
+				D97A93043068B000007C41DB /* PlatriumCore */,
 			);
 			productName = FSExtension;
 			productReference = D97A922A3068953A007C41DB /* FSExtension.appex */;
@@ -223,6 +229,7 @@
 				D97A916F3067A82C007C41DB /* XCLocalSwiftPackageReference "../sdk/_ffi/darwin" */,
 				D97A917C30681DCF007C41DB /* XCRemoteSwiftPackageReference "apollo-ios" */,
 				D97A92443068A8D7007C41DB /* XCLocalSwiftPackageReference "PlatriumGraphQL" */,
+				D97A93053068B000007C41DB /* XCLocalSwiftPackageReference "PlatriumCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D90B27B730679E4500DE31DB /* Products */;
@@ -685,6 +692,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = PlatriumGraphQL;
 		};
+		D97A93053068B000007C41DB /* XCLocalSwiftPackageReference "PlatriumCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = PlatriumCore;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -726,6 +737,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D97A92443068A8D7007C41DB /* XCLocalSwiftPackageReference "PlatriumGraphQL" */;
 			productName = PlatriumGraphQL;
+		};
+		D97A93033068B000007C41DB /* PlatriumCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D97A93053068B000007C41DB /* XCLocalSwiftPackageReference "PlatriumCore" */;
+			productName = PlatriumCore;
+		};
+		D97A93043068B000007C41DB /* PlatriumCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D97A93053068B000007C41DB /* XCLocalSwiftPackageReference "PlatriumCore" */;
+			productName = PlatriumCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

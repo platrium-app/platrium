@@ -1,0 +1,69 @@
+fragment ItemFields on DriveItem {
+  id
+  parentId
+  name
+  type
+  myCapabilities
+  createdAt
+  updatedAt
+  ... on File {
+    size
+    mimeType
+  }
+}
+
+query GetDrives {
+  drives {
+    id
+    name
+    myCapabilities
+    driveMetadata {
+      driveType
+      storageUsed
+      storageQuota
+    }
+  }
+}
+
+query GetFolderContents($folderId: ID!, $first: Int, $after: String) {
+  folderContents(folderId: $folderId, first: $first, after: $after) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        ...ItemFields
+      }
+    }
+  }
+}
+
+query GetItem($id: ID!) {
+  item(id: $id) {
+    ...ItemFields
+    path {
+      id
+      name
+    }
+  }
+}
+
+mutation CreateFolder($parentId: ID!, $name: String!) {
+  createFolder(parentId: $parentId, name: $name) {
+    id
+  }
+}
+
+mutation RenameItem($id: ID!, $newName: String!) {
+  renameItem(id: $id, newName: $newName) {
+    id
+    name
+  }
+}
+
+mutation DeleteItem($id: ID!) {
+  deleteItem(id: $id)
+}

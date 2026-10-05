@@ -1,0 +1,24 @@
+{
+  "originHash" : "e907cd9cfa4d9ebbe37ba688255be5a97f4e9122a9853dc5195a16a966865ae0",
+  "pins" : [
+    {
+      "identity" : "apollo-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apollographql/apollo-ios",
+      "state" : {
+        "revision" : "fe14c216aaea3d25274343e80ccb3015fc3fb0b0",
+        "version" : "2.4.0"
+      }
+    },
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift",
+      "state" : {
+        "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
+        "version" : "7.11.1"
+      }
+    }
+  ],
+  "version" : 3
+}

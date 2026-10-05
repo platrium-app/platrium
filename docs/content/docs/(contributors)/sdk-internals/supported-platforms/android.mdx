@@ -1,0 +1,29 @@
+---
+title: Android
+description: How the Platrium SDK builds for Android, with UniFFI Kotlin bindings and a Gradle library module.
+---
+
+The Android target produces shared libraries for `arm64-v8a` (devices and Apple Silicon emulators) and `x86_64` (Intel emulators), plus the UniFFI-generated Kotlin bindings, in one Gradle library module the app depends on.
+
+```bash
+./nx run sdk:build:android
+```
+
+That target runs three steps in order:
+
+1. `cargo ndk` builds `libplatrium_sdk.so` for both ABIs into `sdk/_ffi/android/src/main/jniLibs`.
+2. The UniFFI generator reads the `arm64` library and writes `platrium_sdk.kt` into `sdk/_ffi/android/src/main/java` (package `uniffi.platrium_sdk`).
+3. Gradle assembles the module in `sdk/_ffi/android`.
+
+The app includes this module as `:platrium-sdk` (`project(":platrium-sdk").projectDir = file("../sdk/_ffi/android")`). Rebuild the SDK whenever the Rust API changes: the Kotlin types change with it, so an API change breaks the app's build instead of failing at runtime.
+
+## Using it from Kotlin
+
+- **Async calls** (`createDownloadSession`, `streamTo`, `auth().exchangeCode`, `auth().me`) are `suspend` functions. Cancelling the calling coroutine cancels the Rust future.
+- **Errors** arrive as `PlatriumException` with the cases `Unauthorized`, `BadRequest`, `ApiException` and `InternalException`.
+- **Authenticated clients** come from `PlatriumClient.withToken(baseUrl, token)`. `PlatriumClient(baseUrl)` has no token and is only for the unauthenticated code exchange.
+- **File descriptors:** `DownloadDestination(fd)` and `UploadSource(fileName, fd)` take a raw descriptor. The SDK takes ownership and closes it, so pass `ParcelFileDescriptor.detachFd()`, never a descriptor you still use.
+- **Progress** comes from `files().onTransferEvent(listener)`. Each call starts another subscription on the process-wide transfer manager, so subscribe once per client.
+- Rust `u64` arrives as Kotlin `ULong`.
+
+For how the app uses these, see the [Android client](/architecture/android/native-app).

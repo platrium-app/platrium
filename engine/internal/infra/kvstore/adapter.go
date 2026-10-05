@@ -2,7 +2,11 @@ package kvstore
 
 import (
 	"context"
+	"errors"
 )
+
+// ErrNotFound is returned by Tx.Get when the key does not exist or has expired.
+var ErrNotFound = errors.New("kvstore: key not found")
 
 // Namespace defines a strongly-typed enum for KV store prefixes.
 type Namespace string
@@ -13,6 +17,7 @@ const (
 	NSManifest         Namespace = "mfst"
 	NSInstanceConfig   Namespace = "icfg"
 	NSChunkMetadata    Namespace = "chnk"
+	NSAuthCode         Namespace = "acod" // single-use native client authorization codes
 )
 
 // Key strictly enforces that every KV operation is Namespaced, completely

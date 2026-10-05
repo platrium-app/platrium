@@ -17,18 +17,42 @@ import (
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Authorize a Client
+	// (POST /auth/authorize)
+	AuthAuthorize(w http.ResponseWriter, r *http.Request)
+	// List Devices and Apps
+	// (GET /auth/clients)
+	AuthListClients(w http.ResponseWriter, r *http.Request)
+	// Create App Token
+	// (POST /auth/clients)
+	AuthCreateClient(w http.ResponseWriter, r *http.Request)
+	// Revoke Device or App
+	// (DELETE /auth/clients/{id})
+	AuthDeleteClient(w http.ResponseWriter, r *http.Request, id string)
+	// Clear Push Token
+	// (DELETE /auth/device/push)
+	AuthClearPush(w http.ResponseWriter, r *http.Request)
+	// Register Push Token
+	// (PUT /auth/device/push)
+	AuthSetPush(w http.ResponseWriter, r *http.Request)
 	// SSO Login Redirect
 	// (GET /auth/login)
 	AuthIdpRedirect(w http.ResponseWriter, r *http.Request, params AuthIdpRedirectParams)
 	// Local Login
 	// (POST /auth/login)
 	AuthLocalUserLogin(w http.ResponseWriter, r *http.Request)
+	// Log Out
+	// (POST /auth/logout)
+	AuthLogout(w http.ResponseWriter, r *http.Request)
 	// Get Current User
 	// (GET /auth/me)
 	AuthMe(w http.ResponseWriter, r *http.Request)
 	// Verify MFA Challenge
 	// (POST /auth/mfa/verify)
 	AuthVerify(w http.ResponseWriter, r *http.Request)
+	// Exchange Code for Token
+	// (POST /auth/token)
+	AuthToken(w http.ResponseWriter, r *http.Request)
 	// Presign a batch of chunks for download
 	// (POST /files/downloadsession/chunks)
 	DownloadSessionChunks(w http.ResponseWriter, r *http.Request, params DownloadSessionChunksParams)
@@ -50,6 +74,42 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// Authorize a Client
+// (POST /auth/authorize)
+func (_ Unimplemented) AuthAuthorize(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List Devices and Apps
+// (GET /auth/clients)
+func (_ Unimplemented) AuthListClients(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create App Token
+// (POST /auth/clients)
+func (_ Unimplemented) AuthCreateClient(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Revoke Device or App
+// (DELETE /auth/clients/{id})
+func (_ Unimplemented) AuthDeleteClient(w http.ResponseWriter, r *http.Request, id string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Clear Push Token
+// (DELETE /auth/device/push)
+func (_ Unimplemented) AuthClearPush(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Register Push Token
+// (PUT /auth/device/push)
+func (_ Unimplemented) AuthSetPush(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // SSO Login Redirect
 // (GET /auth/login)
 func (_ Unimplemented) AuthIdpRedirect(w http.ResponseWriter, r *http.Request, params AuthIdpRedirectParams) {
@@ -62,6 +122,12 @@ func (_ Unimplemented) AuthLocalUserLogin(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Log Out
+// (POST /auth/logout)
+func (_ Unimplemented) AuthLogout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Get Current User
 // (GET /auth/me)
 func (_ Unimplemented) AuthMe(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +137,12 @@ func (_ Unimplemented) AuthMe(w http.ResponseWriter, r *http.Request) {
 // Verify MFA Challenge
 // (POST /auth/mfa/verify)
 func (_ Unimplemented) AuthVerify(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Exchange Code for Token
+// (POST /auth/token)
+func (_ Unimplemented) AuthToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -112,6 +184,102 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// AuthAuthorize operation middleware
+func (siw *ServerInterfaceWrapper) AuthAuthorize(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthAuthorize(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthListClients operation middleware
+func (siw *ServerInterfaceWrapper) AuthListClients(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthListClients(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthCreateClient operation middleware
+func (siw *ServerInterfaceWrapper) AuthCreateClient(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthCreateClient(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthDeleteClient operation middleware
+func (siw *ServerInterfaceWrapper) AuthDeleteClient(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthDeleteClient(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthClearPush operation middleware
+func (siw *ServerInterfaceWrapper) AuthClearPush(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthClearPush(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthSetPush operation middleware
+func (siw *ServerInterfaceWrapper) AuthSetPush(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthSetPush(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // AuthIdpRedirect operation middleware
 func (siw *ServerInterfaceWrapper) AuthIdpRedirect(w http.ResponseWriter, r *http.Request) {
@@ -160,6 +328,20 @@ func (siw *ServerInterfaceWrapper) AuthLocalUserLogin(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// AuthLogout operation middleware
+func (siw *ServerInterfaceWrapper) AuthLogout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthLogout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // AuthMe operation middleware
 func (siw *ServerInterfaceWrapper) AuthMe(w http.ResponseWriter, r *http.Request) {
 
@@ -179,6 +361,20 @@ func (siw *ServerInterfaceWrapper) AuthVerify(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AuthVerify(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AuthToken operation middleware
+func (siw *ServerInterfaceWrapper) AuthToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AuthToken(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -465,16 +661,40 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/authorize", wrapper.AuthAuthorize)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/auth/clients", wrapper.AuthListClients)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/clients", wrapper.AuthCreateClient)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/auth/clients/{id}", wrapper.AuthDeleteClient)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/auth/device/push", wrapper.AuthClearPush)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/auth/device/push", wrapper.AuthSetPush)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/auth/login", wrapper.AuthIdpRedirect)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.AuthLocalUserLogin)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/logout", wrapper.AuthLogout)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/auth/me", wrapper.AuthMe)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/mfa/verify", wrapper.AuthVerify)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/auth/token", wrapper.AuthToken)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/files/downloadsession/chunks", wrapper.DownloadSessionChunks)
@@ -493,6 +713,398 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type AuthAuthorizeRequestObject struct {
+	Body *AuthAuthorizeJSONRequestBody
+}
+
+type AuthAuthorizeResponseObject interface {
+	VisitAuthAuthorizeResponse(w http.ResponseWriter) error
+}
+
+type AuthAuthorize200JSONResponse AuthAuthorizeResponse
+
+func (response AuthAuthorize200JSONResponse) VisitAuthAuthorizeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthAuthorize400JSONResponse ErrorsBadRequest
+
+func (response AuthAuthorize400JSONResponse) VisitAuthAuthorizeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthAuthorize401JSONResponse ErrorsUnauthorized
+
+func (response AuthAuthorize401JSONResponse) VisitAuthAuthorizeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthAuthorize403JSONResponse ErrorsForbidden
+
+func (response AuthAuthorize403JSONResponse) VisitAuthAuthorizeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthAuthorize500JSONResponse ErrorsEngineInternal
+
+func (response AuthAuthorize500JSONResponse) VisitAuthAuthorizeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthListClientsRequestObject struct {
+}
+
+type AuthListClientsResponseObject interface {
+	VisitAuthListClientsResponse(w http.ResponseWriter) error
+}
+
+type AuthListClients200JSONResponse AuthClientListResponse
+
+func (response AuthListClients200JSONResponse) VisitAuthListClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthListClients401JSONResponse ErrorsUnauthorized
+
+func (response AuthListClients401JSONResponse) VisitAuthListClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthListClients500JSONResponse ErrorsEngineInternal
+
+func (response AuthListClients500JSONResponse) VisitAuthListClientsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthCreateClientRequestObject struct {
+	Body *AuthCreateClientJSONRequestBody
+}
+
+type AuthCreateClientResponseObject interface {
+	VisitAuthCreateClientResponse(w http.ResponseWriter) error
+}
+
+type AuthCreateClient200JSONResponse AuthTokenResponse
+
+func (response AuthCreateClient200JSONResponse) VisitAuthCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthCreateClient400JSONResponse ErrorsBadRequest
+
+func (response AuthCreateClient400JSONResponse) VisitAuthCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthCreateClient401JSONResponse ErrorsUnauthorized
+
+func (response AuthCreateClient401JSONResponse) VisitAuthCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthCreateClient403JSONResponse ErrorsForbidden
+
+func (response AuthCreateClient403JSONResponse) VisitAuthCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthCreateClient500JSONResponse ErrorsEngineInternal
+
+func (response AuthCreateClient500JSONResponse) VisitAuthCreateClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthDeleteClientRequestObject struct {
+	Id string `json:"id"`
+}
+
+type AuthDeleteClientResponseObject interface {
+	VisitAuthDeleteClientResponse(w http.ResponseWriter) error
+}
+
+type AuthDeleteClient204Response struct {
+}
+
+func (response AuthDeleteClient204Response) VisitAuthDeleteClientResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AuthDeleteClient401JSONResponse ErrorsUnauthorized
+
+func (response AuthDeleteClient401JSONResponse) VisitAuthDeleteClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthDeleteClient404JSONResponse ErrorsNotFound
+
+func (response AuthDeleteClient404JSONResponse) VisitAuthDeleteClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthDeleteClient500JSONResponse ErrorsEngineInternal
+
+func (response AuthDeleteClient500JSONResponse) VisitAuthDeleteClientResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthClearPushRequestObject struct {
+}
+
+type AuthClearPushResponseObject interface {
+	VisitAuthClearPushResponse(w http.ResponseWriter) error
+}
+
+type AuthClearPush204Response struct {
+}
+
+func (response AuthClearPush204Response) VisitAuthClearPushResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AuthClearPush401JSONResponse ErrorsUnauthorized
+
+func (response AuthClearPush401JSONResponse) VisitAuthClearPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthClearPush403JSONResponse ErrorsForbidden
+
+func (response AuthClearPush403JSONResponse) VisitAuthClearPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthClearPush500JSONResponse ErrorsEngineInternal
+
+func (response AuthClearPush500JSONResponse) VisitAuthClearPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthSetPushRequestObject struct {
+	Body *AuthSetPushJSONRequestBody
+}
+
+type AuthSetPushResponseObject interface {
+	VisitAuthSetPushResponse(w http.ResponseWriter) error
+}
+
+type AuthSetPush204Response struct {
+}
+
+func (response AuthSetPush204Response) VisitAuthSetPushResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AuthSetPush400JSONResponse ErrorsBadRequest
+
+func (response AuthSetPush400JSONResponse) VisitAuthSetPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthSetPush401JSONResponse ErrorsUnauthorized
+
+func (response AuthSetPush401JSONResponse) VisitAuthSetPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthSetPush403JSONResponse ErrorsForbidden
+
+func (response AuthSetPush403JSONResponse) VisitAuthSetPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthSetPush500JSONResponse ErrorsEngineInternal
+
+func (response AuthSetPush500JSONResponse) VisitAuthSetPushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type AuthIdpRedirectRequestObject struct {
@@ -595,6 +1207,35 @@ func (response AuthLocalUserLogin500JSONResponse) VisitAuthLocalUserLoginRespons
 	return err
 }
 
+type AuthLogoutRequestObject struct {
+}
+
+type AuthLogoutResponseObject interface {
+	VisitAuthLogoutResponse(w http.ResponseWriter) error
+}
+
+type AuthLogout204Response struct {
+}
+
+func (response AuthLogout204Response) VisitAuthLogoutResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AuthLogout500JSONResponse ErrorsEngineInternal
+
+func (response AuthLogout500JSONResponse) VisitAuthLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AuthMeRequestObject struct {
 }
 
@@ -669,6 +1310,56 @@ func (response AuthVerify401JSONResponse) VisitAuthVerifyResponse(w http.Respons
 type AuthVerify500JSONResponse ErrorsEngineInternal
 
 func (response AuthVerify500JSONResponse) VisitAuthVerifyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthTokenRequestObject struct {
+	Body *AuthTokenJSONRequestBody
+}
+
+type AuthTokenResponseObject interface {
+	VisitAuthTokenResponse(w http.ResponseWriter) error
+}
+
+type AuthToken200JSONResponse AuthTokenResponse
+
+func (response AuthToken200JSONResponse) VisitAuthTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthToken400JSONResponse ErrorsBadRequest
+
+func (response AuthToken400JSONResponse) VisitAuthTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AuthToken500JSONResponse ErrorsEngineInternal
+
+func (response AuthToken500JSONResponse) VisitAuthTokenResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -893,18 +1584,42 @@ func (response UploadSessionInitialize500JSONResponse) VisitUploadSessionInitial
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Authorize a Client
+	// (POST /auth/authorize)
+	AuthAuthorize(ctx context.Context, request AuthAuthorizeRequestObject) (AuthAuthorizeResponseObject, error)
+	// List Devices and Apps
+	// (GET /auth/clients)
+	AuthListClients(ctx context.Context, request AuthListClientsRequestObject) (AuthListClientsResponseObject, error)
+	// Create App Token
+	// (POST /auth/clients)
+	AuthCreateClient(ctx context.Context, request AuthCreateClientRequestObject) (AuthCreateClientResponseObject, error)
+	// Revoke Device or App
+	// (DELETE /auth/clients/{id})
+	AuthDeleteClient(ctx context.Context, request AuthDeleteClientRequestObject) (AuthDeleteClientResponseObject, error)
+	// Clear Push Token
+	// (DELETE /auth/device/push)
+	AuthClearPush(ctx context.Context, request AuthClearPushRequestObject) (AuthClearPushResponseObject, error)
+	// Register Push Token
+	// (PUT /auth/device/push)
+	AuthSetPush(ctx context.Context, request AuthSetPushRequestObject) (AuthSetPushResponseObject, error)
 	// SSO Login Redirect
 	// (GET /auth/login)
 	AuthIdpRedirect(ctx context.Context, request AuthIdpRedirectRequestObject) (AuthIdpRedirectResponseObject, error)
 	// Local Login
 	// (POST /auth/login)
 	AuthLocalUserLogin(ctx context.Context, request AuthLocalUserLoginRequestObject) (AuthLocalUserLoginResponseObject, error)
+	// Log Out
+	// (POST /auth/logout)
+	AuthLogout(ctx context.Context, request AuthLogoutRequestObject) (AuthLogoutResponseObject, error)
 	// Get Current User
 	// (GET /auth/me)
 	AuthMe(ctx context.Context, request AuthMeRequestObject) (AuthMeResponseObject, error)
 	// Verify MFA Challenge
 	// (POST /auth/mfa/verify)
 	AuthVerify(ctx context.Context, request AuthVerifyRequestObject) (AuthVerifyResponseObject, error)
+	// Exchange Code for Token
+	// (POST /auth/token)
+	AuthToken(ctx context.Context, request AuthTokenRequestObject) (AuthTokenResponseObject, error)
 	// Presign a batch of chunks for download
 	// (POST /files/downloadsession/chunks)
 	DownloadSessionChunks(ctx context.Context, request DownloadSessionChunksRequestObject) (DownloadSessionChunksResponseObject, error)
@@ -949,6 +1664,173 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// AuthAuthorize operation middleware
+func (sh *strictHandler) AuthAuthorize(w http.ResponseWriter, r *http.Request) {
+	var request AuthAuthorizeRequestObject
+
+	var body AuthAuthorizeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthAuthorize(ctx, request.(AuthAuthorizeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthAuthorize")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthAuthorizeResponseObject); ok {
+		if err := validResponse.VisitAuthAuthorizeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthListClients operation middleware
+func (sh *strictHandler) AuthListClients(w http.ResponseWriter, r *http.Request) {
+	var request AuthListClientsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthListClients(ctx, request.(AuthListClientsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthListClients")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthListClientsResponseObject); ok {
+		if err := validResponse.VisitAuthListClientsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthCreateClient operation middleware
+func (sh *strictHandler) AuthCreateClient(w http.ResponseWriter, r *http.Request) {
+	var request AuthCreateClientRequestObject
+
+	var body AuthCreateClientJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthCreateClient(ctx, request.(AuthCreateClientRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthCreateClient")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthCreateClientResponseObject); ok {
+		if err := validResponse.VisitAuthCreateClientResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthDeleteClient operation middleware
+func (sh *strictHandler) AuthDeleteClient(w http.ResponseWriter, r *http.Request, id string) {
+	var request AuthDeleteClientRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthDeleteClient(ctx, request.(AuthDeleteClientRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthDeleteClient")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthDeleteClientResponseObject); ok {
+		if err := validResponse.VisitAuthDeleteClientResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthClearPush operation middleware
+func (sh *strictHandler) AuthClearPush(w http.ResponseWriter, r *http.Request) {
+	var request AuthClearPushRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthClearPush(ctx, request.(AuthClearPushRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthClearPush")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthClearPushResponseObject); ok {
+		if err := validResponse.VisitAuthClearPushResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthSetPush operation middleware
+func (sh *strictHandler) AuthSetPush(w http.ResponseWriter, r *http.Request) {
+	var request AuthSetPushRequestObject
+
+	var body AuthSetPushJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthSetPush(ctx, request.(AuthSetPushRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthSetPush")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthSetPushResponseObject); ok {
+		if err := validResponse.VisitAuthSetPushResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // AuthIdpRedirect operation middleware
@@ -1008,6 +1890,30 @@ func (sh *strictHandler) AuthLocalUserLogin(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// AuthLogout operation middleware
+func (sh *strictHandler) AuthLogout(w http.ResponseWriter, r *http.Request) {
+	var request AuthLogoutRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthLogout(ctx, request.(AuthLogoutRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthLogout")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthLogoutResponseObject); ok {
+		if err := validResponse.VisitAuthLogoutResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // AuthMe operation middleware
 func (sh *strictHandler) AuthMe(w http.ResponseWriter, r *http.Request) {
 	var request AuthMeRequestObject
@@ -1056,6 +1962,37 @@ func (sh *strictHandler) AuthVerify(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AuthVerifyResponseObject); ok {
 		if err := validResponse.VisitAuthVerifyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AuthToken operation middleware
+func (sh *strictHandler) AuthToken(w http.ResponseWriter, r *http.Request) {
+	var request AuthTokenRequestObject
+
+	var body AuthTokenJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AuthToken(ctx, request.(AuthTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AuthToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AuthTokenResponseObject); ok {
+		if err := validResponse.VisitAuthTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

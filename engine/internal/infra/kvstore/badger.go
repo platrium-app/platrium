@@ -2,6 +2,7 @@ package kvstore
 
 import (
 	"context"
+	"errors"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/dgraph-io/badger/v4"
@@ -33,6 +34,15 @@ func NewBadgerStore() (*BadgerStore, error) {
 	return &BadgerStore{db: db}, nil
 }
 
+// NewInMemoryStore returns a Badger store that lives in RAM, for tests.
+func NewInMemoryStore() (*BadgerStore, error) {
+	db, err := badger.Open(badger.DefaultOptions("").WithInMemory(true).WithLoggingLevel(badger.ERROR))
+	if err != nil {
+		return nil, err
+	}
+	return &BadgerStore{db: db}, nil
+}
+
 func (b *BadgerStore) ReadTx(ctx context.Context, fn func(tx Tx) error) error {
 	return b.db.View(func(txn *badger.Txn) error {
 		return fn(&BadgerTx{txn: txn})
@@ -47,6 +57,9 @@ var _ Tx = (*BadgerTx)(nil)
 
 func (t *BadgerTx) Get(key Key) ([]byte, error) {
 	item, err := t.txn.Get([]byte(key.String()))
+	if errors.Is(err, badger.ErrKeyNotFound) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +70,7 @@ func (t *BadgerTx) MultiGet(keys []Key) (map[string][]byte, error) {
 	res := make(map[string][]byte, len(keys))
 	for _, k := range keys {
 		val, err := t.Get(k)
-		if err == badger.ErrKeyNotFound {
+		if errors.Is(err, ErrNotFound) {
 			continue
 		}
 		if err != nil {

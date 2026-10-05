@@ -27,3 +27,15 @@ model Unauthorized {
     @statusCode _: 401;
     message?: string;
 }
+
+@error
+model BadRequest {
+    @statusCode _: 400;
+    message?: string;
+}
+
+@error
+model Forbidden {
+    @statusCode _: 403;
+    message?: string;
+}

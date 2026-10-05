@@ -26,7 +26,7 @@ export function usePlatriumSdkContext() {
 }
 
 export function PlatriumSdkProvider({
-  defaultUrl = "http://localhost:3000/api",
+  defaultUrl = `${window.location.origin}/api`,
   children,
 }: {
   defaultUrl?: string
