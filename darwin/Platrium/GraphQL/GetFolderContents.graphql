@@ -14,6 +14,7 @@ query GetFolderContents($folderId: ID!, $first: Int, $after: String) {
         type
         createdAt
         updatedAt
+        myCapabilities
         ... on File {
           size
           mimeType

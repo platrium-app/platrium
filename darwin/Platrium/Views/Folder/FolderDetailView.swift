@@ -22,6 +22,7 @@ struct FolderDetailView: View {
     @State private var viewModel = FolderViewModel()
     @State private var selection = Set<String>()
     @State private var sortOrder = [KeyPathComparator(\FolderContentNode.name)]
+    @State private var shareTarget: ShareTarget?
     
     private var sortedItems: [FolderContentNode] {
         viewModel.items.sorted { a, b in
@@ -84,6 +85,19 @@ struct FolderDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            if viewModel.folderCapabilities.can(Capability.share) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        shareTarget = currentFolderTarget
+                    } label: {
+                        Label(
+                            SharingFormat.isDriveRoot(parentId: viewModel.folderParentId) ? "Manage Access" : "Share",
+                            systemImage: SharingFormat.isDriveRoot(parentId: viewModel.folderParentId) ? "person.2" : "person.badge.plus"
+                        )
+                    }
+                    .help(SharingFormat.isDriveRoot(parentId: viewModel.folderParentId) ? "Manage access to this drive" : "Share this folder")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     #if os(iOS)
@@ -161,6 +175,23 @@ struct FolderDetailView: View {
             // Reload if folder changes
             if let apollo = store.apollo { await viewModel.loadInitial(folderId: folderId, apollo: apollo) }
         }
+        // Sharing can change what this user sees (giving up their own access, say), so reload after.
+        .sheet(item: $shareTarget, onDismiss: {
+            Task { if let apollo = store.apollo { await viewModel.loadInitial(folderId: folderId, apollo: apollo) } }
+        }) { target in
+            if let apollo = store.apollo, let server = store.activeServer {
+                ShareItemSheet(target: target, service: SharingService(apollo: apollo), serverURL: server.url)
+            }
+        }
+    }
+
+    /// The folder being viewed, as something to share.
+    private var currentFolderTarget: ShareTarget {
+        ShareTarget(id: folderId, name: viewModel.folderName ?? "Folder", isFolder: true, parentId: viewModel.folderParentId)
+    }
+
+    private func shareTarget(for item: FolderContentNode) -> ShareTarget {
+        ShareTarget(id: item.id, name: item.name, isFolder: item.type == .folder, parentId: item.parentId)
     }
     
     @ViewBuilder
@@ -216,6 +247,9 @@ struct FolderDetailView: View {
                     NavigationLink(value: SidebarSelection.folder(id: item.id)) {
                         iosRowView(for: item)
                     }
+                    .swipeActions(edge: .leading) {
+                        shareSwipeAction(for: item)
+                    }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             print("Delete folder: \(item.id)")
@@ -233,6 +267,9 @@ struct FolderDetailView: View {
                         iosRowView(for: item)
                     }
                     .buttonStyle(.plain)
+                    .swipeActions(edge: .leading) {
+                        shareSwipeAction(for: item)
+                    }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             print("Delete item: \(item.id)")
@@ -263,6 +300,20 @@ struct FolderDetailView: View {
         #endif
     }
     
+    #if os(iOS)
+    @ViewBuilder
+    private func shareSwipeAction(for item: FolderContentNode) -> some View {
+        if item.myCapabilities.can(Capability.share) {
+            Button {
+                shareTarget = shareTarget(for: item)
+            } label: {
+                Label("Share", systemImage: "person.badge.plus")
+            }
+            .tint(.blue)
+        }
+    }
+    #endif
+
     // MARK: - Row Views
     
     @ViewBuilder
@@ -298,6 +349,15 @@ struct FolderDetailView: View {
     
     @ViewBuilder
     private func contextMenuOptions(for selectedIds: Set<String>) -> some View {
+        if selectedIds.count == 1, let id = selectedIds.first,
+           let item = viewModel.item(id: id), item.myCapabilities.can(Capability.share) {
+            Button {
+                shareTarget = shareTarget(for: item)
+            } label: {
+                Label("Share…", systemImage: "person.badge.plus")
+            }
+        }
+
         if selectedIds.count == 1 {
             Button {
                 // TODO: Show file information

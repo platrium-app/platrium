@@ -118,7 +118,7 @@ struct DrivesMenuListView: View {
                         NavigationLink(value: SidebarSelection.sharedDrive(id: drive.id)) {
                             Label(drive.name, systemImage: "externaldrive")
                         }
-                        .padding(.leading, 24)
+                        .padding(.leading, 8)
                     }
                 }
                 #else
