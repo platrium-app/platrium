@@ -89,13 +89,13 @@ func main() {
 
 	// Setup Auth Domain
 	idpStore := auth.NewIdpStore(database)
-	localUserStore := local.NewLocalUserStore(database)
 	tokenStore := token.NewStore(database, deviceStore, token.DefaultIdleTimeout)
 	codeStore := token.NewCodeStore(kvStore)
 
 	// Setup Cross-Domain Orchestrators
 	userOrchestrator := orchestrator.NewUserOrchestrator(userStore, fsOps)
-	tenantOrchestrator := orchestrator.NewTenantOrchestrator(database, tenantStore, idpStore, userOrchestrator, localUserStore)
+	localUserStore := local.NewLocalUserStore(database, userOrchestrator)
+	tenantOrchestrator := orchestrator.NewTenantOrchestrator(database, tenantStore, idpStore, localUserStore)
 
 	// Setup Instance Config Store
 	instanceConfigStore := setup.NewInstanceConfigStore(kvStore)
@@ -125,7 +125,7 @@ func main() {
 
 	// CORS Settings for Browser Fetch APIs
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://*:5173"},
+		AllowedOrigins:   []string{"http://*:3000", "http://*:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "User-Agent", "x-platrium-uploadsession", "x-platrium-downloadsession"},
 		ExposedHeaders:   []string{"Link"},
@@ -133,7 +133,7 @@ func main() {
 	}))
 
 	// Setup GraphQL
-	graphqlSrv := newGraphQLServer(tokenStore, graphql.NewExecutableSchema(graphql.Config{Resolvers: &graphql.Resolver{
+	gqlResolver := &graphql.Resolver{
 		FSOps:       fsOps,
 		Authz:       authorizer,
 		DriveOrch:   orchestrator.NewDriveOrchestrator(database, fsOps, authorizer, userStore, policyStore),
@@ -143,7 +143,9 @@ func main() {
 		UserStore:   userStore,
 		GroupStore:  groupStore,
 		IdpStore:    idpStore,
-	}}))
+		UserAdmin:   orchestrator.NewUserAdmin(database, userStore, idpStore, localUserStore),
+	}
+	graphqlSrv := newGraphQLServer(tokenStore, graphql.NewExecutableSchema(graphql.Config{Resolvers: gqlResolver, Directives: gqlResolver.Directives()}))
 
 	graphqlSrv.SetErrorPresenter(graphql.ErrorPresenter)
 

@@ -1,5 +1,6 @@
 import React from "react"
 import { FolderPlus, FileUp, FolderUp } from "lucide-react"
+import { type DriveOperation, type DriveItemNode } from "./FolderViewTypes"
 import {
     ContextMenu,
     ContextMenuContent,
@@ -15,9 +16,10 @@ export interface FolderContextMenuProps {
     folderId: string
     /** Whether the user may add things here; without it there is nothing to offer. */
     canCreate?: boolean
+    onOperation?: (mode: DriveOperation, items: DriveItemNode[]) => void
 }
 
-export function FolderContextMenu({ children, folderId, canCreate = true }: FolderContextMenuProps) {
+export function FolderContextMenu({ children, folderId, canCreate = true, onOperation }: FolderContextMenuProps) {
     const { triggerUpload } = useUpload()
 
     if (!canCreate) {
@@ -31,7 +33,10 @@ export function FolderContextMenu({ children, folderId, canCreate = true }: Fold
             </ContextMenuTrigger>
             <ContextMenuContent className="w-64">
                 <ContextMenuGroup>
-                    <ContextMenuItem className="cursor-pointer">
+                    <ContextMenuItem
+                        className="cursor-pointer"
+                        onClick={() => onOperation?.("CREATE_FOLDER", [])}
+                    >
                         <FolderPlus className="mr-2 h-4 w-4" />
                         <span>New Folder</span>
                     </ContextMenuItem>

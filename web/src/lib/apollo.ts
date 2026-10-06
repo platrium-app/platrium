@@ -1,5 +1,5 @@
 import { ApolloClient, InMemoryCache, HttpLink, ApolloLink } from "@apollo/client";
-import { getMainDefinition } from "@apollo/client/utilities";
+import { getMainDefinition, relayStylePagination } from "@apollo/client/utilities";
 import { GraphQLWsLink } from "@apollo/client/link/subscriptions";
 import { createClient } from "graphql-ws";
 import { getGraphQLEndpoint, getGraphQLWSEndpoint } from "../config/backends";
@@ -34,5 +34,15 @@ const splitLink = ApolloLink.split(
 
 export const client = new ApolloClient({
   link: splitLink,
-  cache: new InMemoryCache(),
+  cache: new InMemoryCache({
+    typePolicies: {
+      Query: {
+        fields: {
+          // Pages of the admin user list accumulate under one key per filter set.
+          adminUsers: relayStylePagination(["search", "sourceId", "status"]),
+          sharedWithMe: relayStylePagination(),
+        },
+      },
+    },
+  }),
 });

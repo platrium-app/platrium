@@ -50,7 +50,8 @@ export interface DriveOperationManagerProps {
   onClose: () => void
   onSuccess?: () => void
   items?: DriveItemNode[] // Required for Rename, Move, Copy
-  currentFolderId: string
+  /** The folder being viewed, where new folders go and pickers start. Absent on pages without one. */
+  currentFolderId?: string
 }
 
 export function DriveOperationManager({
@@ -67,6 +68,7 @@ export function DriveOperationManager({
 
   // 1. Create Folder Handler
   const handleCreateFolder = async (name: string) => {
+    if (!currentFolderId) throw new Error("There is no folder to create it in")
     await createFolder({ variables: { parentId: currentFolderId, name } })
     onSuccess?.()
   }

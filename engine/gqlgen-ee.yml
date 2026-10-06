@@ -28,3 +28,14 @@ models:
   Int64: { model: github.com/99designs/gqlgen/graphql.Int64 }
   File: { fields: { path: { resolver: true } } }
   Folder: { fields: { path: { resolver: true } } }
+  Permission:
+    model: platrium/internal/authz.Permission
+    enum_values:
+      USERS_READ: { value: platrium/internal/authz.PermUsersRead }
+      USERS_CREATE: { value: platrium/internal/authz.PermUsersCreate }
+      USERS_UPDATE: { value: platrium/internal/authz.PermUsersUpdate }
+      USERS_DISABLE: { value: platrium/internal/authz.PermUsersDisable }
+      ROLES_ASSIGN: { value: platrium/internal/authz.PermRolesAssign }
+      SHARED_DRIVES_CREATE: { value: platrium/internal/authz.PermSharedDrivesCreate }
+      POLICIES_MANAGE: { value: platrium/internal/authz.PermPoliciesManage }
+      TENANTS_MANAGE: { value: platrium/internal/authz.PermTenantsManage }

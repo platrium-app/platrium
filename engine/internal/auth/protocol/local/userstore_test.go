@@ -12,12 +12,21 @@ import (
 	"platrium/internal/infra/db/ent"
 )
 
+// provisioner stands in for the orchestrator: it creates the user row without
+// the drive, which these tests do not need.
+type provisioner struct{ users *identity.UserStore }
+
+func (p provisioner) ProvisionUserTx(ctx context.Context, tx *ent.Tx, params identity.CreateUserParams) (*identity.User, error) {
+	return p.users.CreateUserTx(ctx, tx, params)
+}
+
 type fixture struct {
 	db        *db.DB
 	store     *local.LocalUserStore
 	tenantID  string
-	userID    string // user on the LOCAL IdP
-	oidcUser  string // user on an OIDC IdP, which may not hold a local credential
+	localIdp  string
+	oidcIdp   string
+	otherIdp  string // a LOCAL IdP of a different tenant
 	otherTnID string
 }
 
@@ -25,7 +34,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := context.Background()
 	d := dbtest.New(t)
-	f := &fixture{db: d, store: local.NewLocalUserStore(d)}
+	f := &fixture{db: d, store: local.NewLocalUserStore(d, provisioner{identity.NewUserStore(d)})}
 
 	err := d.WithTx(ctx, func(tx *ent.Tx) error {
 		tn, err := tx.Tenant.Create().SetAlias("acme").SetName("acme").Save(ctx)
@@ -44,15 +53,11 @@ func newFixture(t *testing.T) *fixture {
 		if err != nil {
 			return err
 		}
-		lu, err := tx.User.Create().SetTenantID(tn.ID).SetIdpID(localIdp.ID).SetExternalID("l").SetEmail("l@x.com").SetDisplayName("l").Save(ctx)
+		otherIdp, err := tx.IdpProvider.Create().SetTenantID(other.ID).SetType("LOCAL").SetName("local").Save(ctx)
 		if err != nil {
 			return err
 		}
-		ou, err := tx.User.Create().SetTenantID(tn.ID).SetIdpID(oidcIdp.ID).SetExternalID("o").SetEmail("o@x.com").SetDisplayName("o").Save(ctx)
-		if err != nil {
-			return err
-		}
-		f.tenantID, f.userID, f.oidcUser, f.otherTnID = tn.ID, lu.ID, ou.ID, other.ID
+		f.tenantID, f.localIdp, f.oidcIdp, f.otherIdp, f.otherTnID = tn.ID, localIdp.ID, oidcIdp.ID, otherIdp.ID, other.ID
 		return nil
 	})
 	if err != nil {
@@ -61,28 +66,45 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-func (f *fixture) create(userID, tenantID, password string) error {
+func (f *fixture) create(tenantID, idpID, externalID, password string) (*identity.User, error) {
 	ctx := context.Background()
 	hash, err := local.HashPassword(password)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return f.db.WithTx(ctx, func(tx *ent.Tx) error {
-		return f.store.CreateTx(ctx, tx, tenantID, userID, hash)
+	var u *identity.User
+	err = f.db.WithTx(ctx, func(tx *ent.Tx) error {
+		var err error
+		u, err = f.store.CreateUserTx(ctx, tx, identity.CreateUserParams{
+			TenantID:    tenantID,
+			IdpID:       idpID,
+			ExternalID:  externalID,
+			Email:       externalID,
+			DisplayName: externalID,
+		}, hash)
+		return err
 	})
+	return u, err
+}
+
+func (f *fixture) mustCreate(t *testing.T, externalID, password string) *identity.User {
+	t.Helper()
+	u, err := f.create(f.tenantID, f.localIdp, externalID, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }
 
 func TestCreateAndVerifyPassword(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)
 
-	if err := f.create(f.userID, f.tenantID, "correct horse"); err != nil {
-		t.Fatal(err)
-	}
-	if ok, err := f.store.VerifyPassword(ctx, f.userID, "correct horse"); err != nil || !ok {
+	u := f.mustCreate(t, "a@x.com", "correct horse")
+	if ok, err := f.store.VerifyPassword(ctx, u.ID, "correct horse"); err != nil || !ok {
 		t.Fatalf("right password: %v %v", ok, err)
 	}
-	if ok, err := f.store.VerifyPassword(ctx, f.userID, "wrong"); err != nil || ok {
+	if ok, err := f.store.VerifyPassword(ctx, u.ID, "wrong"); err != nil || ok {
 		t.Fatalf("wrong password must be (false, nil): %v %v", ok, err)
 	}
 	if _, err := f.store.VerifyPassword(ctx, "missing", "x"); !errors.Is(err, identity.ErrNotFound) {
@@ -93,9 +115,7 @@ func TestCreateAndVerifyPassword(t *testing.T) {
 func TestPasswordIsNeverStoredInPlaintext(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)
-	if err := f.create(f.userID, f.tenantID, "s3cret-value"); err != nil {
-		t.Fatal(err)
-	}
+	f.mustCreate(t, "a@x.com", "s3cret-value")
 	cred, err := f.db.LocalCredential.Query().Only(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -108,18 +128,16 @@ func TestPasswordIsNeverStoredInPlaintext(t *testing.T) {
 func TestSetPassword(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)
-	if err := f.create(f.userID, f.tenantID, "old-password"); err != nil {
-		t.Fatal(err)
-	}
+	u := f.mustCreate(t, "a@x.com", "old-password")
 	before, _ := f.db.LocalCredential.Query().Only(ctx)
 
-	if err := f.store.SetPassword(ctx, f.userID, "new-password"); err != nil {
+	if err := f.store.SetPassword(ctx, u.ID, "new-password"); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := f.store.VerifyPassword(ctx, f.userID, "old-password"); ok {
+	if ok, _ := f.store.VerifyPassword(ctx, u.ID, "old-password"); ok {
 		t.Error("old password must stop working")
 	}
-	if ok, _ := f.store.VerifyPassword(ctx, f.userID, "new-password"); !ok {
+	if ok, _ := f.store.VerifyPassword(ctx, u.ID, "new-password"); !ok {
 		t.Error("new password must work")
 	}
 	after, _ := f.db.LocalCredential.Query().Only(ctx)
@@ -131,32 +149,38 @@ func TestSetPassword(t *testing.T) {
 	}
 }
 
-func TestCreateConstraints(t *testing.T) {
+func TestCreateUserConstraints(t *testing.T) {
+	ctx := context.Background()
 	f := newFixture(t)
 
-	if err := f.create(f.userID, f.tenantID, "a"); err != nil {
-		t.Fatal(err)
+	f.mustCreate(t, "a@x.com", "a")
+	if _, err := f.create(f.tenantID, f.localIdp, "a@x.com", "b"); !errors.Is(err, identity.ErrConflict) {
+		t.Errorf("the same login twice must conflict, got %v", err)
 	}
-	if err := f.create(f.userID, f.tenantID, "b"); !errors.Is(err, identity.ErrConflict) {
-		t.Errorf("a second credential must conflict, got %v", err)
-	}
-	if err := f.create(f.oidcUser, f.tenantID, "a"); !errors.Is(err, identity.ErrNotFound) {
+	if _, err := f.create(f.tenantID, f.oidcIdp, "o@x.com", "a"); !errors.Is(err, identity.ErrNotFound) {
 		t.Errorf("only LOCAL-IdP users may hold a credential, got %v", err)
 	}
-	// Tenant isolation: the user must belong to the tenant named on the credential.
-	if err := f.create(f.userID, f.otherTnID, "a"); !errors.Is(err, identity.ErrNotFound) {
-		t.Errorf("cross-tenant credential must be rejected, got %v", err)
+	// Tenant isolation: the IdP must belong to the tenant the user is created in.
+	if _, err := f.create(f.tenantID, f.otherIdp, "c@x.com", "a"); !errors.Is(err, identity.ErrNotFound) {
+		t.Errorf("cross-tenant IdP must be rejected, got %v", err)
+	}
+
+	// None of the rejected attempts may leave a half-created user behind.
+	if n, _ := f.db.User.Query().Count(ctx); n != 1 {
+		t.Errorf("expected only the first user to exist, got %d", n)
 	}
 }
 
-func TestCredentialRollsBackWithTransaction(t *testing.T) {
+func TestUserAndCredentialRollBackTogether(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)
 	hash, _ := local.HashPassword("pw")
 
 	boom := errors.New("boom")
 	err := f.db.WithTx(ctx, func(tx *ent.Tx) error {
-		if err := f.store.CreateTx(ctx, tx, f.tenantID, f.userID, hash); err != nil {
+		if _, err := f.store.CreateUserTx(ctx, tx, identity.CreateUserParams{
+			TenantID: f.tenantID, IdpID: f.localIdp, ExternalID: "a@x.com", Email: "a@x.com", DisplayName: "A",
+		}, hash); err != nil {
 			return err
 		}
 		return boom
@@ -164,7 +188,10 @@ func TestCredentialRollsBackWithTransaction(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatal(err)
 	}
-	if _, err := f.store.VerifyPassword(ctx, f.userID, "pw"); !errors.Is(err, identity.ErrNotFound) {
-		t.Fatalf("credential must not survive a rolled back transaction: %v", err)
+	if n, _ := f.db.User.Query().Count(ctx); n != 0 {
+		t.Errorf("user must not survive a rolled back transaction, got %d", n)
+	}
+	if n, _ := f.db.LocalCredential.Query().Count(ctx); n != 0 {
+		t.Errorf("credential must not survive a rolled back transaction, got %d", n)
 	}
 }

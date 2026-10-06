@@ -56,6 +56,10 @@ func (User) Fields() []ent.Field {
 		// Free-form so new roles don't need a schema change. The permissions
 		// layer owns the vocabulary.
 		field.String("role").MaxLen(32).Default("MEMBER"),
+		// Set when an administrator disables the account; NULL while active.
+		// A disabled user keeps their data and identity but cannot sign in,
+		// and every credential they hold stops working at once.
+		field.Time("disabled_at").SchemaType(timestampType).Optional().Nillable(),
 	}
 }
 

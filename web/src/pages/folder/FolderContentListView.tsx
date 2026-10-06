@@ -69,6 +69,7 @@ export function FolderContentListView({
     sortDirection,
     onSortChange,
     onOperation,
+    ownerLabel = "Owner",
 }: FolderViewProps) {
     const parentRef = React.useRef<HTMLDivElement>(null)
 
@@ -103,7 +104,7 @@ export function FolderContentListView({
                     className="col-span-2 hidden cursor-pointer items-center transition-colors hover:text-foreground sm:flex"
                     onClick={() => onSortChange("owner")}
                 >
-                    <span>Owner</span>
+                    <span>{ownerLabel}</span>
                     {renderSortArrow("owner")}
                 </div>
                 <div

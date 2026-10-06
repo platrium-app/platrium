@@ -28,4 +28,5 @@ type Resolver struct {
 	GroupStore  *identity.GroupStore
 	TenantStore *identity.TenantStore
 	IdpStore    *auth.IdpStore
+	UserAdmin   *orchestrator.UserAdmin
 }

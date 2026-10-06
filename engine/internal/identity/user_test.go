@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"platrium/internal/authz"
 	"platrium/internal/identity"
 	"platrium/internal/infra/db/ent"
 )
@@ -139,5 +140,98 @@ func TestUserSearch(t *testing.T) {
 	}
 	if got := names("_", 10); len(got) != 0 {
 		t.Errorf("underscore must not match everything: %v", got)
+	}
+}
+
+func TestUserSetDisabled(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	acme, acmeIdp := e.tenantWithIdp(t, "acme", false)
+	other, _ := e.tenantWithIdp(t, "other", false)
+	var u *identity.User
+	if err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
+		var err error
+		u, err = e.users.CreateUserTx(ctx, tx, identity.CreateUserParams{TenantID: acme.ID, IdpID: acmeIdp.ID, ExternalID: "a", Email: "a@x.com", DisplayName: "A"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if u.Disabled() {
+		t.Fatal("a new user is active")
+	}
+
+	got, err := e.users.SetDisabled(ctx, acme.ID, u.ID, true)
+	if err != nil || !got.Disabled() {
+		t.Fatalf("disable: %+v %v", got, err)
+	}
+	// Disabling twice keeps the original time, so it records when it happened.
+	again, err := e.users.SetDisabled(ctx, acme.ID, u.ID, true)
+	if err != nil || again.DisabledAt == nil || !again.DisabledAt.Equal(*got.DisabledAt) {
+		t.Fatalf("second disable must not move disabled_at: %+v %v", again, err)
+	}
+	got, err = e.users.SetDisabled(ctx, acme.ID, u.ID, false)
+	if err != nil || got.Disabled() {
+		t.Fatalf("enable: %+v %v", got, err)
+	}
+
+	// Tenant isolation: another tenant's admin cannot touch this user.
+	if _, err := e.users.SetDisabled(ctx, other.ID, u.ID, true); !errors.Is(err, identity.ErrNotFound) {
+		t.Errorf("cross-tenant disable must be not found, got %v", err)
+	}
+	if _, err := e.users.SetDisabled(ctx, acme.ID, "missing", true); !errors.Is(err, identity.ErrNotFound) {
+		t.Errorf("unknown user: %v", err)
+	}
+}
+
+func TestUserPermissions(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	home, homeIdp := e.tenantWithIdp(t, "home", true)
+	acme, acmeIdp := e.tenantWithIdp(t, "acme", false)
+
+	mk := func(tenantID, idpID, name, role string) *identity.User {
+		t.Helper()
+		var u *identity.User
+		if err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
+			var err error
+			u, err = e.users.CreateUserTx(ctx, tx, identity.CreateUserParams{TenantID: tenantID, IdpID: idpID, ExternalID: name, Email: name + "@x.com", DisplayName: name, Role: role})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	clusterAdmin := mk(home.ID, homeIdp.ID, "root", identity.RoleSuperAdmin)
+	orgAdmin := mk(acme.ID, acmeIdp.ID, "boss", identity.RoleSuperAdmin)
+	member := mk(acme.ID, acmeIdp.ID, "bob", identity.RoleMember)
+
+	perms := func(tenantID, userID string) authz.PermissionSet {
+		t.Helper()
+		p, err := e.users.Permissions(ctx, tenantID, userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	if !perms(home.ID, clusterAdmin.ID).Has(authz.PermTenantsManage) {
+		t.Error("the native tenant's super admin administers the cluster")
+	}
+	if p := perms(acme.ID, orgAdmin.ID); p.Has(authz.PermTenantsManage) || !p.Has(authz.PermUsersCreate) {
+		t.Errorf("an org super admin administers only their org: %v", p.Sorted())
+	}
+	if p := perms(acme.ID, member.ID); len(p) != 0 {
+		t.Errorf("member: %v", p.Sorted())
+	}
+	// Tenant isolation: the same user ID under another tenant is nobody.
+	if p := perms(home.ID, orgAdmin.ID); len(p) != 0 {
+		t.Errorf("cross-tenant lookup must grant nothing: %v", p.Sorted())
+	}
+
+	// A disabled user holds nothing, whatever their role.
+	if _, err := e.users.SetDisabled(ctx, acme.ID, orgAdmin.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if p := perms(acme.ID, orgAdmin.ID); len(p) != 0 {
+		t.Errorf("a disabled admin must hold nothing: %v", p.Sorted())
 	}
 }

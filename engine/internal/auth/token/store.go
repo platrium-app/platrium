@@ -158,6 +158,12 @@ func (s *Store) Validate(ctx context.Context, secret string) (*Principal, error)
 		_ = s.db.AuthToken.UpdateOneID(row.ID).SetLastUsedAt(now).Exec(ctx)
 	}
 
+	// A disabled user's tokens stop working at once, without being deleted, so
+	// re-enabling the account restores their devices.
+	if u := row.Edges.User; u != nil && u.DisabledAt != nil {
+		return nil, ErrInvalidToken
+	}
+
 	p := &Principal{TokenID: row.ID, TenantID: row.TenantID, UserID: row.UserID}
 	if row.DeviceID != nil {
 		p.DeviceID = *row.DeviceID

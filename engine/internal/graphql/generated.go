@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"platrium/internal/authz"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,7 @@ type ResolverRoot interface {
 }
 
 type DirectiveRoot struct {
+	Requires func(ctx context.Context, obj any, next graphql.Resolver, permission authz.Permission) (res any, err error)
 }
 
 type ComplexityRoot struct {
@@ -59,6 +61,30 @@ type ComplexityRoot struct {
 		Level          func(childComplexity int) int
 		Roles          func(childComplexity int) int
 		SupportsExpiry func(childComplexity int) int
+	}
+
+	AdminUser struct {
+		CreatedAt   func(childComplexity int) int
+		Disabled    func(childComplexity int) int
+		DisabledAt  func(childComplexity int) int
+		DisplayName func(childComplexity int) int
+		Editable    func(childComplexity int) int
+		Email       func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Manageable  func(childComplexity int) int
+		Role        func(childComplexity int) int
+		Source      func(childComplexity int) int
+	}
+
+	AdminUserConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	AdminUserEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
 	}
 
 	DirectorySubject struct {
@@ -133,6 +159,13 @@ type ComplexityRoot struct {
 		Role       func(childComplexity int) int
 	}
 
+	IdentitySource struct {
+		ID      func(childComplexity int) int
+		IsLocal func(childComplexity int) int
+		Name    func(childComplexity int) int
+		Type    func(childComplexity int) int
+	}
+
 	IdpProvider struct {
 		ID   func(childComplexity int) int
 		Name func(childComplexity int) int
@@ -153,18 +186,32 @@ type ComplexityRoot struct {
 		Name func(childComplexity int) int
 	}
 
+	Me struct {
+		AssignableRoles func(childComplexity int) int
+		DisplayName     func(childComplexity int) int
+		Email           func(childComplexity int) int
+		Permissions     func(childComplexity int) int
+		Role            func(childComplexity int) int
+		TenantID        func(childComplexity int) int
+		UserID          func(childComplexity int) int
+	}
+
 	Mutation struct {
 		CopyFile               func(childComplexity int, fileID string, newParentID string, newName string) int
 		CreateFolder           func(childComplexity int, parentID string, name string) int
+		CreateLocalUser        func(childComplexity int, input CreateLocalUserInput) int
 		CreateSharedDrive      func(childComplexity int, name string) int
 		DeleteItem             func(childComplexity int, id string) int
 		MoveItem               func(childComplexity int, id string, newParentID string) int
 		RenameItem             func(childComplexity int, id string, newName string) int
+		ResetLocalUserPassword func(childComplexity int, id string, password string) int
 		RevokeAccess           func(childComplexity int, grantID string) int
 		SetGeneralAccess       func(childComplexity int, input GeneralAccessInput) int
 		SetInheritance         func(childComplexity int, itemID string, inherit bool) int
 		SetSharedDriveCreators func(childComplexity int, groupIds []string) int
+		SetUserDisabled        func(childComplexity int, id string, disabled bool) int
 		ShareItem              func(childComplexity int, input ShareInput) int
+		UpdateLocalUser        func(childComplexity int, id string, input UpdateLocalUserInput) int
 	}
 
 	PageInfo struct {
@@ -173,6 +220,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		AdminIdentitySources func(childComplexity int) int
+		AdminUsers           func(childComplexity int, first *int, after *string, search *string, sourceID *string, status *UserStatus) int
 		CanCreateSharedDrive func(childComplexity int) int
 		Drives               func(childComplexity int) int
 		FolderContents       func(childComplexity int, folderID string, first *int, after *string) int
@@ -180,6 +229,7 @@ type ComplexityRoot struct {
 		GetChanges           func(childComplexity int, folderID string, since time.Time) int
 		Item                 func(childComplexity int, id string) int
 		ItemAccess           func(childComplexity int, itemID string) int
+		Me                   func(childComplexity int) int
 		SearchDirectory      func(childComplexity int, query string, first *int, excludeAccessToItemID *string) int
 		ServerInfo           func(childComplexity int) int
 		ShareRoles           func(childComplexity int, itemID string) int
@@ -247,6 +297,10 @@ type MutationResolver interface {
 	MoveItem(ctx context.Context, id string, newParentID string) (DriveItem, error)
 	CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*File, error)
 	DeleteItem(ctx context.Context, id string) (bool, error)
+	CreateLocalUser(ctx context.Context, input CreateLocalUserInput) (*AdminUser, error)
+	UpdateLocalUser(ctx context.Context, id string, input UpdateLocalUserInput) (*AdminUser, error)
+	ResetLocalUserPassword(ctx context.Context, id string, password string) (bool, error)
+	SetUserDisabled(ctx context.Context, id string, disabled bool) (*AdminUser, error)
 	CreateSharedDrive(ctx context.Context, name string) (*Folder, error)
 	SetSharedDriveCreators(ctx context.Context, groupIds []string) ([]*DirectorySubject, error)
 	ShareItem(ctx context.Context, input ShareInput) (*AccessGrant, error)
@@ -258,6 +312,9 @@ type QueryResolver interface {
 	Item(ctx context.Context, id string) (DriveItem, error)
 	FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error)
 	Drives(ctx context.Context) ([]*Folder, error)
+	Me(ctx context.Context) (*Me, error)
+	AdminUsers(ctx context.Context, first *int, after *string, search *string, sourceID *string, status *UserStatus) (*AdminUserConnection, error)
+	AdminIdentitySources(ctx context.Context) ([]*IdentitySource, error)
 	CanCreateSharedDrive(ctx context.Context) (bool, error)
 	SharedDriveCreators(ctx context.Context) ([]*DirectorySubject, error)
 	GetChanges(ctx context.Context, folderID string, since time.Time) ([]*DriveItemEvent, error)
@@ -388,6 +445,99 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AccessLevelOption.SupportsExpiry(childComplexity), true
+
+	case "AdminUser.createdAt":
+		if e.ComplexityRoot.AdminUser.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.CreatedAt(childComplexity), true
+	case "AdminUser.disabled":
+		if e.ComplexityRoot.AdminUser.Disabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.Disabled(childComplexity), true
+	case "AdminUser.disabledAt":
+		if e.ComplexityRoot.AdminUser.DisabledAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.DisabledAt(childComplexity), true
+	case "AdminUser.displayName":
+		if e.ComplexityRoot.AdminUser.DisplayName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.DisplayName(childComplexity), true
+	case "AdminUser.editable":
+		if e.ComplexityRoot.AdminUser.Editable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.Editable(childComplexity), true
+	case "AdminUser.email":
+		if e.ComplexityRoot.AdminUser.Email == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.Email(childComplexity), true
+	case "AdminUser.id":
+		if e.ComplexityRoot.AdminUser.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.ID(childComplexity), true
+	case "AdminUser.manageable":
+		if e.ComplexityRoot.AdminUser.Manageable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.Manageable(childComplexity), true
+	case "AdminUser.role":
+		if e.ComplexityRoot.AdminUser.Role == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.Role(childComplexity), true
+	case "AdminUser.source":
+		if e.ComplexityRoot.AdminUser.Source == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUser.Source(childComplexity), true
+
+	case "AdminUserConnection.edges":
+		if e.ComplexityRoot.AdminUserConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUserConnection.Edges(childComplexity), true
+	case "AdminUserConnection.pageInfo":
+		if e.ComplexityRoot.AdminUserConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUserConnection.PageInfo(childComplexity), true
+	case "AdminUserConnection.totalCount":
+		if e.ComplexityRoot.AdminUserConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUserConnection.TotalCount(childComplexity), true
+
+	case "AdminUserEdge.cursor":
+		if e.ComplexityRoot.AdminUserEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUserEdge.Cursor(childComplexity), true
+	case "AdminUserEdge.node":
+		if e.ComplexityRoot.AdminUserEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AdminUserEdge.Node(childComplexity), true
 
 	case "DirectorySubject.email":
 		if e.ComplexityRoot.DirectorySubject.Email == nil {
@@ -668,6 +818,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.GeneralAccess.Role(childComplexity), true
 
+	case "IdentitySource.id":
+		if e.ComplexityRoot.IdentitySource.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentitySource.ID(childComplexity), true
+	case "IdentitySource.isLocal":
+		if e.ComplexityRoot.IdentitySource.IsLocal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentitySource.IsLocal(childComplexity), true
+	case "IdentitySource.name":
+		if e.ComplexityRoot.IdentitySource.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentitySource.Name(childComplexity), true
+	case "IdentitySource.type":
+		if e.ComplexityRoot.IdentitySource.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentitySource.Type(childComplexity), true
+
 	case "IdpProvider.id":
 		if e.ComplexityRoot.IdpProvider.ID == nil {
 			break
@@ -737,6 +912,49 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.ItemRef.Name(childComplexity), true
 
+	case "Me.assignableRoles":
+		if e.ComplexityRoot.Me.AssignableRoles == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.AssignableRoles(childComplexity), true
+	case "Me.displayName":
+		if e.ComplexityRoot.Me.DisplayName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.DisplayName(childComplexity), true
+	case "Me.email":
+		if e.ComplexityRoot.Me.Email == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.Email(childComplexity), true
+	case "Me.permissions":
+		if e.ComplexityRoot.Me.Permissions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.Permissions(childComplexity), true
+	case "Me.role":
+		if e.ComplexityRoot.Me.Role == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.Role(childComplexity), true
+	case "Me.tenantId":
+		if e.ComplexityRoot.Me.TenantID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.TenantID(childComplexity), true
+	case "Me.userId":
+		if e.ComplexityRoot.Me.UserID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Me.UserID(childComplexity), true
+
 	case "Mutation.copyFile":
 		if e.ComplexityRoot.Mutation.CopyFile == nil {
 			break
@@ -759,6 +977,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateFolder(childComplexity, args["parentId"].(string), args["name"].(string)), true
+	case "Mutation.createLocalUser":
+		if e.ComplexityRoot.Mutation.CreateLocalUser == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createLocalUser_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateLocalUser(childComplexity, args["input"].(CreateLocalUserInput)), true
 	case "Mutation.createSharedDrive":
 		if e.ComplexityRoot.Mutation.CreateSharedDrive == nil {
 			break
@@ -803,6 +1032,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RenameItem(childComplexity, args["id"].(string), args["newName"].(string)), true
+	case "Mutation.resetLocalUserPassword":
+		if e.ComplexityRoot.Mutation.ResetLocalUserPassword == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_resetLocalUserPassword_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ResetLocalUserPassword(childComplexity, args["id"].(string), args["password"].(string)), true
 	case "Mutation.revokeAccess":
 		if e.ComplexityRoot.Mutation.RevokeAccess == nil {
 			break
@@ -847,6 +1087,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetSharedDriveCreators(childComplexity, args["groupIds"].([]string)), true
+	case "Mutation.setUserDisabled":
+		if e.ComplexityRoot.Mutation.SetUserDisabled == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setUserDisabled_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetUserDisabled(childComplexity, args["id"].(string), args["disabled"].(bool)), true
 	case "Mutation.shareItem":
 		if e.ComplexityRoot.Mutation.ShareItem == nil {
 			break
@@ -858,6 +1109,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ShareItem(childComplexity, args["input"].(ShareInput)), true
+	case "Mutation.updateLocalUser":
+		if e.ComplexityRoot.Mutation.UpdateLocalUser == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateLocalUser_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateLocalUser(childComplexity, args["id"].(string), args["input"].(UpdateLocalUserInput)), true
 
 	case "PageInfo.endCursor":
 		if e.ComplexityRoot.PageInfo.EndCursor == nil {
@@ -872,6 +1134,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PageInfo.HasNextPage(childComplexity), true
 
+	case "Query.adminIdentitySources":
+		if e.ComplexityRoot.Query.AdminIdentitySources == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.AdminIdentitySources(childComplexity), true
+	case "Query.adminUsers":
+		if e.ComplexityRoot.Query.AdminUsers == nil {
+			break
+		}
+
+		args, err := ec.field_Query_adminUsers_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.AdminUsers(childComplexity, args["first"].(*int), args["after"].(*string), args["search"].(*string), args["sourceId"].(*string), args["status"].(*UserStatus)), true
 	case "Query.canCreateSharedDrive":
 		if e.ComplexityRoot.Query.CanCreateSharedDrive == nil {
 			break
@@ -940,6 +1219,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ItemAccess(childComplexity, args["itemId"].(string)), true
+	case "Query.me":
+		if e.ComplexityRoot.Query.Me == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Me(childComplexity), true
 	case "Query.searchDirectory":
 		if e.ComplexityRoot.Query.SearchDirectory == nil {
 			break
@@ -1133,8 +1418,10 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputCreateLocalUserInput,
 		ec.unmarshalInputGeneralAccessInput,
 		ec.unmarshalInputShareInput,
+		ec.unmarshalInputUpdateLocalUserInput,
 	)
 	first := true
 
@@ -1227,6 +1514,122 @@ func newExecutionContext(
 }
 
 var sources = []*ast.Source{
+	{Name: "../../../api/graphql/core/admin.graphql", Input: `# Administration of an organization's people. Every field here is gated by
+# @requires, so what the schema shows is exactly what is protected. Whether the
+# caller may act on one particular user (their own role, the user's source) is
+# checked in the resolver, because a directive cannot see its target.
+
+"""
+Gates a field on a permission. The caller must be signed in and hold the
+permission through their role (see ` + "`" + `me` + "`" + `); otherwise the field fails with
+FORBIDDEN, or UNAUTHENTICATED without a session.
+"""
+directive @requires(permission: Permission!) on FIELD_DEFINITION
+
+"Something a user may do to their organization (or, in the native tenant, the cluster)."
+enum Permission {
+  USERS_READ
+  USERS_CREATE
+  USERS_UPDATE
+  USERS_DISABLE
+  ROLES_ASSIGN
+  SHARED_DRIVES_CREATE
+  POLICIES_MANAGE
+  TENANTS_MANAGE
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+"The signed-in user, with what they may do. Clients show or hide admin features from ` + "`" + `permissions` + "`" + `, never from ` + "`" + `role` + "`" + `."
+type Me {
+  userId: ID!
+  tenantId: ID!
+  email: String!
+  displayName: String!
+  role: String!
+  permissions: [Permission!]!
+  "The roles this user may give to others. Empty without ROLES_ASSIGN."
+  assignableRoles: [String!]!
+}
+
+"Where a user (or group) comes from: the built-in provider, or an external one."
+type IdentitySource {
+  id: ID!
+  name: String!
+  "LOCAL, OIDC or SAML."
+  type: String!
+  "True for the built-in provider, whose users Platrium itself manages."
+  isLocal: Boolean!
+}
+
+type AdminUser {
+  id: ID!
+  email: String!
+  displayName: String!
+  role: String!
+  disabled: Boolean!
+  disabledAt: DateTime
+  createdAt: DateTime!
+  source: IdentitySource!
+  "False when an external provider manages this user: only disabling is possible."
+  editable: Boolean!
+  "Whether the caller may act on this user at all. False for someone with more permissions than the caller holds."
+  manageable: Boolean!
+}
+
+type AdminUserEdge {
+  cursor: String!
+  node: AdminUser!
+}
+
+type AdminUserConnection {
+  edges: [AdminUserEdge!]!
+  pageInfo: PageInfo!
+  "How many users match the filters, across all pages."
+  totalCount: Int!
+}
+
+input CreateLocalUserInput {
+  "Their sign-in name. It cannot be changed afterwards."
+  email: String!
+  displayName: String!
+  password: String!
+  "Defaults to MEMBER."
+  role: String
+}
+
+input UpdateLocalUserInput {
+  displayName: String
+  role: String
+}
+
+extend type Query {
+  me: Me!
+  "The organization's users, ordered by name. Search matches name and email."
+  adminUsers(
+    first: Int
+    after: String
+    search: String
+    sourceId: ID
+    status: UserStatus
+  ): AdminUserConnection! @requires(permission: USERS_READ)
+  "The identity providers users can come from, for filtering."
+  adminIdentitySources: [IdentitySource!]! @requires(permission: USERS_READ)
+}
+
+extend type Mutation {
+  "Create a user on the built-in provider."
+  createLocalUser(input: CreateLocalUserInput!): AdminUser! @requires(permission: USERS_CREATE)
+  "Edit a built-in user. Changing the role also needs ROLES_ASSIGN."
+  updateLocalUser(id: ID!, input: UpdateLocalUserInput!): AdminUser! @requires(permission: USERS_UPDATE)
+  resetLocalUserPassword(id: ID!, password: String!): Boolean! @requires(permission: USERS_UPDATE)
+  "Block or restore sign-in for a user of any provider."
+  setUserDisabled(id: ID!, disabled: Boolean!): AdminUser! @requires(permission: USERS_DISABLE)
+}
+`, BuiltIn: false},
 	{Name: "../../../api/graphql/core/drives.graphql", Input: `# Shared drives. A shared drive belongs to the organization, not to a person.
 # People get access to it through the sharing API (shareItem on the drive's ID).
 
@@ -1584,6 +1987,54 @@ func (ec *executionContext) childFields_AccessLevelOption(ctx context.Context, f
 	return nil, fmt.Errorf("no field named %q was found under type AccessLevelOption", field.Name)
 }
 
+func (ec *executionContext) childFields_AdminUser(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_AdminUser_id(ctx, field)
+	case "email":
+		return ec.fieldContext_AdminUser_email(ctx, field)
+	case "displayName":
+		return ec.fieldContext_AdminUser_displayName(ctx, field)
+	case "role":
+		return ec.fieldContext_AdminUser_role(ctx, field)
+	case "disabled":
+		return ec.fieldContext_AdminUser_disabled(ctx, field)
+	case "disabledAt":
+		return ec.fieldContext_AdminUser_disabledAt(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_AdminUser_createdAt(ctx, field)
+	case "source":
+		return ec.fieldContext_AdminUser_source(ctx, field)
+	case "editable":
+		return ec.fieldContext_AdminUser_editable(ctx, field)
+	case "manageable":
+		return ec.fieldContext_AdminUser_manageable(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AdminUser", field.Name)
+}
+
+func (ec *executionContext) childFields_AdminUserConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "edges":
+		return ec.fieldContext_AdminUserConnection_edges(ctx, field)
+	case "pageInfo":
+		return ec.fieldContext_AdminUserConnection_pageInfo(ctx, field)
+	case "totalCount":
+		return ec.fieldContext_AdminUserConnection_totalCount(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AdminUserConnection", field.Name)
+}
+
+func (ec *executionContext) childFields_AdminUserEdge(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "cursor":
+		return ec.fieldContext_AdminUserEdge_cursor(ctx, field)
+	case "node":
+		return ec.fieldContext_AdminUserEdge_node(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AdminUserEdge", field.Name)
+}
+
 func (ec *executionContext) childFields_DirectorySubject(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "type":
@@ -1728,6 +2179,20 @@ func (ec *executionContext) childFields_GeneralAccess(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type GeneralAccess", field.Name)
 }
 
+func (ec *executionContext) childFields_IdentitySource(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_IdentitySource_id(ctx, field)
+	case "name":
+		return ec.fieldContext_IdentitySource_name(ctx, field)
+	case "type":
+		return ec.fieldContext_IdentitySource_type(ctx, field)
+	case "isLocal":
+		return ec.fieldContext_IdentitySource_isLocal(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type IdentitySource", field.Name)
+}
+
 func (ec *executionContext) childFields_IdpProvider(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -1766,6 +2231,26 @@ func (ec *executionContext) childFields_ItemRef(ctx context.Context, field graph
 		return ec.fieldContext_ItemRef_name(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ItemRef", field.Name)
+}
+
+func (ec *executionContext) childFields_Me(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "userId":
+		return ec.fieldContext_Me_userId(ctx, field)
+	case "tenantId":
+		return ec.fieldContext_Me_tenantId(ctx, field)
+	case "email":
+		return ec.fieldContext_Me_email(ctx, field)
+	case "displayName":
+		return ec.fieldContext_Me_displayName(ctx, field)
+	case "role":
+		return ec.fieldContext_Me_role(ctx, field)
+	case "permissions":
+		return ec.fieldContext_Me_permissions(ctx, field)
+	case "assignableRoles":
+		return ec.fieldContext_Me_assignableRoles(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Me", field.Name)
 }
 
 func (ec *executionContext) childFields_PageInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1970,6 +2455,20 @@ func (ec *executionContext) childFields___Type(ctx context.Context, field graphq
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) dir_requires_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "permission",
+		func(ctx context.Context, v any) (authz.Permission, error) {
+			return ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["permission"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_copyFile_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2019,6 +2518,20 @@ func (ec *executionContext) field_Mutation_createFolder_args(ctx context.Context
 		return nil, err
 	}
 	args["name"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createLocalUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (CreateLocalUserInput, error) {
+			return ec.unmarshalNCreateLocalUserInput2platriumᚋinternalᚋgraphqlᚐCreateLocalUserInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -2094,6 +2607,28 @@ func (ec *executionContext) field_Mutation_renameItem_args(ctx context.Context, 
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_resetLocalUserPassword_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "password",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["password"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_revokeAccess_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2158,6 +2693,28 @@ func (ec *executionContext) field_Mutation_setSharedDriveCreators_args(ctx conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_setUserDisabled_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "disabled",
+		func(ctx context.Context, v any) (bool, error) {
+			return ec.unmarshalNBoolean2bool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["disabled"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_shareItem_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2172,6 +2729,28 @@ func (ec *executionContext) field_Mutation_shareItem_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateLocalUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (UpdateLocalUserInput, error) {
+			return ec.unmarshalNUpdateLocalUserInput2platriumᚋinternalᚋgraphqlᚐUpdateLocalUserInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2183,6 +2762,52 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_adminUsers_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "after",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "search",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "sourceId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["sourceId"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "status",
+		func(ctx context.Context, v any) (*UserStatus, error) {
+			return ec.unmarshalOUserStatus2ᚖplatriumᚋinternalᚋgraphqlᚐUserStatus(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["status"] = arg4
 	return args, nil
 }
 
@@ -2781,6 +3406,387 @@ func (ec *executionContext) _AccessLevelOption_supportsExpiry(ctx context.Contex
 }
 func (ec *executionContext) fieldContext_AccessLevelOption_supportsExpiry(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AccessLevelOption", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_id(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_email(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_email(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Email, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_displayName(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_displayName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DisplayName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_displayName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_role(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_role(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Role, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_disabled(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_disabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Disabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_disabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_disabledAt(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_disabledAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DisabledAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalODateTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_disabledAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type DateTime does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_createdAt(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNDateTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type DateTime does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_source(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_source(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *IdentitySource) graphql.Marshaler {
+			return ec.marshalNIdentitySource2ᚖplatriumᚋinternalᚋgraphqlᚐIdentitySource(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminUser",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentitySource(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AdminUser_editable(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_editable(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Editable, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_editable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUser_manageable(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUser_manageable(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Manageable, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUser_manageable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUserConnection_edges(ctx context.Context, field graphql.CollectedField, obj *AdminUserConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUserConnection_edges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*AdminUserEdge) graphql.Marshaler {
+			return ec.marshalNAdminUserEdge2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAdminUserEdgeᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUserConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminUserConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminUserEdge(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AdminUserConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *AdminUserConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUserConnection_pageInfo(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *PageInfo) graphql.Marshaler {
+			return ec.marshalNPageInfo2ᚖplatriumᚋinternalᚋgraphqlᚐPageInfo(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUserConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminUserConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PageInfo(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AdminUserConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *AdminUserConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUserConnection_totalCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUserConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUserConnection", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUserEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *AdminUserEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUserEdge_cursor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUserEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUserEdge", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AdminUserEdge_node(ctx context.Context, field graphql.CollectedField, obj *AdminUserEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AdminUserEdge_node(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *AdminUser) graphql.Marshaler {
+			return ec.marshalNAdminUser2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AdminUserEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AdminUserEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminUser(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _DirectorySubject_type(ctx context.Context, field graphql.CollectedField, obj *DirectorySubject) (ret graphql.Marshaler) {
@@ -3890,6 +4896,98 @@ func (ec *executionContext) fieldContext_GeneralAccess_expiresAt(_ context.Conte
 	return graphql.NewScalarFieldContext("GeneralAccess", field, false, false, errors.New("field of type DateTime does not have child fields"))
 }
 
+func (ec *executionContext) _IdentitySource_id(ctx context.Context, field graphql.CollectedField, obj *IdentitySource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentitySource_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentitySource_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentitySource", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _IdentitySource_name(ctx context.Context, field graphql.CollectedField, obj *IdentitySource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentitySource_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentitySource_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentitySource", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _IdentitySource_type(ctx context.Context, field graphql.CollectedField, obj *IdentitySource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentitySource_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentitySource_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentitySource", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _IdentitySource_isLocal(ctx context.Context, field graphql.CollectedField, obj *IdentitySource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentitySource_isLocal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsLocal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentitySource_isLocal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentitySource", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _IdpProvider_id(ctx context.Context, field graphql.CollectedField, obj *IdpProvider) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4179,6 +5277,167 @@ func (ec *executionContext) fieldContext_ItemRef_name(_ context.Context, field g
 	return graphql.NewScalarFieldContext("ItemRef", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _Me_userId(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_userId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UserID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_userId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _Me_tenantId(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_tenantId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TenantID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_tenantId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _Me_email(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_email(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Email, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Me_displayName(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_displayName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DisplayName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_displayName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Me_role(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_role(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Role, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Me_permissions(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_permissions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Permissions, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []authz.Permission) graphql.Marshaler {
+			return ec.marshalNPermission2ᚕplatriumᚋinternalᚋauthzᚐPermissionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_permissions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type Permission does not have child fields"))
+}
+
+func (ec *executionContext) _Me_assignableRoles(ctx context.Context, field graphql.CollectedField, obj *Me) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Me_assignableRoles(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AssignableRoles, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Me_assignableRoles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Me", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Mutation_createFolder(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4393,6 +5652,254 @@ func (ec *executionContext) fieldContext_Mutation_deleteItem(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteItem_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createLocalUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createLocalUser(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateLocalUser(ctx, fc.Args["input"].(CreateLocalUserInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "USERS_CREATE")
+				if err != nil {
+					var zeroVal *AdminUser
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *AdminUser
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *AdminUser) graphql.Marshaler {
+			return ec.marshalNAdminUser2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createLocalUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminUser(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createLocalUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateLocalUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateLocalUser(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateLocalUser(ctx, fc.Args["id"].(string), fc.Args["input"].(UpdateLocalUserInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "USERS_UPDATE")
+				if err != nil {
+					var zeroVal *AdminUser
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *AdminUser
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *AdminUser) graphql.Marshaler {
+			return ec.marshalNAdminUser2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateLocalUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminUser(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateLocalUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_resetLocalUserPassword(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_resetLocalUserPassword(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ResetLocalUserPassword(ctx, fc.Args["id"].(string), fc.Args["password"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "USERS_UPDATE")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_resetLocalUserPassword(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_resetLocalUserPassword_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setUserDisabled(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setUserDisabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetUserDisabled(ctx, fc.Args["id"].(string), fc.Args["disabled"].(bool))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "USERS_DISABLE")
+				if err != nil {
+					var zeroVal *AdminUser
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *AdminUser
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *AdminUser) graphql.Marshaler {
+			return ec.marshalNAdminUser2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setUserDisabled(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminUser(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setUserDisabled_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -4824,6 +6331,150 @@ func (ec *executionContext) fieldContext_Query_drives(_ context.Context, field g
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_Folder(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_me(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Me(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *Me) graphql.Marshaler {
+			return ec.marshalNMe2ᚖplatriumᚋinternalᚋgraphqlᚐMe(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_me(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Me(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_adminUsers(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_adminUsers(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().AdminUsers(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["search"].(*string), fc.Args["sourceId"].(*string), fc.Args["status"].(*UserStatus))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "USERS_READ")
+				if err != nil {
+					var zeroVal *AdminUserConnection
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *AdminUserConnection
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *AdminUserConnection) graphql.Marshaler {
+			return ec.marshalNAdminUserConnection2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUserConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_adminUsers(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AdminUserConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_adminUsers_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_adminIdentitySources(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_adminIdentitySources(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().AdminIdentitySources(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "USERS_READ")
+				if err != nil {
+					var zeroVal []*IdentitySource
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal []*IdentitySource
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []*IdentitySource) graphql.Marshaler {
+			return ec.marshalNIdentitySource2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdentitySourceᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_adminIdentitySources(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentitySource(ctx, field)
 		},
 	}
 	return fc, nil
@@ -6884,6 +8535,57 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputCreateLocalUserInput(ctx context.Context, obj any) (CreateLocalUserInput, error) {
+	var it CreateLocalUserInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"email", "displayName", "password", "role"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "email":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Email = data
+		case "displayName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DisplayName = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "role":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Role = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputGeneralAccessInput(ctx context.Context, obj any) (GeneralAccessInput, error) {
 	var it GeneralAccessInput
 	if obj == nil {
@@ -7002,6 +8704,43 @@ func (ec *executionContext) unmarshalInputShareInput(ctx context.Context, obj an
 				return it, err
 			}
 			it.ExpiresAt = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateLocalUserInput(ctx context.Context, obj any) (UpdateLocalUserInput, error) {
+	var it UpdateLocalUserInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"displayName", "role"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "displayName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DisplayName = data
+		case "role":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Role = data
 		}
 	}
 	return it, nil
@@ -7164,6 +8903,180 @@ func (ec *executionContext) _AccessLevelOption(ctx context.Context, sel ast.Sele
 			}
 		case "supportsExpiry":
 			out.Values[i] = ec._AccessLevelOption_supportsExpiry(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var adminUserImplementors = []string{"AdminUser"}
+
+func (ec *executionContext) _AdminUser(ctx context.Context, sel ast.SelectionSet, obj *AdminUser) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, adminUserImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AdminUser")
+		case "id":
+			out.Values[i] = ec._AdminUser_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "email":
+			out.Values[i] = ec._AdminUser_email(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "displayName":
+			out.Values[i] = ec._AdminUser_displayName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "role":
+			out.Values[i] = ec._AdminUser_role(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "disabled":
+			out.Values[i] = ec._AdminUser_disabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "disabledAt":
+			out.Values[i] = ec._AdminUser_disabledAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._AdminUser_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "source":
+			out.Values[i] = ec._AdminUser_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "editable":
+			out.Values[i] = ec._AdminUser_editable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "manageable":
+			out.Values[i] = ec._AdminUser_manageable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var adminUserConnectionImplementors = []string{"AdminUserConnection"}
+
+func (ec *executionContext) _AdminUserConnection(ctx context.Context, sel ast.SelectionSet, obj *AdminUserConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, adminUserConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AdminUserConnection")
+		case "edges":
+			out.Values[i] = ec._AdminUserConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._AdminUserConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._AdminUserConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var adminUserEdgeImplementors = []string{"AdminUserEdge"}
+
+func (ec *executionContext) _AdminUserEdge(ctx context.Context, sel ast.SelectionSet, obj *AdminUserEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, adminUserEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AdminUserEdge")
+		case "cursor":
+			out.Values[i] = ec._AdminUserEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "node":
+			out.Values[i] = ec._AdminUserEdge_node(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -7776,6 +9689,59 @@ func (ec *executionContext) _GeneralAccess(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var identitySourceImplementors = []string{"IdentitySource"}
+
+func (ec *executionContext) _IdentitySource(ctx context.Context, sel ast.SelectionSet, obj *IdentitySource) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, identitySourceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("IdentitySource")
+		case "id":
+			out.Values[i] = ec._IdentitySource_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._IdentitySource_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "type":
+			out.Values[i] = ec._IdentitySource_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isLocal":
+			out.Values[i] = ec._IdentitySource_isLocal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var idpProviderImplementors = []string{"IdpProvider"}
 
 func (ec *executionContext) _IdpProvider(ctx context.Context, sel ast.SelectionSet, obj *IdpProvider) graphql.Marshaler {
@@ -7930,6 +9896,74 @@ func (ec *executionContext) _ItemRef(ctx context.Context, sel ast.SelectionSet, 
 	return out
 }
 
+var meImplementors = []string{"Me"}
+
+func (ec *executionContext) _Me(ctx context.Context, sel ast.SelectionSet, obj *Me) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, meImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Me")
+		case "userId":
+			out.Values[i] = ec._Me_userId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tenantId":
+			out.Values[i] = ec._Me_tenantId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "email":
+			out.Values[i] = ec._Me_email(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "displayName":
+			out.Values[i] = ec._Me_displayName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "role":
+			out.Values[i] = ec._Me_role(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "permissions":
+			out.Values[i] = ec._Me_permissions(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "assignableRoles":
+			out.Values[i] = ec._Me_assignableRoles(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -7981,6 +10015,34 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteItem":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteItem(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createLocalUser":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createLocalUser(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateLocalUser":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateLocalUser(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "resetLocalUserPassword":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_resetLocalUserPassword(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setUserDisabled":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setUserDisabled(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -8165,6 +10227,72 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_drives(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "me":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_me(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "adminUsers":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_adminUsers(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "adminIdentitySources":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_adminIdentitySources(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -9194,6 +11322,52 @@ func (ec *executionContext) marshalNAccessLevelOption2ᚖplatriumᚋinternalᚋg
 	return ec._AccessLevelOption(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNAdminUser2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUser(ctx context.Context, sel ast.SelectionSet, v *AdminUser) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AdminUser(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAdminUserConnection2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUserConnection(ctx context.Context, sel ast.SelectionSet, v *AdminUserConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AdminUserConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAdminUserEdge2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAdminUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*AdminUserEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAdminUserEdge2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUserEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAdminUserEdge2ᚖplatriumᚋinternalᚋgraphqlᚐAdminUserEdge(ctx context.Context, sel ast.SelectionSet, v *AdminUserEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AdminUserEdge(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -9208,6 +11382,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNCreateLocalUserInput2platriumᚋinternalᚋgraphqlᚐCreateLocalUserInput(ctx context.Context, v any) (CreateLocalUserInput, error) {
+	res, err := ec.unmarshalInputCreateLocalUserInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNDateTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
@@ -9460,6 +11639,32 @@ func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast
 	return ret
 }
 
+func (ec *executionContext) marshalNIdentitySource2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdentitySourceᚄ(ctx context.Context, sel ast.SelectionSet, v []*IdentitySource) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNIdentitySource2ᚖplatriumᚋinternalᚋgraphqlᚐIdentitySource(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNIdentitySource2ᚖplatriumᚋinternalᚋgraphqlᚐIdentitySource(ctx context.Context, sel ast.SelectionSet, v *IdentitySource) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._IdentitySource(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNIdpProvider2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdpProviderᚄ(ctx context.Context, sel ast.SelectionSet, v []*IdpProvider) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -9528,6 +11733,16 @@ func (ec *executionContext) marshalNItemAccess2ᚖplatriumᚋinternalᚋgraphql�
 	return ec._ItemAccess(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNMe2ᚖplatriumᚋinternalᚋgraphqlᚐMe(ctx context.Context, sel ast.SelectionSet, v *Me) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Me(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖplatriumᚋinternalᚋgraphqlᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -9536,6 +11751,76 @@ func (ec *executionContext) marshalNPageInfo2ᚖplatriumᚋinternalᚋgraphqlᚐ
 		return graphql.Null
 	}
 	return ec._PageInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx context.Context, v any) (authz.Permission, error) {
+	tmp, err := graphql.UnmarshalString(v)
+	res := unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission[tmp]
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx context.Context, sel ast.SelectionSet, v authz.Permission) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalString(marshalNPermission2platriumᚋinternalᚋauthzᚐPermission[v])
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
+var (
+	unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission = map[string]authz.Permission{
+		"USERS_READ":           authz.PermUsersRead,
+		"USERS_CREATE":         authz.PermUsersCreate,
+		"USERS_UPDATE":         authz.PermUsersUpdate,
+		"USERS_DISABLE":        authz.PermUsersDisable,
+		"ROLES_ASSIGN":         authz.PermRolesAssign,
+		"SHARED_DRIVES_CREATE": authz.PermSharedDrivesCreate,
+		"POLICIES_MANAGE":      authz.PermPoliciesManage,
+		"TENANTS_MANAGE":       authz.PermTenantsManage,
+	}
+	marshalNPermission2platriumᚋinternalᚋauthzᚐPermission = map[authz.Permission]string{
+		authz.PermUsersRead:          "USERS_READ",
+		authz.PermUsersCreate:        "USERS_CREATE",
+		authz.PermUsersUpdate:        "USERS_UPDATE",
+		authz.PermUsersDisable:       "USERS_DISABLE",
+		authz.PermRolesAssign:        "ROLES_ASSIGN",
+		authz.PermSharedDrivesCreate: "SHARED_DRIVES_CREATE",
+		authz.PermPoliciesManage:     "POLICIES_MANAGE",
+		authz.PermTenantsManage:      "TENANTS_MANAGE",
+	}
+)
+
+func (ec *executionContext) unmarshalNPermission2ᚕplatriumᚋinternalᚋauthzᚐPermissionᚄ(ctx context.Context, v any) ([]authz.Permission, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]authz.Permission, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNPermission2ᚕplatriumᚋinternalᚋauthzᚐPermissionᚄ(ctx context.Context, sel ast.SelectionSet, v []authz.Permission) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐRoleOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*RoleOption) graphql.Marshaler {
@@ -9678,6 +11963,11 @@ func (ec *executionContext) marshalNTenantAuthConfig2ᚖplatriumᚋinternalᚋgr
 		return graphql.Null
 	}
 	return ec._TenantAuthConfig(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUpdateLocalUserInput2platriumᚋinternalᚋgraphqlᚐUpdateLocalUserInput(ctx context.Context, v any) (UpdateLocalUserInput, error) {
+	res, err := ec.unmarshalInputUpdateLocalUserInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
@@ -9978,6 +12268,22 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOUserStatus2ᚖplatriumᚋinternalᚋgraphqlᚐUserStatus(ctx context.Context, v any) (*UserStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(UserStatus)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOUserStatus2ᚖplatriumᚋinternalᚋgraphqlᚐUserStatus(ctx context.Context, sel ast.SelectionSet, v *UserStatus) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

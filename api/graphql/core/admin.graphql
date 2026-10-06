@@ -1,0 +1,115 @@
+# Administration of an organization's people. Every field here is gated by
+# @requires, so what the schema shows is exactly what is protected. Whether the
+# caller may act on one particular user (their own role, the user's source) is
+# checked in the resolver, because a directive cannot see its target.
+
+"""
+Gates a field on a permission. The caller must be signed in and hold the
+permission through their role (see `me`); otherwise the field fails with
+FORBIDDEN, or UNAUTHENTICATED without a session.
+"""
+directive @requires(permission: Permission!) on FIELD_DEFINITION
+
+"Something a user may do to their organization (or, in the native tenant, the cluster)."
+enum Permission {
+  USERS_READ
+  USERS_CREATE
+  USERS_UPDATE
+  USERS_DISABLE
+  ROLES_ASSIGN
+  SHARED_DRIVES_CREATE
+  POLICIES_MANAGE
+  TENANTS_MANAGE
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+"The signed-in user, with what they may do. Clients show or hide admin features from `permissions`, never from `role`."
+type Me {
+  userId: ID!
+  tenantId: ID!
+  email: String!
+  displayName: String!
+  role: String!
+  permissions: [Permission!]!
+  "The roles this user may give to others. Empty without ROLES_ASSIGN."
+  assignableRoles: [String!]!
+}
+
+"Where a user (or group) comes from: the built-in provider, or an external one."
+type IdentitySource {
+  id: ID!
+  name: String!
+  "LOCAL, OIDC or SAML."
+  type: String!
+  "True for the built-in provider, whose users Platrium itself manages."
+  isLocal: Boolean!
+}
+
+type AdminUser {
+  id: ID!
+  email: String!
+  displayName: String!
+  role: String!
+  disabled: Boolean!
+  disabledAt: DateTime
+  createdAt: DateTime!
+  source: IdentitySource!
+  "False when an external provider manages this user: only disabling is possible."
+  editable: Boolean!
+  "Whether the caller may act on this user at all. False for someone with more permissions than the caller holds."
+  manageable: Boolean!
+}
+
+type AdminUserEdge {
+  cursor: String!
+  node: AdminUser!
+}
+
+type AdminUserConnection {
+  edges: [AdminUserEdge!]!
+  pageInfo: PageInfo!
+  "How many users match the filters, across all pages."
+  totalCount: Int!
+}
+
+input CreateLocalUserInput {
+  "Their sign-in name. It cannot be changed afterwards."
+  email: String!
+  displayName: String!
+  password: String!
+  "Defaults to MEMBER."
+  role: String
+}
+
+input UpdateLocalUserInput {
+  displayName: String
+  role: String
+}
+
+extend type Query {
+  me: Me!
+  "The organization's users, ordered by name. Search matches name and email."
+  adminUsers(
+    first: Int
+    after: String
+    search: String
+    sourceId: ID
+    status: UserStatus
+  ): AdminUserConnection! @requires(permission: USERS_READ)
+  "The identity providers users can come from, for filtering."
+  adminIdentitySources: [IdentitySource!]! @requires(permission: USERS_READ)
+}
+
+extend type Mutation {
+  "Create a user on the built-in provider."
+  createLocalUser(input: CreateLocalUserInput!): AdminUser! @requires(permission: USERS_CREATE)
+  "Edit a built-in user. Changing the role also needs ROLES_ASSIGN."
+  updateLocalUser(id: ID!, input: UpdateLocalUserInput!): AdminUser! @requires(permission: USERS_UPDATE)
+  resetLocalUserPassword(id: ID!, password: String!): Boolean! @requires(permission: USERS_UPDATE)
+  "Block or restore sign-in for a user of any provider."
+  setUserDisabled(id: ID!, disabled: Boolean!): AdminUser! @requires(permission: USERS_DISABLE)
+}
