@@ -38,13 +38,16 @@ export interface FolderHeaderToolbarProps {
   sortField: SortField
   sortDirection: SortDirection
   onSortChange: (field: SortField) => void
-  folderId: string
+  /** The folder being viewed. Absent on pages that list items from many folders. */
+  folderId?: string
   onOperation?: (mode: DriveOperation, items: DriveItemNode[]) => void
   selectedItems?: DriveItemNode[]
   /** What the user may do with the folder being viewed (create, share, ...). */
   folderCapabilities?: string[]
   /** The folder being viewed, so it can be shared itself when nothing is selected. */
   currentFolder?: DriveItemNode
+  /** What the `owner` column holds, when it is not the owner. */
+  ownerLabel?: string
 }
 
 export function FolderHeaderToolbar({
@@ -59,6 +62,7 @@ export function FolderHeaderToolbar({
   selectedItems = [],
   folderCapabilities,
   currentFolder,
+  ownerLabel = "Owner",
 }: FolderHeaderToolbarProps) {
   const { triggerUpload } = useUpload()
 
@@ -66,7 +70,7 @@ export function FolderHeaderToolbar({
     { label: "Name", field: "name" },
     { label: "Last Modified", field: "updatedAt" },
     { label: "File Size", field: "size" },
-    { label: "Owner", field: "owner" },
+    { label: ownerLabel, field: "owner" },
   ]
 
   const hasSelection = selectedCount > 0
@@ -103,7 +107,7 @@ export function FolderHeaderToolbar({
                 <span>New Folder</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => triggerUpload(folderId)}>
+              <DropdownMenuItem onClick={() => folderId && triggerUpload(folderId)}>
                 <FileUp className="size-4 text-muted-foreground" />
                 <span>Upload File</span>
               </DropdownMenuItem>

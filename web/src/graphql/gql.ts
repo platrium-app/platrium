@@ -14,7 +14,6 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-    "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": typeof types.GetSubfoldersSidebarDocument,
     "\n  query GetAuthConfig {\n    tenantAuthConfig {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": typeof types.GetAuthConfigDocument,
     "\n  mutation CreateFolder($parentId: ID!, $name: String!) {\n    createFolder(parentId: $parentId, name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.CreateFolderDocument,
     "\n  mutation RenameItem($id: ID!, $newName: String!) {\n    renameItem(id: $id, newName: $newName) {\n      id\n      name\n    }\n  }\n": typeof types.RenameItemDocument,
@@ -30,16 +29,24 @@ type Documents = {
     "\n  mutation RevokeAccess($grantId: ID!) {\n    revokeAccess(grantId: $grantId)\n  }\n": typeof types.RevokeAccessDocument,
     "\n  mutation SetGeneralAccess($input: GeneralAccessInput!) {\n    setGeneralAccess(input: $input) {\n      level\n      role\n      noDownload\n      expiresAt\n    }\n  }\n": typeof types.SetGeneralAccessDocument,
     "\n  mutation SetInheritance($itemId: ID!, $inherit: Boolean!) {\n    setInheritance(itemId: $itemId, inherit: $inherit)\n  }\n": typeof types.SetInheritanceDocument,
+    "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": typeof types.GetSubfoldersSidebarDocument,
     "\n  query GetEEAuthConfig($alias: String!) {\n    tenantAuthConfigByAlias(alias: $alias) {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": typeof types.GetEeAuthConfigDocument,
     "\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n": typeof types.DriveItemChangedDocument,
+    "\n  query GetMe {\n    me {\n      userId\n      tenantId\n      email\n      displayName\n      role\n      permissions\n      assignableRoles\n    }\n  }\n": typeof types.GetMeDocument,
+    "\n  query AdminUsers(\n    $first: Int\n    $after: String\n    $search: String\n    $sourceId: ID\n    $status: UserStatus\n  ) {\n    adminUsers(\n      first: $first\n      after: $after\n      search: $search\n      sourceId: $sourceId\n      status: $status\n    ) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          email\n          displayName\n          role\n          disabled\n          disabledAt\n          createdAt\n          editable\n          manageable\n          source {\n            id\n            name\n            type\n            isLocal\n          }\n        }\n      }\n    }\n  }\n": typeof types.AdminUsersDocument,
+    "\n  query AdminIdentitySources {\n    adminIdentitySources {\n      id\n      name\n      type\n      isLocal\n    }\n  }\n": typeof types.AdminIdentitySourcesDocument,
+    "\n  mutation CreateLocalUser($input: CreateLocalUserInput!) {\n    createLocalUser(input: $input) {\n      id\n    }\n  }\n": typeof types.CreateLocalUserDocument,
+    "\n  mutation UpdateLocalUser($id: ID!, $input: UpdateLocalUserInput!) {\n    updateLocalUser(id: $id, input: $input) {\n      id\n      displayName\n      role\n      manageable\n    }\n  }\n": typeof types.UpdateLocalUserDocument,
+    "\n  mutation ResetLocalUserPassword($id: ID!, $password: String!) {\n    resetLocalUserPassword(id: $id, password: $password)\n  }\n": typeof types.ResetLocalUserPasswordDocument,
+    "\n  mutation SetUserDisabled($id: ID!, $disabled: Boolean!) {\n    setUserDisabled(id: $id, disabled: $disabled) {\n      id\n      disabled\n      disabledAt\n    }\n  }\n": typeof types.SetUserDisabledDocument,
     "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n": typeof types.GetDrivesDocument,
     "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n": typeof types.CanCreateSharedDriveDocument,
     "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.CreateSharedDriveDocument,
     "\n  query GetFolderInfo($id: ID!) {\n    item(id: $id) {\n      id\n      parentId\n      name\n      type\n      myCapabilities\n      path {\n        id\n        name\n      }\n    }\n  }\n": typeof types.GetFolderInfoDocument,
     "\n  query GetFolderContents($folderId: ID!, $first: Int, $after: String) {\n    folderContents(folderId: $folderId, first: $first, after: $after) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          parentId\n          name\n          type\n          myCapabilities\n          createdAt\n          updatedAt\n          ... on File {\n            size\n            mimeType\n          }\n        }\n      }\n    }\n  }\n": typeof types.GetFolderContentsDocument,
+    "\n  query GetSharedWithMe($first: Int, $after: String) {\n    sharedWithMe(first: $first, after: $after) {\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          role\n          item {\n            id\n            parentId\n            name\n            type\n            myCapabilities\n            createdAt\n            updatedAt\n            ... on File {\n              size\n              mimeType\n            }\n          }\n        }\n      }\n    }\n  }\n": typeof types.GetSharedWithMeDocument,
 };
 const documents: Documents = {
-    "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": types.GetSubfoldersSidebarDocument,
     "\n  query GetAuthConfig {\n    tenantAuthConfig {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": types.GetAuthConfigDocument,
     "\n  mutation CreateFolder($parentId: ID!, $name: String!) {\n    createFolder(parentId: $parentId, name: $name) {\n      id\n      name\n    }\n  }\n": types.CreateFolderDocument,
     "\n  mutation RenameItem($id: ID!, $newName: String!) {\n    renameItem(id: $id, newName: $newName) {\n      id\n      name\n    }\n  }\n": types.RenameItemDocument,
@@ -55,13 +62,22 @@ const documents: Documents = {
     "\n  mutation RevokeAccess($grantId: ID!) {\n    revokeAccess(grantId: $grantId)\n  }\n": types.RevokeAccessDocument,
     "\n  mutation SetGeneralAccess($input: GeneralAccessInput!) {\n    setGeneralAccess(input: $input) {\n      level\n      role\n      noDownload\n      expiresAt\n    }\n  }\n": types.SetGeneralAccessDocument,
     "\n  mutation SetInheritance($itemId: ID!, $inherit: Boolean!) {\n    setInheritance(itemId: $itemId, inherit: $inherit)\n  }\n": types.SetInheritanceDocument,
+    "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n": types.GetSubfoldersSidebarDocument,
     "\n  query GetEEAuthConfig($alias: String!) {\n    tenantAuthConfigByAlias(alias: $alias) {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n": types.GetEeAuthConfigDocument,
     "\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n": types.DriveItemChangedDocument,
+    "\n  query GetMe {\n    me {\n      userId\n      tenantId\n      email\n      displayName\n      role\n      permissions\n      assignableRoles\n    }\n  }\n": types.GetMeDocument,
+    "\n  query AdminUsers(\n    $first: Int\n    $after: String\n    $search: String\n    $sourceId: ID\n    $status: UserStatus\n  ) {\n    adminUsers(\n      first: $first\n      after: $after\n      search: $search\n      sourceId: $sourceId\n      status: $status\n    ) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          email\n          displayName\n          role\n          disabled\n          disabledAt\n          createdAt\n          editable\n          manageable\n          source {\n            id\n            name\n            type\n            isLocal\n          }\n        }\n      }\n    }\n  }\n": types.AdminUsersDocument,
+    "\n  query AdminIdentitySources {\n    adminIdentitySources {\n      id\n      name\n      type\n      isLocal\n    }\n  }\n": types.AdminIdentitySourcesDocument,
+    "\n  mutation CreateLocalUser($input: CreateLocalUserInput!) {\n    createLocalUser(input: $input) {\n      id\n    }\n  }\n": types.CreateLocalUserDocument,
+    "\n  mutation UpdateLocalUser($id: ID!, $input: UpdateLocalUserInput!) {\n    updateLocalUser(id: $id, input: $input) {\n      id\n      displayName\n      role\n      manageable\n    }\n  }\n": types.UpdateLocalUserDocument,
+    "\n  mutation ResetLocalUserPassword($id: ID!, $password: String!) {\n    resetLocalUserPassword(id: $id, password: $password)\n  }\n": types.ResetLocalUserPasswordDocument,
+    "\n  mutation SetUserDisabled($id: ID!, $disabled: Boolean!) {\n    setUserDisabled(id: $id, disabled: $disabled) {\n      id\n      disabled\n      disabledAt\n    }\n  }\n": types.SetUserDisabledDocument,
     "\n  query GetDrives {\n    drives {\n      id\n      name\n      driveMetadata {\n        driveType\n      }\n    }\n  }\n": types.GetDrivesDocument,
     "\n  query CanCreateSharedDrive {\n    canCreateSharedDrive\n  }\n": types.CanCreateSharedDriveDocument,
     "\n  mutation CreateSharedDrive($name: String!) {\n    createSharedDrive(name: $name) {\n      id\n      name\n    }\n  }\n": types.CreateSharedDriveDocument,
     "\n  query GetFolderInfo($id: ID!) {\n    item(id: $id) {\n      id\n      parentId\n      name\n      type\n      myCapabilities\n      path {\n        id\n        name\n      }\n    }\n  }\n": types.GetFolderInfoDocument,
     "\n  query GetFolderContents($folderId: ID!, $first: Int, $after: String) {\n    folderContents(folderId: $folderId, first: $first, after: $after) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          parentId\n          name\n          type\n          myCapabilities\n          createdAt\n          updatedAt\n          ... on File {\n            size\n            mimeType\n          }\n        }\n      }\n    }\n  }\n": types.GetFolderContentsDocument,
+    "\n  query GetSharedWithMe($first: Int, $after: String) {\n    sharedWithMe(first: $first, after: $after) {\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          role\n          item {\n            id\n            parentId\n            name\n            type\n            myCapabilities\n            createdAt\n            updatedAt\n            ... on File {\n              size\n              mimeType\n            }\n          }\n        }\n      }\n    }\n  }\n": types.GetSharedWithMeDocument,
 };
 
 /**
@@ -78,10 +94,6 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -145,11 +157,43 @@ export function graphql(source: "\n  mutation SetInheritance($itemId: ID!, $inhe
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetSubfoldersSidebar($folderId: ID!) {\n    folderContents(folderId: $folderId, first: 100) {\n      edges {\n        node {\n          id\n          name\n          type\n        }\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  query GetEEAuthConfig($alias: String!) {\n    tenantAuthConfigByAlias(alias: $alias) {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetEEAuthConfig($alias: String!) {\n    tenantAuthConfigByAlias(alias: $alias) {\n      tenantId\n      name\n      alias\n      defaultIdpId\n      providers {\n        id\n        name\n        type\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n"): (typeof documents)["\n  subscription DriveItemChanged {\n    driveItemChanged {\n      eventType\n      itemId\n      deletedId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query GetMe {\n    me {\n      userId\n      tenantId\n      email\n      displayName\n      role\n      permissions\n      assignableRoles\n    }\n  }\n"): (typeof documents)["\n  query GetMe {\n    me {\n      userId\n      tenantId\n      email\n      displayName\n      role\n      permissions\n      assignableRoles\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AdminUsers(\n    $first: Int\n    $after: String\n    $search: String\n    $sourceId: ID\n    $status: UserStatus\n  ) {\n    adminUsers(\n      first: $first\n      after: $after\n      search: $search\n      sourceId: $sourceId\n      status: $status\n    ) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          email\n          displayName\n          role\n          disabled\n          disabledAt\n          createdAt\n          editable\n          manageable\n          source {\n            id\n            name\n            type\n            isLocal\n          }\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query AdminUsers(\n    $first: Int\n    $after: String\n    $search: String\n    $sourceId: ID\n    $status: UserStatus\n  ) {\n    adminUsers(\n      first: $first\n      after: $after\n      search: $search\n      sourceId: $sourceId\n      status: $status\n    ) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          email\n          displayName\n          role\n          disabled\n          disabledAt\n          createdAt\n          editable\n          manageable\n          source {\n            id\n            name\n            type\n            isLocal\n          }\n        }\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AdminIdentitySources {\n    adminIdentitySources {\n      id\n      name\n      type\n      isLocal\n    }\n  }\n"): (typeof documents)["\n  query AdminIdentitySources {\n    adminIdentitySources {\n      id\n      name\n      type\n      isLocal\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateLocalUser($input: CreateLocalUserInput!) {\n    createLocalUser(input: $input) {\n      id\n    }\n  }\n"): (typeof documents)["\n  mutation CreateLocalUser($input: CreateLocalUserInput!) {\n    createLocalUser(input: $input) {\n      id\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateLocalUser($id: ID!, $input: UpdateLocalUserInput!) {\n    updateLocalUser(id: $id, input: $input) {\n      id\n      displayName\n      role\n      manageable\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateLocalUser($id: ID!, $input: UpdateLocalUserInput!) {\n    updateLocalUser(id: $id, input: $input) {\n      id\n      displayName\n      role\n      manageable\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ResetLocalUserPassword($id: ID!, $password: String!) {\n    resetLocalUserPassword(id: $id, password: $password)\n  }\n"): (typeof documents)["\n  mutation ResetLocalUserPassword($id: ID!, $password: String!) {\n    resetLocalUserPassword(id: $id, password: $password)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetUserDisabled($id: ID!, $disabled: Boolean!) {\n    setUserDisabled(id: $id, disabled: $disabled) {\n      id\n      disabled\n      disabledAt\n    }\n  }\n"): (typeof documents)["\n  mutation SetUserDisabled($id: ID!, $disabled: Boolean!) {\n    setUserDisabled(id: $id, disabled: $disabled) {\n      id\n      disabled\n      disabledAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -170,6 +214,10 @@ export function graphql(source: "\n  query GetFolderInfo($id: ID!) {\n    item(i
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query GetFolderContents($folderId: ID!, $first: Int, $after: String) {\n    folderContents(folderId: $folderId, first: $first, after: $after) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          parentId\n          name\n          type\n          myCapabilities\n          createdAt\n          updatedAt\n          ... on File {\n            size\n            mimeType\n          }\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetFolderContents($folderId: ID!, $first: Int, $after: String) {\n    folderContents(folderId: $folderId, first: $first, after: $after) {\n      totalCount\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          id\n          parentId\n          name\n          type\n          myCapabilities\n          createdAt\n          updatedAt\n          ... on File {\n            size\n            mimeType\n          }\n        }\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query GetSharedWithMe($first: Int, $after: String) {\n    sharedWithMe(first: $first, after: $after) {\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          role\n          item {\n            id\n            parentId\n            name\n            type\n            myCapabilities\n            createdAt\n            updatedAt\n            ... on File {\n              size\n              mimeType\n            }\n          }\n        }\n      }\n    }\n  }\n"): (typeof documents)["\n  query GetSharedWithMe($first: Int, $after: String) {\n    sharedWithMe(first: $first, after: $after) {\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n      edges {\n        cursor\n        node {\n          role\n          item {\n            id\n            parentId\n            name\n            type\n            myCapabilities\n            createdAt\n            updatedAt\n            ... on File {\n              size\n              mimeType\n            }\n          }\n        }\n      }\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

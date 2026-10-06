@@ -70,6 +70,14 @@ sequenceDiagram
 
 The app target and the File Provider extension share no source files, so everything they both need lives in the local Swift package `PlatriumCore`: the models, the store, the Keychain vault, PKCE, the sign-in service, and the authenticated client factory. Its tests run on the Mac with `swift test`. With `PLATRIUM_TEST_SERVER`, `PLATRIUM_TEST_EMAIL` and `PLATRIUM_TEST_PASSWORD` set, they also run the whole sign-in flow, revocation included, against a live engine.
 
+## Sharing
+
+The share sheet is the web dialog's native twin and uses the same GraphQL API (`itemAccess`, `shareRoles`, `generalAccessOptions`, `searchDirectory`, `shareItem`, `revokeAccess`, `setGeneralAccess`, `setInheritance`). The server decides everything: which roles exist for an item, who may share, and what is valid. The app only asks and shows, so role names, descriptions and access levels come from the server and a new role needs no app update.
+
+- **Where it opens:** a *Share…* item in the context menu, a leading swipe on iOS, and a toolbar button for the folder being viewed (*Manage Access* on a shared drive's root). All three appear only when the item's `myCapabilities` include `SHARE`, which the folder queries now fetch.
+- **What it shows:** add people or groups (search starts at two characters), people with access with a role menu and remove, inherited access (read-only, with where it comes from), general access (restricted, organization or anyone with the link, with role, download and end-date options), and whether the item inherits from the folder above. *Copy Link* puts `<server>/folder/<id>` or `/file/<id>` on the pasteboard.
+- **Where the logic lives:** `SharingService` in `PlatriumCore` wraps the operations and maps them into plain values, so it is tested against a live engine, including sharing with a second user and the denied cases. `ShareViewModel` in the app holds the sheet's state. Failures show the server's own message, mapped by its error code (`FORBIDDEN`, `NOT_FOUND`, ...).
+
 ## Hosting the File Provider
 
 The most critical job of the native app is to host and register the **FileProviderReplicatedExtension**.

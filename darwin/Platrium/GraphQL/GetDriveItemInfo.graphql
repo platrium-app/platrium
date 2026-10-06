@@ -2,5 +2,8 @@ query GetDriveItemInfo($id: ID!) {
   item(id: $id) {
     id
     name
+    type
+    parentId
+    myCapabilities
   }
 }

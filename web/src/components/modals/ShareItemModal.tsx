@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation, useQuery } from "@apollo/client/react"
 import { AlertTriangle, Link2 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { isSharedDriveRoot } from "@/lib/capabilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +58,31 @@ export interface ShareItemModalProps {
   isOpen: boolean
   onClose: () => void
   item: ShareableItem | null
+}
+
+/**
+ * Opens and closes a block of content by animating its height (a grid row going
+ * between 0fr and 1fr), so the dialog grows and shrinks instead of jumping.
+ * Closed content is inert: not focusable and hidden from screen readers.
+ */
+function Collapse({
+  open,
+  children,
+}: {
+  open: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      inert={!open}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+      )}
+    >
+      <div className="-mx-1 min-h-0 overflow-hidden px-1">{children}</div>
+    </div>
+  )
 }
 
 /**
@@ -124,7 +150,9 @@ function ShareItemBody({
   const data = access.data?.itemAccess
   const phase = phaseOf({
     loading:
-      access.loading || (rolesQuery.loading && roles.length === 0) || levelsQuery.loading,
+      access.loading ||
+      (rolesQuery.loading && roles.length === 0) ||
+      levelsQuery.loading,
     hasData: !!data && levels.length > 0,
     denied: access.error
       ? ["FORBIDDEN", "NOT_FOUND"].includes(errorCode(access.error) ?? "")
@@ -148,9 +176,15 @@ function ShareItemBody({
     [data]
   )
   const idle = busy.kind === "idle"
+  // Once someone is picked the dialog is about adding them: Cancel or Share, and
+  // nothing else competing for attention. Sharing returns to the full view.
+  const adding = recipients.length > 0
 
   /** Run one write, holding the dialog busy until it and the refresh finish. */
-  const run = async (b: Exclude<Busy, { kind: "idle" }>, fn: () => Promise<unknown>) => {
+  const run = async (
+    b: Exclude<Busy, { kind: "idle" }>,
+    fn: () => Promise<unknown>
+  ) => {
     dispatch({ type: "start", busy: b })
     try {
       await fn()
@@ -244,7 +278,8 @@ function ShareItemBody({
     } catch {
       dispatch({
         type: "error",
-        message: "Could not copy the link. Copy it from the address bar instead.",
+        message:
+          "Could not copy the link. Copy it from the address bar instead.",
       })
     }
   }
@@ -278,16 +313,18 @@ function ShareItemBody({
       )}
 
       {phase === "ready" && data && (
-        <div className="-m-1 flex max-h-[70vh] flex-col gap-5 overflow-y-auto p-1">
-          <section className="flex flex-col gap-3" aria-label="Add people">
+        <div className="-m-1 flex max-h-[70vh] flex-col overflow-y-auto p-1">
+          <section aria-label="Add people">
             <PeoplePicker
               itemId={itemId}
               selected={recipients}
-              onChange={(next) => dispatch({ type: "recipients", recipients: next })}
+              onChange={(next) =>
+                dispatch({ type: "recipients", recipients: next })
+              }
               disabled={busy.kind === "sharing"}
             />
-            {recipients.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
+            <Collapse open={adding}>
+              <div className="flex flex-wrap items-center gap-2 pt-3">
                 <RoleSelect
                   label="Role for the people you are adding"
                   value={activeRole}
@@ -303,81 +340,79 @@ function ShareItemBody({
                     dispatch({ type: "expiry", expiry: e.target.value })
                   }
                 />
-                <Button
-                  type="button"
-                  className="ml-auto"
-                  disabled={!idle || !activeRole}
-                  onClick={handleShare}
-                >
-                  {busy.kind === "sharing" ? <Spinner /> : null}
-                  Share
-                </Button>
               </div>
-            )}
+            </Collapse>
           </section>
 
-          <section
-            className="flex flex-col gap-2"
-            aria-label="People with access"
-          >
-            <div className="flex flex-col gap-0.5">
-              <h3 className="text-sm font-medium">People with access</h3>
-              {grants.length === 0 && inherited.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Only the owner can open this. Add people below to share it.
-                </p>
-              )}
-            </div>
-            <PeopleWithAccess
-              owner={data.owner}
-              grants={grants}
-              inherited={inherited}
-              roles={roles}
-              busyId={busy.kind === "grant" ? busy.id : null}
-              canManage
-              onChangeRole={handleChangeRole}
-              onRemove={handleRemove}
-            />
-          </section>
-
-          <GeneralAccessSection
-            value={{
-              ...data.generalAccess,
-              expiresAt: asIso(data.generalAccess.expiresAt),
-            }}
-            levels={levels}
-            roles={roles}
-            canManage
-            busy={!idle}
-            onChange={handleGeneral}
-          />
-
-          {item.parentId ? (
-            <section
-              className="flex items-center justify-between gap-4 rounded-2xl bg-muted/40 p-4"
-              aria-label="Inherited access"
-            >
-              <p className="text-sm text-muted-foreground">
-                {data.inheritsPermissions
-                  ? `People with access to the folder above can also open this ${kind}.`
-                  : `Only the people listed here can open this ${kind}. Access from the folder above doesn't apply.`}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0"
-                disabled={!idle}
-                onClick={() => handleInheritance(!data.inheritsPermissions)}
+          <Collapse open={!adding}>
+            <div className="flex flex-col gap-5 pt-5">
+              <section
+                className="flex flex-col gap-2"
+                aria-label="People with access"
               >
-                {data.inheritsPermissions ? "Restrict access" : "Inherit access"}
-              </Button>
-            </section>
-          ) : null}
+                <div className="flex flex-col gap-0.5">
+                  <h3 className="text-sm font-medium">People with access</h3>
+                  {grants.length === 0 && inherited.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Only the owner can open this. Add people below to share
+                      it.
+                    </p>
+                  )}
+                </div>
+                <PeopleWithAccess
+                  owner={data.owner}
+                  grants={grants}
+                  inherited={inherited}
+                  roles={roles}
+                  busyId={busy.kind === "grant" ? busy.id : null}
+                  canManage
+                  onChangeRole={handleChangeRole}
+                  onRemove={handleRemove}
+                />
+              </section>
+
+              <GeneralAccessSection
+                value={{
+                  ...data.generalAccess,
+                  expiresAt: asIso(data.generalAccess.expiresAt),
+                }}
+                levels={levels}
+                roles={roles}
+                canManage
+                busy={!idle}
+                onChange={handleGeneral}
+              />
+
+              {item.parentId ? (
+                <section
+                  className="flex items-center justify-between gap-4 rounded-2xl bg-muted/40 p-4"
+                  aria-label="Inherited access"
+                >
+                  <p className="text-sm text-muted-foreground">
+                    {data.inheritsPermissions
+                      ? `People with access to the folder above can also open this ${kind}.`
+                      : `Only the people listed here can open this ${kind}. Access from the folder above doesn't apply.`}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={!idle}
+                    onClick={() => handleInheritance(!data.inheritsPermissions)}
+                  >
+                    {data.inheritsPermissions
+                      ? "Restrict access"
+                      : "Inherit access"}
+                  </Button>
+                </section>
+              ) : null}
+            </div>
+          </Collapse>
 
           {error && (
             <p
               role="alert"
-              className="rounded-2xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              className="mt-5 rounded-2xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
               {error}
             </p>
@@ -386,17 +421,43 @@ function ShareItemBody({
       )}
 
       <DialogFooter className="sm:justify-between">
-        {phase === "ready" ? (
-          <Button type="button" variant="outline" onClick={copyLink}>
-            <Link2 />
-            {copied ? "Copied" : "Copy link"}
-          </Button>
+        {adding ? (
+          <>
+            <span />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!idle}
+                onClick={() => dispatch({ type: "recipients", recipients: [] })}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={!idle || !activeRole}
+                onClick={handleShare}
+              >
+                {busy.kind === "sharing" ? <Spinner /> : null}
+                Share
+              </Button>
+            </div>
+          </>
         ) : (
-          <span />
+          <>
+            {phase === "ready" ? (
+              <Button type="button" variant="outline" onClick={copyLink}>
+                <Link2 />
+                {copied ? "Copied" : "Copy link"}
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Button type="button" onClick={onClose}>
+              Done
+            </Button>
+          </>
         )}
-        <Button type="button" onClick={onClose}>
-          Done
-        </Button>
       </DialogFooter>
     </>
   )

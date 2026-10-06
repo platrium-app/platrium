@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"platrium/internal/authz"
 	"strconv"
 	"time"
 )
@@ -50,6 +51,42 @@ type AccessLevelOption struct {
 	// The roles this level may carry; empty when it takes none (RESTRICTED).
 	Roles          []string `json:"roles"`
 	SupportsExpiry bool     `json:"supportsExpiry"`
+}
+
+type AdminUser struct {
+	ID          string          `json:"id"`
+	Email       string          `json:"email"`
+	DisplayName string          `json:"displayName"`
+	Role        string          `json:"role"`
+	Disabled    bool            `json:"disabled"`
+	DisabledAt  *time.Time      `json:"disabledAt,omitempty"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	Source      *IdentitySource `json:"source"`
+	// False when an external provider manages this user: only disabling is possible.
+	Editable bool `json:"editable"`
+	// Whether the caller may act on this user at all. False for someone with more permissions than the caller holds.
+	Manageable bool `json:"manageable"`
+}
+
+type AdminUserConnection struct {
+	Edges    []*AdminUserEdge `json:"edges"`
+	PageInfo *PageInfo        `json:"pageInfo"`
+	// How many users match the filters, across all pages.
+	TotalCount int `json:"totalCount"`
+}
+
+type AdminUserEdge struct {
+	Cursor string     `json:"cursor"`
+	Node   *AdminUser `json:"node"`
+}
+
+type CreateLocalUserInput struct {
+	// Their sign-in name. It cannot be changed afterwards.
+	Email       string `json:"email"`
+	DisplayName string `json:"displayName"`
+	Password    string `json:"password"`
+	// Defaults to MEMBER.
+	Role *string `json:"role,omitempty"`
 }
 
 // A person, group or organization shown in a picker or on an access list.
@@ -197,6 +234,16 @@ type GeneralAccessInput struct {
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
+// Where a user (or group) comes from: the built-in provider, or an external one.
+type IdentitySource struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// LOCAL, OIDC or SAML.
+	Type string `json:"type"`
+	// True for the built-in provider, whose users Platrium itself manages.
+	IsLocal bool `json:"isLocal"`
+}
+
 type IdpProvider struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -221,6 +268,18 @@ type ItemRef struct {
 	// Null when the signed-in user cannot open the item.
 	ID   *string `json:"id,omitempty"`
 	Name string  `json:"name"`
+}
+
+// The signed-in user, with what they may do. Clients show or hide admin features from `permissions`, never from `role`.
+type Me struct {
+	UserID      string             `json:"userId"`
+	TenantID    string             `json:"tenantId"`
+	Email       string             `json:"email"`
+	DisplayName string             `json:"displayName"`
+	Role        string             `json:"role"`
+	Permissions []authz.Permission `json:"permissions"`
+	// The roles this user may give to others. Empty without ROLES_ASSIGN.
+	AssignableRoles []string `json:"assignableRoles"`
 }
 
 type Mutation struct {
@@ -284,6 +343,11 @@ type TenantAuthConfig struct {
 	Alias        *string        `json:"alias,omitempty"`
 	DefaultIdpID *string        `json:"defaultIdpId,omitempty"`
 	Providers    []*IdpProvider `json:"providers"`
+}
+
+type UpdateLocalUserInput struct {
+	DisplayName *string `json:"displayName,omitempty"`
+	Role        *string `json:"role,omitempty"`
 }
 
 type DriveItemEventType string
@@ -446,6 +510,61 @@ func (e *DriveType) UnmarshalJSON(b []byte) error {
 }
 
 func (e DriveType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type UserStatus string
+
+const (
+	UserStatusActive   UserStatus = "ACTIVE"
+	UserStatusDisabled UserStatus = "DISABLED"
+)
+
+var AllUserStatus = []UserStatus{
+	UserStatusActive,
+	UserStatusDisabled,
+}
+
+func (e UserStatus) IsValid() bool {
+	switch e {
+	case UserStatusActive, UserStatusDisabled:
+		return true
+	}
+	return false
+}
+
+func (e UserStatus) String() string {
+	return string(e)
+}
+
+func (e *UserStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UserStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UserStatus", str)
+	}
+	return nil
+}
+
+func (e UserStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UserStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UserStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

@@ -28,14 +28,14 @@ func NewDriveOrchestrator(d *db.DB, fs *fsops.FSOps, az authz.Authorizer, us *id
 	return &DriveOrchestrator{db: d, fsOps: fs, authz: az, users: us, policies: ps}
 }
 
-// isAdmin reports whether the actor administers their tenant.
-func (o *DriveOrchestrator) isAdmin(ctx context.Context, p authz.Principal) (bool, error) {
-	users, err := o.users.GetByIDs(ctx, p.TenantID, []string{p.UserID})
+// canCreateAnywhere reports whether the actor holds the permission to create
+// shared drives without a policy grant.
+func (o *DriveOrchestrator) canCreateAnywhere(ctx context.Context, p authz.Principal) (bool, error) {
+	perms, err := o.users.Permissions(ctx, p.TenantID, p.UserID)
 	if err != nil {
 		return false, err
 	}
-	u, ok := users[p.UserID]
-	return ok && identity.IsAdmin(u.Role), nil
+	return perms.Has(authz.PermSharedDrivesCreate), nil
 }
 
 func requireSignedIn(p authz.Principal) error {
@@ -52,8 +52,8 @@ func (o *DriveOrchestrator) CanCreateSharedDrive(ctx context.Context, p authz.Pr
 	if err := requireSignedIn(p); err != nil {
 		return false, nil
 	}
-	if admin, err := o.isAdmin(ctx, p); err != nil || admin {
-		return admin, err
+	if ok, err := o.canCreateAnywhere(ctx, p); err != nil || ok {
+		return ok, err
 	}
 	return o.policies.AppliesTo(ctx, p.TenantID, identity.PolicySharedDriveCreators, p.GroupIDs)
 }
@@ -108,7 +108,7 @@ func (o *DriveOrchestrator) CreateSharedDrive(ctx context.Context, p authz.Princ
 // SharedDriveCreators returns the groups allowed to create shared drives.
 // Tenant admins only.
 func (o *DriveOrchestrator) SharedDriveCreators(ctx context.Context, p authz.Principal) ([]string, error) {
-	if err := o.requireAdmin(ctx, p); err != nil {
+	if err := o.requirePermission(ctx, p, authz.PermPoliciesManage); err != nil {
 		return nil, err
 	}
 	return o.policies.Groups(ctx, p.TenantID, identity.PolicySharedDriveCreators)
@@ -117,22 +117,22 @@ func (o *DriveOrchestrator) SharedDriveCreators(ctx context.Context, p authz.Pri
 // SetSharedDriveCreators replaces the groups allowed to create shared drives.
 // Tenant admins only.
 func (o *DriveOrchestrator) SetSharedDriveCreators(ctx context.Context, p authz.Principal, groupIDs []string) error {
-	if err := o.requireAdmin(ctx, p); err != nil {
+	if err := o.requirePermission(ctx, p, authz.PermPoliciesManage); err != nil {
 		return err
 	}
 	return o.policies.SetGroups(ctx, p.TenantID, identity.PolicySharedDriveCreators, groupIDs)
 }
 
-func (o *DriveOrchestrator) requireAdmin(ctx context.Context, p authz.Principal) error {
+func (o *DriveOrchestrator) requirePermission(ctx context.Context, p authz.Principal, perm authz.Permission) error {
 	if err := requireSignedIn(p); err != nil {
 		return err
 	}
-	admin, err := o.isAdmin(ctx, p)
+	perms, err := o.users.Permissions(ctx, p.TenantID, p.UserID)
 	if err != nil {
 		return err
 	}
-	if !admin {
-		return fmt.Errorf("%w: tenant administrators only", authz.ErrForbidden)
+	if !perms.Has(perm) {
+		return fmt.Errorf("%w: you do not have the %s permission", authz.ErrForbidden, perm)
 	}
 	return nil
 }

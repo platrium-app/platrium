@@ -33,4 +33,6 @@ export interface FolderViewProps {
   sortDirection: SortDirection
   onSortChange: (field: SortField) => void
   onOperation?: (mode: DriveOperation, items: DriveItemNode[]) => void
+  /** What the `owner` column holds, when it is not the owner. */
+  ownerLabel?: string
 }

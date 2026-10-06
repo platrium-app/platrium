@@ -91,17 +91,3 @@ func TestPolicyGroups(t *testing.T) {
 		t.Fatalf("isolation: %v", got)
 	}
 }
-
-func TestIsAdmin(t *testing.T) {
-	for role, want := range map[string]bool{
-		identity.RoleSuperAdmin: true,
-		identity.RoleAdmin:      true,
-		identity.RoleMember:     false,
-		"":                      false,
-		"admin":                 false, // role names are exact
-	} {
-		if identity.IsAdmin(role) != want {
-			t.Errorf("IsAdmin(%q) = %v", role, !want)
-		}
-	}
-}

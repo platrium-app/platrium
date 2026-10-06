@@ -268,3 +268,24 @@ func TestPushRegistration(t *testing.T) {
 		t.Fatalf("push not cleared: %+v", got[0])
 	}
 }
+
+func TestValidateRejectsDisabledUserUntilReenabled(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	iss := f.issueDevice(t)
+
+	if err := f.db.User.UpdateOneID(f.userID).SetDisabledAt(time.Now()).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Validate(ctx, iss.Secret); !errors.Is(err, token.ErrInvalidToken) {
+		t.Fatalf("a disabled user's token must be rejected: %v", err)
+	}
+
+	// The token is kept, so re-enabling the account restores the device.
+	if err := f.db.User.UpdateOneID(f.userID).ClearDisabledAt().Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.Validate(ctx, iss.Secret); err != nil {
+		t.Fatalf("token must work again once the user is re-enabled: %v", err)
+	}
+}

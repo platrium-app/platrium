@@ -13,9 +13,9 @@ import { FolderHeaderToolbar } from "./FolderHeaderToolbar"
 import { FolderContentListView } from "./FolderContentListView"
 import { FolderContentGridView } from "./FolderContentGridView"
 import { SelectionArea } from "@/components/custom/SelectionArea"
-import { FilePreviewCore } from "../filepreview/FilePreviewCore"
-import { Dialog } from "@base-ui/react/dialog"
-import type { DriveItemNode, SortField, SortDirection, ViewMode } from "./FolderViewTypes"
+import { FilePreviewDialog } from "./FilePreviewDialog"
+import { useItemSelection, useItemSort } from "./itemListState"
+import type { DriveItemNode, ViewMode } from "./FolderViewTypes"
 import { DriveOperationManager, type OperationMode } from "@/components/modals/DriveOperationManager"
 import { useDriveEventSubscription } from "@/hooks/useDriveEventSubscription"
 import { hasCapability } from "@/lib/capabilities"
@@ -72,20 +72,10 @@ export default function FolderRootView() {
   const { user } = useAuth()
 
   const [viewMode, setViewMode] = React.useState<ViewMode>("list")
-  const [sortField, setSortField] = React.useState<SortField>("name")
-  const [sortDirection, setSortDirection] = React.useState<SortDirection>("asc")
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
-  const [lastSelectedIndex, setLastSelectedIndex] = React.useState<number | null>(null)
   const [previewFileId, setPreviewFileId] = React.useState<string | null>(null)
-  
+
   const [opMode, setOpMode] = React.useState<OperationMode>(null)
   const [opItems, setOpItems] = React.useState<DriveItemNode[]>([])
-
-  // Clear selection on folder navigation
-  React.useEffect(() => {
-    setSelectedIds(new Set())
-    setLastSelectedIndex(null)
-  }, [id])
 
   const infoQuery = useQuery(GET_FOLDER_INFO, {
     variables: { id: id! },
@@ -127,28 +117,19 @@ export default function FolderRootView() {
     })
   }, [contentsQuery.data])
 
-  // Sorted items
-  const items = React.useMemo(() => {
-    const sorted = [...rawItems]
-    sorted.sort((a, b) => {
-      // Folders always sorted first
-      const isAFolder = a.type === "FOLDER"
-      const isBFolder = b.type === "FOLDER"
-      if (isAFolder && !isBFolder) return -1
-      if (!isAFolder && isBFolder) return 1
+  const { items, sortField, sortDirection, handleSortChange } = useItemSort(rawItems)
+  const {
+    selectedIds,
+    setSelectedIds,
+    clearSelection,
+    handleItemClick,
+    handleItemContextMenu,
+  } = useItemSelection(items)
 
-      let valA: any = a[sortField] ?? ""
-      let valB: any = b[sortField] ?? ""
-
-      if (typeof valA === "string") valA = valA.toLowerCase()
-      if (typeof valB === "string") valB = valB.toLowerCase()
-
-      if (valA < valB) return sortDirection === "asc" ? -1 : 1
-      if (valA > valB) return sortDirection === "asc" ? 1 : -1
-      return 0
-    })
-    return sorted
-  }, [rawItems, sortField, sortDirection])
+  // Clear selection on folder navigation
+  React.useEffect(() => {
+    clearSelection()
+  }, [id, clearSelection])
 
   // Breadcrumb updates
   const breadcrumbs = React.useMemo<BreadcrumbItemType[]>(() => {
@@ -202,53 +183,11 @@ export default function FolderRootView() {
 
   useSetBreadcrumbs(breadcrumbs)
 
-  // Selection Handlers
-  const handleItemClick = (clickedItem: DriveItemNode, e: React.MouseEvent) => {
-    e.stopPropagation()
-    const index = items.findIndex((i) => i.id === clickedItem.id)
-
-    if (e.metaKey || e.ctrlKey) {
-      setSelectedIds((prev) => {
-        const next = new Set(prev)
-        if (next.has(clickedItem.id)) {
-          next.delete(clickedItem.id)
-        } else {
-          next.add(clickedItem.id)
-        }
-        return next
-      })
-      setLastSelectedIndex(index)
-    } else if (e.shiftKey && lastSelectedIndex !== null && lastSelectedIndex !== index) {
-      const start = Math.min(lastSelectedIndex, index)
-      const end = Math.max(lastSelectedIndex, index)
-      const rangeIds = items.slice(start, end + 1).map((i) => i.id)
-      setSelectedIds(new Set(rangeIds))
-    } else {
-      setSelectedIds(new Set([clickedItem.id]))
-      setLastSelectedIndex(index)
-    }
-  }
-
   const handleItemDoubleClick = (clickedItem: DriveItemNode) => {
     if (clickedItem.type === "FOLDER") {
       navigate(`/folder/${clickedItem.id}`)
     } else if (clickedItem.type === "FILE") {
       setPreviewFileId(clickedItem.id)
-    }
-  }
-
-  const handleItemContextMenu = (clickedItem: DriveItemNode) => {
-    if (!selectedIds.has(clickedItem.id)) {
-      setSelectedIds(new Set([clickedItem.id]))
-    }
-  }
-
-  const handleSortChange = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
-    } else {
-      setSortField(field)
-      setSortDirection("asc")
     }
   }
 
@@ -315,12 +254,19 @@ export default function FolderRootView() {
   }
 
   return (
-    <FolderContextMenu folderId={id!} canCreate={hasCapability(item.myCapabilities, "CREATE")}>
+    <FolderContextMenu 
+      folderId={id!} 
+      canCreate={hasCapability(item.myCapabilities, "CREATE")}
+      onOperation={(mode, items) => {
+        setOpMode(mode)
+        setOpItems(items)
+      }}
+    >
       <div className="flex h-full w-full flex-1 flex-col overflow-hidden">
         {/* Permanent Toolbar */}
         <FolderHeaderToolbar
           selectedCount={selectedIds.size}
-          onClearSelection={() => setSelectedIds(new Set())}
+          onClearSelection={clearSelection}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           sortField={sortField}
@@ -401,32 +347,7 @@ export default function FolderRootView() {
         </SelectionArea>
       </div>
 
-      <Dialog.Root
-        open={Boolean(previewFileId)}
-        onOpenChange={(open) => {
-          if (!open) setPreviewFileId(null)
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Backdrop 
-            className="fixed inset-0 z-50 bg-black/15 dark:bg-black/60 backdrop-blur-xl dark:backdrop-blur-sm backdrop-saturate-200 dark:backdrop-saturate-100 transition-opacity duration-150 ease-out data-starting-style:opacity-0 data-ending-style:opacity-0"
-            onContextMenu={(e) => e.stopPropagation()}
-          />
-          <Dialog.Popup
-            initialFocus={false}
-            className="fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-150 data-starting-style:opacity-0 data-ending-style:opacity-0 outline-none"
-            onContextMenu={(e) => e.stopPropagation()}
-          >
-            {previewFileId && (
-              <FilePreviewCore
-                fileId={previewFileId}
-                isModal
-                onClose={() => setPreviewFileId(null)}
-              />
-            )}
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <FilePreviewDialog fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
 
       <DriveOperationManager
         mode={opMode}
@@ -436,7 +357,7 @@ export default function FolderRootView() {
         onSuccess={() => {
           infoQuery.refetch()
           contentsQuery.refetch()
-          setSelectedIds(new Set())
+          clearSelection()
         }}
       />
     </FolderContextMenu>

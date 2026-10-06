@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"platrium/internal/authz"
+	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/db/ent/groupclosure"
 	"platrium/internal/infra/db/ent/user"
 )
@@ -14,12 +15,16 @@ import (
 // groups included. The groups come from the flattened closure table, so this
 // is two indexed lookups regardless of how deeply groups nest.
 func (a *Authorizer) Principal(ctx context.Context, tenantID, userID string) (authz.Principal, error) {
-	ok, err := a.db.User.Query().Where(user.ID(userID), user.TenantID(tenantID)).Exist(ctx)
+	u, err := a.db.User.Query().Where(user.ID(userID), user.TenantID(tenantID)).
+		Select(user.FieldDisabledAt).Only(ctx)
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return authz.Principal{}, fmt.Errorf("%w: user", authz.ErrNotFound)
+		}
 		return authz.Principal{}, fmt.Errorf("failed to look up user: %w", err)
 	}
-	if !ok {
-		return authz.Principal{}, fmt.Errorf("%w: user", authz.ErrNotFound)
+	if u.DisabledAt != nil {
+		return authz.Principal{}, authz.ErrDisabled
 	}
 
 	groups, err := a.db.GroupClosure.Query().

@@ -16,26 +16,23 @@ import (
 
 // TenantOrchestrator orchestrates complex multi-domain operations for Tenants.
 type TenantOrchestrator struct {
-	db               *db.DB
-	tenantStore      *identity.TenantStore
-	idpStore         *auth.IdpStore
-	userOrchestrator *UserOrchestrator
-	localUserStore   *local.LocalUserStore
+	db             *db.DB
+	tenantStore    *identity.TenantStore
+	idpStore       *auth.IdpStore
+	localUserStore *local.LocalUserStore
 }
 
 func NewTenantOrchestrator(
 	d *db.DB,
 	ts *identity.TenantStore,
 	is *auth.IdpStore,
-	uo *UserOrchestrator,
 	lus *local.LocalUserStore,
 ) *TenantOrchestrator {
 	return &TenantOrchestrator{
-		db:               d,
-		tenantStore:      ts,
-		idpStore:         is,
-		userOrchestrator: uo,
-		localUserStore:   lus,
+		db:             d,
+		tenantStore:    ts,
+		idpStore:       is,
+		localUserStore: lus,
 	}
 }
 
@@ -50,6 +47,8 @@ func (m *TenantOrchestrator) ProvisionNewTenant(ctx context.Context, name, alias
 	if len(alias) < 2 {
 		return nil, fmt.Errorf("tenant alias must be at least 2 characters")
 	}
+
+	adminEmail = local.NormalizeLogin(adminEmail)
 
 	tenantId := nanoid.Must()
 	idpId := nanoid.Must()
@@ -82,8 +81,8 @@ func (m *TenantOrchestrator) ProvisionNewTenant(ctx context.Context, name, alias
 			return err
 		}
 
-		// B. The Super Admin user and their personal drive.
-		if _, err := m.userOrchestrator.ProvisionUserTx(ctx, tx, identity.CreateUserParams{
+		// B. The Super Admin: a local user with a password and a personal drive.
+		if _, err := m.localUserStore.CreateUserTx(ctx, tx, identity.CreateUserParams{
 			ID:          userId,
 			TenantID:    tenantId,
 			IdpID:       idpId,
@@ -91,12 +90,10 @@ func (m *TenantOrchestrator) ProvisionNewTenant(ctx context.Context, name, alias
 			Email:       adminEmail,
 			DisplayName: "Admin",
 			Role:        identity.RoleSuperAdmin,
-		}); err != nil {
+		}, passwordHash); err != nil {
 			return fmt.Errorf("failed to provision super admin user: %w", err)
 		}
-
-		// C. Create a Local User with Hashed Password.
-		return m.localUserStore.CreateTx(ctx, tx, tenantId, userId, passwordHash)
+		return nil
 	})
 
 	if err != nil {

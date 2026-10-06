@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
 )
 
@@ -22,7 +23,7 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		}, nil
 	}
 
-	user, tenantId, err := a.UserStore.GetUserByExternalId(ctx, idp.ID, request.Body.Email)
+	user, tenantId, err := a.UserStore.GetUserByExternalId(ctx, idp.ID, local.NormalizeLogin(request.Body.Email))
 	if err != nil {
 		msg := "Invalid credentials"
 		return AuthLocalUserLogin401JSONResponse{
@@ -33,6 +34,13 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 	valid, err := a.LocalUserStore.VerifyPassword(ctx, user.ID, *request.Body.Password)
 	if err != nil || !valid {
 		msg := "Invalid credentials"
+		return AuthLocalUserLogin401JSONResponse{
+			Message: &msg,
+		}, nil
+	}
+
+	if user.Disabled() {
+		msg := "This account has been disabled. Contact your administrator."
 		return AuthLocalUserLogin401JSONResponse{
 			Message: &msg,
 		}, nil
@@ -95,6 +103,13 @@ func (a *RestAPI) AuthVerify(ctx context.Context, request AuthVerifyRequestObjec
 func (a *RestAPI) AuthMe(ctx context.Context, request AuthMeRequestObject) (AuthMeResponseObject, error) {
 	sess, ok := session.FromContext(ctx)
 	if !ok {
+		return AuthMe401JSONResponse{}, nil
+	}
+
+	// Browser cookies outlive a disabled account, so check it here too.
+	if users, err := a.UserStore.GetByIDs(ctx, sess.TenantID, []string{sess.UserID}); err != nil {
+		return nil, err
+	} else if u, ok := users[sess.UserID]; !ok || u.Disabled() {
 		return AuthMe401JSONResponse{}, nil
 	}
 

@@ -24,7 +24,8 @@ func TestProvisionNewTenant(t *testing.T) {
 	idps := auth.NewIdpStore(d)
 	az := sqlauthz.New(d)
 	fs := fsops.NewFSOps(d, nil, az)
-	to := orchestrator.NewTenantOrchestrator(d, tenants, idps, orchestrator.NewUserOrchestrator(users, fs), local.NewLocalUserStore(d))
+	localStore := local.NewLocalUserStore(d, orchestrator.NewUserOrchestrator(users, fs))
+	to := orchestrator.NewTenantOrchestrator(d, tenants, idps, localStore)
 
 	tn, err := to.ProvisionNewTenant(ctx, "Home", "home", "admin@home.org", "pw-12345678", true)
 	if err != nil {
@@ -43,7 +44,7 @@ func TestProvisionNewTenant(t *testing.T) {
 	if err != nil || tenantID != tn.ID || user.Role != identity.RoleSuperAdmin {
 		t.Fatalf("admin: %+v %q %v", user, tenantID, err)
 	}
-	if ok, err := local.NewLocalUserStore(d).VerifyPassword(ctx, user.ID, "pw-12345678"); err != nil || !ok {
+	if ok, err := localStore.VerifyPassword(ctx, user.ID, "pw-12345678"); err != nil || !ok {
 		t.Fatalf("the admin password must work immediately after provisioning: %v %v", ok, err)
 	}
 	principal, err := az.Principal(ctx, tn.ID, user.ID)
@@ -75,5 +76,27 @@ func TestProvisionNewTenant(t *testing.T) {
 	// The conflict reason names the real cause.
 	if _, err := to.ProvisionNewTenant(ctx, "Home 2", "HOME", "x@home.org", "pw-12345678", false); !errors.Is(err, identity.ErrConflict) || !strings.Contains(err.Error(), "alias 'home' already exists") {
 		t.Fatalf("duplicate alias error: %v", err)
+	}
+}
+
+func TestProvisionNewTenantStoresTheLoginInLowercase(t *testing.T) {
+	ctx := context.Background()
+	d := dbtest.New(t)
+	users := identity.NewUserStore(d)
+	fs := fsops.NewFSOps(d, nil, sqlauthz.New(d))
+	to := orchestrator.NewTenantOrchestrator(d, identity.NewTenantStore(d), auth.NewIdpStore(d), local.NewLocalUserStore(d, orchestrator.NewUserOrchestrator(users, fs)))
+
+	tn, err := to.ProvisionNewTenant(ctx, "Home", "home", "  Admin@Home.ORG ", "pw-12345678", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := identity.NewTenantStore(d).GetPublicTenantAuthConfig(ctx, tn.Alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The login handler looks users up with local.NormalizeLogin(whatever was typed).
+	u, _, err := users.GetUserByExternalId(ctx, cfg.Providers[0].ID, local.NormalizeLogin("ADMIN@home.org"))
+	if err != nil || u.Email != "admin@home.org" {
+		t.Fatalf("lookup by any casing must find the admin: %+v %v", u, err)
 	}
 }

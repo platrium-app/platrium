@@ -13,6 +13,10 @@ final class FolderViewModel {
     private(set) var hasNextPage: Bool = false
     private(set) var endCursor: String? = nil
     private(set) var folderName: String? = nil
+    /// Nil for a drive's root.
+    private(set) var folderParentId: String? = nil
+    /// What the signed-in user may do in this folder (`SHARE`, `CREATE`, ...).
+    private(set) var folderCapabilities: [String] = []
 
     func loadInitial(folderId: String, apollo: ApolloClient) async {
         guard !isLoading else { return }
@@ -22,6 +26,8 @@ final class FolderViewModel {
         self.hasNextPage = false
         self.endCursor = nil
         self.folderName = nil
+        self.folderParentId = nil
+        self.folderCapabilities = []
         self.isLoading = true
         
         async let infoFetch: () = fetchFolderInfo(folderId: folderId, apollo: apollo)
@@ -35,13 +41,19 @@ final class FolderViewModel {
             let query = PlatriumGraphQL.GetDriveItemInfoQuery(id: folderId)
             apollo.fetch(query: query, cachePolicy: .fetchIgnoringCacheData) { [weak self] result in
                 DispatchQueue.main.async {
-                    if case .success(let graphQLResult) = result {
-                        self?.folderName = graphQLResult.data?.item?.name
+                    if case .success(let graphQLResult) = result, let item = graphQLResult.data?.item {
+                        self?.folderName = item.name
+                        self?.folderParentId = item.parentId
+                        self?.folderCapabilities = item.myCapabilities
                     }
                     continuation.resume()
                 }
             }
         }
+    }
+
+    func item(id: String) -> FolderContentNode? {
+        items.first { $0.id == id }
     }
 
     func loadMore(folderId: String, apollo: ApolloClient) async {

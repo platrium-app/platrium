@@ -22,7 +22,7 @@ func ErrorPresenter(ctx context.Context, err error) *gqlerror.Error {
 
 	code := ""
 	switch {
-	case errors.Is(err, actor.ErrUnauthenticated):
+	case errors.Is(err, actor.ErrUnauthenticated), errors.Is(err, authz.ErrDisabled):
 		code = "UNAUTHENTICATED"
 	case errors.Is(err, authz.ErrForbidden): // fsops.ErrForbidden is the same error
 		code = "FORBIDDEN"

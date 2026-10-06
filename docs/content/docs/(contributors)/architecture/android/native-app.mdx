@@ -89,7 +89,7 @@ sequenceDiagram
 
 ### Plain http
 
-Servers are `https`. The network security config allows cleartext only for `localhost`, `127.0.0.1`, `10.0.2.2` and `.local` hosts, for development. The server address field adds `http://` for local and LAN addresses and `https://` for everything else.
+Servers are `https`. Release builds allow cleartext only to `localhost`, `127.0.0.1`, `10.0.2.2` and `.local` hosts. Android cannot allow a private address range by pattern, so a development server on a LAN address (`http://192.168.x.x:3000`) is blocked there, even though a browser opens it. **Debug builds** override the config (`src/debug/res/xml/network_security_config.xml`) to allow cleartext everywhere, so a phone on the same network can reach a dev engine. The server address field adds `http://` for local and LAN addresses and `https://` for everything else. A blocked request shows up as a generic network error from GraphQL, and logcat names the cleartext policy.
 
 ## Browsing and Sharing
 

@@ -14,6 +14,7 @@ import (
 	"platrium/internal/auth/session"
 	"platrium/internal/auth/token"
 	"platrium/internal/identity"
+	"platrium/internal/infra/db"
 	"platrium/internal/infra/db/dbtest"
 	"platrium/internal/infra/db/ent"
 	"platrium/internal/infra/kvstore"
@@ -25,6 +26,7 @@ const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 type env struct {
 	t        *testing.T
 	srv      *httptest.Server
+	db       *db.DB
 	tokens   *token.Store
 	tenantID string
 	userID   string
@@ -44,9 +46,9 @@ func newEnv(t *testing.T) *env {
 	devices := identity.NewEntDeviceStore(d)
 	tokens := token.NewStore(d, devices, 0)
 	sm := session.NewManager()
-	api := restapi.NewRestAPI(nil, nil, nil, nil, nil, nil, nil, nil, sm, tokens, token.NewCodeStore(kv), devices)
+	api := restapi.NewRestAPI(nil, nil, nil, nil, nil, nil, identity.NewUserStore(d), nil, sm, tokens, token.NewCodeStore(kv), devices)
 
-	e := &env{t: t, tokens: tokens}
+	e := &env{t: t, db: d, tokens: tokens}
 	err = d.WithTx(ctx, func(tx *ent.Tx) error {
 		tn, err := tx.Tenant.Create().SetAlias("acme").SetName("acme").Save(ctx)
 		if err != nil {
@@ -306,5 +308,38 @@ func TestCreateAppTokenAndBrowserLogout(t *testing.T) {
 	}
 	if status, _ := ci.do("GET", "/auth/me", nil); status != 200 {
 		t.Fatalf("browser logout killed the CI token: %d", status)
+	}
+}
+
+func TestDisabledUserLosesBrowserAndTokenAccess(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	b := e.browser()
+
+	code := e.authorize(b, map[string]any{"platform": "ios", "app_version": "1.2"})
+	_, tok := (&client{e: e}).do("POST", "/auth/token", map[string]any{"code": code, "code_verifier": verifier})
+	app := &client{e: e, bearer: tok["token"].(string)}
+
+	for name, c := range map[string]*client{"browser": b, "device": app} {
+		if status, _ := c.do("GET", "/auth/me", nil); status != 200 {
+			t.Fatalf("%s must be signed in before the user is disabled: %d", name, status)
+		}
+	}
+	if _, err := identity.NewUserStore(e.db).SetDisabled(ctx, e.tenantID, e.userID, true); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]*client{"browser": b, "device": app} {
+		if status, _ := c.do("GET", "/auth/me", nil); status != 401 {
+			t.Errorf("disabled user's %s must be rejected: %d", name, status)
+		}
+	}
+
+	if _, err := identity.NewUserStore(e.db).SetDisabled(ctx, e.tenantID, e.userID, false); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]*client{"browser": b, "device": app} {
+		if status, _ := c.do("GET", "/auth/me", nil); status != 200 {
+			t.Errorf("re-enabled user's %s must work again: %d", name, status)
+		}
 	}
 }

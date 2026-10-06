@@ -5,7 +5,10 @@ import {
   LogOutIcon,
   MoreVerticalIcon,
   SmartphoneIcon,
+  Settings,
 } from "lucide-react"
+
+import { usePermissions } from "@/hooks/usePermissions"
 
 import {
   Avatar,
@@ -39,6 +42,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const navigate = useNavigate()
+  const { can } = usePermissions()
 
   const handleLogout = async () => {
     try {
@@ -101,6 +105,12 @@ export function NavUser({
                 <SmartphoneIcon />
                 Devices &amp; Apps
               </DropdownMenuItem>
+              {can("USERS_READ") && (
+                <DropdownMenuItem onClick={() => navigate("/admin/users")}>
+                  <Settings />
+                  Admin Console
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOutIcon />
                 Log out

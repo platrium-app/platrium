@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"platrium/internal/authz"
 )
@@ -44,5 +45,26 @@ func TestPrincipal(t *testing.T) {
 	}
 	if !authz.Anonymous().IsAnonymous() {
 		t.Error("Anonymous must be anonymous")
+	}
+}
+
+func TestPrincipalRejectsDisabledUser(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	acme := e.tenant(t, "acme")
+	alice := e.user(t, acme, "alice")
+
+	if err := e.db.User.UpdateOneID(alice).SetDisabledAt(time.Now()).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.az.Principal(ctx, acme.id, alice); !errors.Is(err, authz.ErrDisabled) {
+		t.Fatalf("a disabled user is not a principal: %v", err)
+	}
+
+	if err := e.db.User.UpdateOneID(alice).ClearDisabledAt().Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.az.Principal(ctx, acme.id, alice); err != nil {
+		t.Fatalf("re-enabled user must work again: %v", err)
 	}
 }

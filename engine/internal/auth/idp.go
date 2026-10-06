@@ -91,6 +91,37 @@ func (r *IdpStore) GetIdpsForTenant(ctx context.Context, alias string) ([]*IdpPr
 	return idps, nil
 }
 
+// ListForTenant returns every IdP of a tenant, the built-in one first.
+func (r *IdpStore) ListForTenant(ctx context.Context, tenantID string) ([]*IdpProvider, error) {
+	rows, err := r.db.IdpProvider.Query().
+		Where(idpprovider.TenantID(tenantID)).
+		Order(idpprovider.ByCreatedAt(), idpprovider.ByID()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list idps: %w", err)
+	}
+	idps := make([]*IdpProvider, 0, len(rows))
+	for _, i := range rows {
+		idps = append(idps, idpFromEnt(i))
+	}
+	return idps, nil
+}
+
+// LocalForTenant returns the tenant's built-in (LOCAL) identity provider.
+func (r *IdpStore) LocalForTenant(ctx context.Context, tenantID string) (*IdpProvider, error) {
+	i, err := r.db.IdpProvider.Query().
+		Where(idpprovider.TenantID(tenantID), idpprovider.TypeEQ(idpprovider.TypeLOCAL)).
+		Order(idpprovider.ByCreatedAt(), idpprovider.ByID()).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: local identity provider", identity.ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to fetch local idp: %w", err)
+	}
+	return idpFromEnt(i), nil
+}
+
 // GetIdpById fetches a specific IdP connection by its unique NanoID.
 func (r *IdpStore) GetIdpById(ctx context.Context, id string) (*IdpProvider, error) {
 	i, err := r.db.IdpProvider.Get(ctx, id)

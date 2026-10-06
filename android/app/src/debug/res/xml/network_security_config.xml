@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only: a development server on a LAN address (http://192.168.x.x:3000)
+  is plain http, and Android can't allow a whole private range by pattern. Release
+  builds use the strict config in src/main, which allows cleartext to local hosts only.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
