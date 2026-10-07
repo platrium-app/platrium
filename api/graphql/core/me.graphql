@@ -1,0 +1,31 @@
+# The signed-in user and what they may do. Clients show or hide features from
+# `permissions`, never from `role`. The gate that enforces them is `@requires`
+# (see admin.graphql); every field it protects is also checked on the server.
+
+"Something a user may do to their organization (or, in the native tenant, the cluster)."
+enum Permission {
+  USERS_READ
+  USERS_CREATE
+  USERS_UPDATE
+  USERS_DISABLE
+  ROLES_ASSIGN
+  SHARED_DRIVES_CREATE
+  POLICIES_MANAGE
+  TENANTS_MANAGE
+}
+
+"The signed-in user, with what they may do. Clients show or hide admin features from `permissions`, never from `role`."
+type Me {
+  userId: ID!
+  tenantId: ID!
+  email: String!
+  displayName: String!
+  role: String!
+  permissions: [Permission!]!
+  "The roles this user may give to others. Empty without ROLES_ASSIGN."
+  assignableRoles: [String!]!
+}
+
+extend type Query {
+  me: Me!
+}

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"platrium/internal/apperr"
+	"platrium/internal/auth/actor"
 	"platrium/internal/authz"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
@@ -34,7 +36,7 @@ func TestErrorPresenterCodesEverySentinel(t *testing.T) {
 		{"apperr invalid", apperr.ErrInvalid, "BAD_REQUEST"},
 		{"authz invalid", authz.ErrInvalid, "BAD_REQUEST"},
 		{"fsops invalid", fsops.ErrInvalid, "BAD_REQUEST"},
-		{"disabled", authz.ErrDisabled, "UNAUTHENTICATED"},
+		{"unauthenticated", actor.ErrUnauthenticated, "UNAUTHENTICATED"},
 		{"wrapped", fmt.Errorf("%w: user", identity.ErrNotFound), "NOT_FOUND"},
 	}
 	for _, c := range cases {
@@ -47,5 +49,26 @@ func TestErrorPresenterCodesEverySentinel(t *testing.T) {
 	}
 	if got := ErrorPresenter(context.Background(), errors.New("boom")); got.Extensions["code"] != nil {
 		t.Fatalf("unmapped error got code %v", got.Extensions["code"])
+	}
+}
+
+// Opening a subscription needs a user who is still enabled and still signed
+// in, not merely a session that exists.
+func TestSubscriptionRefusesStaleSessions(t *testing.T) {
+	h := newHarness(t)
+	s := &subscriptionResolver{h.r}
+
+	if _, err := s.DriveItemChanged(anonymous()); !errors.Is(err, actor.ErrUnauthenticated) {
+		t.Errorf("no session: %v", err)
+	}
+	if err := h.db.User.UpdateOneID(h.bob).SetDisabledAt(time.Now()).Exec(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DriveItemChanged(h.as(h.bob)); !errors.Is(err, actor.ErrUnauthenticated) {
+		t.Errorf("disabled user: %v", err)
+	}
+	h.db.User.UpdateOneID(h.alice).SetSessionsValidAfter(time.Now().Add(time.Hour)).ExecX(context.Background())
+	if _, err := s.DriveItemChanged(h.as(h.alice)); !errors.Is(err, actor.ErrUnauthenticated) {
+		t.Errorf("signed out everywhere: %v", err)
 	}
 }

@@ -9,7 +9,7 @@ import (
 
 func TestEveryRolePermissionIsRegistered(t *testing.T) {
 	for _, role := range authz.TenantRoles() {
-		for p := range authz.EffectivePermissions(role, true) {
+		for _, p := range authz.EffectivePermissions(role, true).Sorted() {
 			if _, ok := p.Scope(); !ok {
 				t.Errorf("role %s carries unregistered permission %q", role, p)
 			}
@@ -19,10 +19,10 @@ func TestEveryRolePermissionIsRegistered(t *testing.T) {
 
 func TestEffectivePermissionsByRole(t *testing.T) {
 	member := authz.EffectivePermissions(authz.TenantRoleMember, false)
-	if len(member) != 0 {
+	if member.Len() != 0 {
 		t.Errorf("a member holds nothing: %v", member.Sorted())
 	}
-	if p := authz.EffectivePermissions("admin", true); len(p) != 0 {
+	if p := authz.EffectivePermissions("admin", true); p.Len() != 0 {
 		t.Errorf("role names are exact; an unknown role holds nothing: %v", p.Sorted())
 	}
 
@@ -85,5 +85,60 @@ func TestPermissionSetSorted(t *testing.T) {
 	s := authz.NewPermissionSet(authz.PermUsersRead, authz.PermRolesAssign)
 	if got := s.Sorted(); !slices.Equal(got, []authz.Permission{authz.PermRolesAssign, authz.PermUsersRead}) {
 		t.Errorf("sorted: %v", got)
+	}
+}
+
+// A set resolved once is shared by a whole request, so nothing it hands out may
+// be a way to change it.
+func TestPermissionSetCannotBeChangedFromOutside(t *testing.T) {
+	s := authz.NewPermissionSet(authz.PermUsersRead, authz.PermRolesAssign)
+	got := s.Sorted()
+	got[0] = authz.PermTenantsManage
+	got = append(got, authz.PermUsersCreate)
+	_ = got
+	if s.Len() != 2 || !s.Has(authz.PermUsersRead) || !s.Has(authz.PermRolesAssign) || s.Has(authz.PermTenantsManage) {
+		t.Fatalf("the set changed: %v", s.Sorted())
+	}
+
+	// A role's permissions are a fresh set each time, never the table's own.
+	a := authz.EffectivePermissions(authz.TenantRoleSuperAdmin, true)
+	b := authz.EffectivePermissions(authz.TenantRoleSuperAdmin, true)
+	if a.Len() != b.Len() || !a.Covers(b) || !b.Covers(a) {
+		t.Fatal("two reads of one role must agree")
+	}
+	var zero authz.PermissionSet
+	if zero.Has(authz.PermUsersRead) || zero.Len() != 0 || !zero.Covers(zero) {
+		t.Fatal("the zero value is an empty set")
+	}
+}
+
+// The boundary that keeps one organization's administrators out of the
+// installation: no role held in an ordinary tenant ever carries a cluster
+// permission, whatever the role table says.
+func TestOrdinaryTenantsNeverHoldClusterPermissions(t *testing.T) {
+	var cluster int
+	for _, role := range authz.TenantRoles() {
+		for _, p := range authz.EffectivePermissions(role, false).Sorted() {
+			if scope, _ := p.Scope(); scope == authz.ScopeCluster {
+				t.Errorf("role %s holds cluster permission %s outside the native tenant", role, p)
+			}
+		}
+		for _, p := range authz.EffectivePermissions(role, true).Sorted() {
+			if scope, _ := p.Scope(); scope == authz.ScopeCluster {
+				cluster++
+			}
+		}
+	}
+	if cluster == 0 {
+		t.Error("the native tenant must be able to hold a cluster permission, or this test proves nothing")
+	}
+	// Assigning is bounded the same way: an organization's super admin cannot
+	// hand out a role whose power they do not hold.
+	org := authz.EffectivePermissions(authz.TenantRoleSuperAdmin, false)
+	if !authz.CanAssignRole(org, authz.TenantRoleSuperAdmin, false) {
+		t.Error("an org super admin may create another org super admin")
+	}
+	if authz.CanAssignRole(org, authz.TenantRoleSuperAdmin, true) {
+		t.Error("an org super admin must not create a native-tenant super admin")
 	}
 }

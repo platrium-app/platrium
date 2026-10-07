@@ -70,7 +70,7 @@ func WithBearer(ctx context.Context, tokens *token.Store, secret string) (contex
 	if p.DeviceID != "" {
 		kind = AuthKindDevice
 	}
-	ctx = WithSession(ctx, &PlatriumSession{UserID: p.UserID, TenantID: p.TenantID, Email: p.Email})
+	ctx = WithSession(ctx, &PlatriumSession{UserID: p.UserID, TenantID: p.TenantID, Email: p.Email, IssuedAt: p.IssuedAt})
 	return WithAuthInfo(ctx, AuthInfo{Kind: kind, TokenID: p.TokenID, DeviceID: p.DeviceID}), nil
 }
 

@@ -1,10 +1,6 @@
 package authz
 
-import (
-	"errors"
-
-	"platrium/internal/apperr"
-)
+import "platrium/internal/apperr"
 
 var (
 	// ErrForbidden means the principal lacks the required capability.
@@ -16,8 +12,4 @@ var (
 	ErrInvalid = apperr.ErrInvalid
 	// ErrConflict means a uniqueness rule rejected the write.
 	ErrConflict = apperr.ErrConflict
-
-	// ErrDisabled means the principal's account has been disabled. Callers
-	// treat it as "not signed in": the session is no longer good.
-	ErrDisabled = errors.New("account disabled")
 )

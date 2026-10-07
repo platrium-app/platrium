@@ -48,7 +48,14 @@ func (m *TenantOrchestrator) ProvisionNewTenant(ctx context.Context, name, alias
 		return nil, fmt.Errorf("tenant alias must be at least 2 characters")
 	}
 
-	adminEmail = local.NormalizeLogin(adminEmail)
+	// The first administrator is held to the same rules as any local user.
+	adminEmail, err := local.NormalizeEmail(adminEmail)
+	if err != nil {
+		return nil, err
+	}
+	if err := local.ValidatePassword(adminPassword); err != nil {
+		return nil, err
+	}
 
 	tenantId := nanoid.Must()
 	idpId := nanoid.Must()

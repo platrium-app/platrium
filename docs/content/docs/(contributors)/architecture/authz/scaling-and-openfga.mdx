@@ -5,7 +5,7 @@ description: How fast the SQL engine is, what we deliberately don't cache, and h
 
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 
-The default authorizer needs nothing but your database. It's fast enough for a homelab and, with batching, for big tenants. When it isn't, the `Authorizer` interface is the seam where a heavier engine can slot in.
+The default authorizer needs nothing but your database. It's fast enough for a homelab and, with batching, for big tenants. When it isn't, the `Authorizer` interface is the seam where a heavier engine can slot in. It is [four small interfaces](./capabilities#one-contract-four-parts) an engine implements together: resolving a principal's groups, checking capabilities, sharing, and group membership.
 
 ## How Fast Is It?
 
@@ -27,6 +27,9 @@ Listing a folder is one check on the folder plus one batched check on the page, 
 There's no permission cache, which makes revocation **instant**: remove a grant and the very next request is refused. We decided that's worth more than shaving a millisecond.
 
 <Accordions>
+  <Accordion title="Isn't the per-request identity a cache?">
+    Not in the sense that matters. The identity (role, permissions, groups) is resolved once and reused only **inside one request**, then thrown away, so the next request reads fresh and revocation is still instant. Nothing is stored in the session or shared between requests. See [from request to identity](../authn/requests-and-sessions#one-identity-per-request).
+  </Accordion>
   <Accordion title="If we add caching later, what would it look like?">
     Start by caching only the *stable* parts: a user's group set (changes on membership edits) and an item's ancestor chain (changes on folder moves). Grants, which churn with every share, stay a live indexed read. Sharing activity then never invalidates anything.
 
@@ -44,7 +47,7 @@ There's no permission cache, which makes revocation **instant**: remove a grant 
 - **No trash or soft delete yet**, and no user-deletion purge. Grants and drives carry `drive_id` so a purge is a flat batch, not a tree walk.
 - **Searching across shared content** needs a pre-filter to the roots you can reach; there's no "everything I can see" query by design.
 - **Moving between drives** is rejected for now.
-- **Group membership and user deletion** don't go through the [change rules](./overview#changing-access-the-rules) yet. Emptying a group that is a drive's only admin, or deleting its last admin user, can still orphan a drive.
+- **Group membership and user deletion** don't go through the [change rules](./capabilities#changing-access-the-rules) yet. Emptying a group that is a drive's only admin, or deleting its last admin user, can still orphan a drive.
 
 ## OpenFGA
 

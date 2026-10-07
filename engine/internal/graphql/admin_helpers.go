@@ -8,7 +8,6 @@ import (
 
 	gqlgraphql "github.com/99designs/gqlgen/graphql"
 
-	"platrium/internal/auth/actor"
 	"platrium/internal/authz"
 	"platrium/internal/identity"
 	"platrium/internal/orchestrator"
@@ -24,16 +23,12 @@ const (
 // the orchestrators re-check, and also enforce the rules a directive cannot,
 // such as which users the caller may act on.
 func (r *Resolver) Requires(ctx context.Context, _ any, next gqlgraphql.Resolver, permission authz.Permission) (any, error) {
-	// Principal also rejects a user who has been disabled since signing in.
-	p, err := actor.Principal(ctx, r.Authz)
+	// Identity also rejects a user who has been disabled since signing in.
+	c, err := r.Actors.Identity(ctx)
 	if err != nil {
 		return nil, err
 	}
-	perms, err := r.UserStore.Permissions(ctx, p.TenantID, p.UserID)
-	if err != nil {
-		return nil, err
-	}
-	if !perms.Has(permission) {
+	if !c.Perms.Has(permission) {
 		return nil, fmt.Errorf("%w: requires the %s permission", authz.ErrForbidden, permission)
 	}
 	return next(ctx)

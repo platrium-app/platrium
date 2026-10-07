@@ -39,12 +39,14 @@ func newHarness(t *testing.T) *harness {
 	fs := fsops.NewFSOps(d, nil, az)
 
 	broker := notifications.NewBroker()
+	users := identity.NewUserStore(d)
 	h := &harness{db: d, r: &Resolver{
+		Actors:      actor.NewResolver(az, users),
 		DriveOrch:   orchestrator.NewDriveOrchestrator(d, fs, az, identity.NewUserStore(d), identity.NewPolicyStore(d)),
 		FSOps:       fs,
 		Broker:      broker,
 		Authz:       az,
-		UserStore:   identity.NewUserStore(d),
+		UserStore:   users,
 		GroupStore:  identity.NewGroupStore(d),
 		TenantStore: identity.NewTenantStore(d),
 	}}

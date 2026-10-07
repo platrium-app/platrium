@@ -15,8 +15,8 @@ type Resolver interface {
 	// Principal resolves a signed-in user, including every group they belong
 	// to. How membership is expanded is the engine's business: the SQL engine
 	// reads a flattened closure table, another engine may not need the list.
-	// A disabled account yields ErrDisabled. TODO: that check is identity's, not
-	// the engine's; it moves to package actor with the resolved caller.
+	// It does not check that the user exists or may sign in: that is identity's
+	// question, answered by package actor before this is asked.
 	Principal(ctx context.Context, tenantID, userID string) (Principal, error)
 }
 

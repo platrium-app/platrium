@@ -2,8 +2,10 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	nanoid "github.com/matoous/go-nanoid/v2"
@@ -60,7 +62,8 @@ func userFromEnt(u *ent.User) *User {
 
 // UserStore manages User records.
 type UserStore struct {
-	db *db.DB
+	db       *db.DB
+	nativeID atomic.Pointer[string] // the native tenant's ID, once seen
 }
 
 func NewUserStore(d *db.DB) *UserStore {
@@ -114,56 +117,130 @@ func (r *UserStore) CreateUserTx(ctx context.Context, tx *ent.Tx, p CreateUserPa
 	return userFromEnt(u), nil
 }
 
+// Account is the part of a user that decides whether and how they may act:
+// what their role carries, whether they are blocked, and when their sessions
+// were last revoked. It is one row read, whatever is asked of it.
+type Account struct {
+	Role string
+	// Native says the user's organization is the installation's native tenant,
+	// the only place cluster permissions apply.
+	Native             bool
+	DisabledAt         *time.Time
+	SessionsValidAfter *time.Time
+}
+
+// Disabled reports whether the account is blocked from signing in.
+func (a *Account) Disabled() bool { return a.DisabledAt != nil }
+
+// Account loads a user's account. A user who is not in the tenant is ErrNotFound.
+func (r *UserStore) Account(ctx context.Context, tenantID, userID string) (*Account, error) {
+	return r.account(ctx, r.db.Client, tenantID, userID)
+}
+
+// AccountTx is Account within a transaction.
+func (r *UserStore) AccountTx(ctx context.Context, tx *ent.Tx, tenantID, userID string) (*Account, error) {
+	return r.account(ctx, tx.Client(), tenantID, userID)
+}
+
+func (r *UserStore) account(ctx context.Context, c *ent.Client, tenantID, userID string) (*Account, error) {
+	u, err := c.User.Query().Where(user.ID(userID), user.TenantID(tenantID)).
+		Select(user.FieldRole, user.FieldDisabledAt, user.FieldSessionsValidAfter).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: user", ErrNotFound)
+		}
+		return nil, fmt.Errorf("failed to fetch user: %w", err)
+	}
+	native, err := r.isNative(ctx, c, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	return &Account{Role: u.Role, Native: native, DisabledAt: u.DisabledAt, SessionsValidAfter: u.SessionsValidAfter}, nil
+}
+
+// isNative reports whether the tenant is the native one. There is at most one
+// and it is never replaced, so once found its ID is remembered and later
+// checks cost nothing. Until it exists the answer is not remembered.
+func (r *UserStore) isNative(ctx context.Context, c *ent.Client, tenantID string) (bool, error) {
+	if id := r.nativeID.Load(); id != nil {
+		return *id == tenantID, nil
+	}
+	id, err := c.Tenant.Query().Where(tenant.NativeSlotNotNil()).OnlyID(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to fetch tenant: %w", err)
+	}
+	r.nativeID.Store(&id)
+	return id == tenantID, nil
+}
+
 // Access returns what a user may do to their organization (and, in the native
 // tenant, to the cluster), and whether that organization is the native tenant.
 // A disabled or unknown user holds nothing.
 func (r *UserStore) Access(ctx context.Context, tenantID, userID string) (authz.PermissionSet, bool, error) {
-	return access(ctx, r.db.Client, tenantID, userID)
+	return r.access(ctx, r.Account, tenantID, userID)
 }
 
 // AccessTx is Access within a transaction.
 func (r *UserStore) AccessTx(ctx context.Context, tx *ent.Tx, tenantID, userID string) (authz.PermissionSet, bool, error) {
-	return access(ctx, tx.Client(), tenantID, userID)
+	return r.access(ctx, func(ctx context.Context, tenantID, userID string) (*Account, error) {
+		return r.AccountTx(ctx, tx, tenantID, userID)
+	}, tenantID, userID)
 }
 
-func access(ctx context.Context, c *ent.Client, tenantID, userID string) (perms authz.PermissionSet, native bool, err error) {
-	native, err = c.Tenant.Query().Where(tenant.ID(tenantID), tenant.NativeSlotNotNil()).Exist(ctx)
+func (r *UserStore) access(ctx context.Context, load func(context.Context, string, string) (*Account, error), tenantID, userID string) (authz.PermissionSet, bool, error) {
+	acc, err := load(ctx, tenantID, userID)
+	if errors.Is(err, ErrNotFound) {
+		native, nerr := r.isNative(ctx, r.db.Client, tenantID)
+		return authz.NewPermissionSet(), native, nerr
+	}
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to fetch tenant: %w", err)
+		return authz.PermissionSet{}, false, err
 	}
-	u, err := c.User.Query().Where(user.ID(userID), user.TenantID(tenantID)).Only(ctx)
+	if acc.Disabled() {
+		return authz.NewPermissionSet(), acc.Native, nil
+	}
+	return authz.EffectivePermissions(acc.Role, acc.Native), acc.Native, nil
+}
+
+// RevokeSessionsTx voids every session and token issued to the user so far;
+// they must sign in again. It is the single sink for "sign out everywhere": a
+// password reset calls it today, and an identity provider's logout notice or a
+// revalidation failure would call it too. Re-enabling a disabled user does not
+// call it, so their devices come back with them.
+func (r *UserStore) RevokeSessionsTx(ctx context.Context, tx *ent.Tx, tenantID, userID string) error {
+	n, err := tx.User.Update().Where(user.ID(userID), user.TenantID(tenantID)).
+		SetSessionsValidAfter(time.Now().UTC()).Save(ctx)
 	if err != nil {
-		if ent.IsNotFound(err) {
-			return authz.NewPermissionSet(), native, nil
-		}
-		return nil, false, fmt.Errorf("failed to fetch user: %w", err)
+		return fmt.Errorf("failed to revoke sessions: %w", err)
 	}
-	if u.DisabledAt != nil {
-		return authz.NewPermissionSet(), native, nil
+	if n == 0 {
+		return fmt.Errorf("%w: user", ErrNotFound)
 	}
-	return authz.EffectivePermissions(u.Role, native), native, nil
+	return nil
 }
 
-// Permissions is Access without the native flag.
-func (r *UserStore) Permissions(ctx context.Context, tenantID, userID string) (authz.PermissionSet, error) {
-	perms, _, err := r.Access(ctx, tenantID, userID)
-	return perms, err
-}
-
-// SetDisabled disables or re-enables a user of the tenant. It is idempotent:
-// disabling an already disabled user keeps the original timestamp. Anything
-// that authenticates the user checks the flag on every request, so this takes
-// effect immediately.
+// SetDisabled disables or re-enables a user of the tenant and returns them. It
+// is idempotent: disabling an already disabled user keeps the original
+// timestamp. Anything that authenticates the user checks the flag on every
+// request, so this takes effect immediately.
 func (r *UserStore) SetDisabled(ctx context.Context, tenantID, userID string, disabled bool) (*User, error) {
-	return setDisabled(ctx, r.db.Client, tenantID, userID, disabled)
+	if err := setDisabled(ctx, r.db.Client, tenantID, userID, disabled); err != nil {
+		return nil, err
+	}
+	return r.Get(ctx, tenantID, userID)
 }
 
-// SetDisabledTx is SetDisabled within a transaction.
-func (r *UserStore) SetDisabledTx(ctx context.Context, tx *ent.Tx, tenantID, userID string, disabled bool) (*User, error) {
+// SetDisabledTx is SetDisabled within a transaction. It returns nothing, since
+// its caller has the user in hand already and reads them again only if it must.
+// A user who is not in the tenant is not an error here; check first.
+func (r *UserStore) SetDisabledTx(ctx context.Context, tx *ent.Tx, tenantID, userID string, disabled bool) error {
 	return setDisabled(ctx, tx.Client(), tenantID, userID, disabled)
 }
 
-func setDisabled(ctx context.Context, c *ent.Client, tenantID, userID string, disabled bool) (*User, error) {
+func setDisabled(ctx context.Context, c *ent.Client, tenantID, userID string, disabled bool) error {
 	q := c.User.Update().Where(user.ID(userID), user.TenantID(tenantID))
 	if disabled {
 		q = q.Where(user.DisabledAtIsNil()).SetDisabledAt(time.Now().UTC())
@@ -171,9 +248,14 @@ func setDisabled(ctx context.Context, c *ent.Client, tenantID, userID string, di
 		q = q.ClearDisabledAt()
 	}
 	if _, err := q.Save(ctx); err != nil {
-		return nil, fmt.Errorf("failed to update user: %w", err)
+		return fmt.Errorf("failed to update user: %w", err)
 	}
-	u, err := c.User.Query().Where(user.ID(userID), user.TenantID(tenantID)).Only(ctx)
+	return nil
+}
+
+// Get fetches one user of the tenant. A user who is not in it is ErrNotFound.
+func (r *UserStore) Get(ctx context.Context, tenantID, userID string) (*User, error) {
+	u, err := r.db.User.Query().Where(user.ID(userID), user.TenantID(tenantID)).Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return nil, fmt.Errorf("%w: user", ErrNotFound)

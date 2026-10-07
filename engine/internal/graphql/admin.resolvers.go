@@ -7,15 +7,13 @@ package graphql
 
 import (
 	"context"
-	"platrium/internal/auth/actor"
-	"platrium/internal/authz"
 	"platrium/internal/identity"
 	"platrium/internal/orchestrator"
 )
 
 // CreateLocalUser is the resolver for the createLocalUser field.
 func (r *mutationResolver) CreateLocalUser(ctx context.Context, input CreateLocalUserInput) (*AdminUser, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +30,7 @@ func (r *mutationResolver) CreateLocalUser(ctx context.Context, input CreateLoca
 
 // UpdateLocalUser is the resolver for the updateLocalUser field.
 func (r *mutationResolver) UpdateLocalUser(ctx context.Context, id string, input UpdateLocalUserInput) (*AdminUser, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +43,7 @@ func (r *mutationResolver) UpdateLocalUser(ctx context.Context, id string, input
 
 // ResetLocalUserPassword is the resolver for the resetLocalUserPassword field.
 func (r *mutationResolver) ResetLocalUserPassword(ctx context.Context, id string, password string) (bool, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -57,7 +55,7 @@ func (r *mutationResolver) ResetLocalUserPassword(ctx context.Context, id string
 
 // SetUserDisabled is the resolver for the setUserDisabled field.
 func (r *mutationResolver) SetUserDisabled(ctx context.Context, id string, disabled bool) (*AdminUser, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -68,45 +66,9 @@ func (r *mutationResolver) SetUserDisabled(ctx context.Context, id string, disab
 	return mapAdminUser(u), nil
 }
 
-// Me is the resolver for the me field.
-func (r *queryResolver) Me(ctx context.Context) (*Me, error) {
-	p, err := actor.Principal(ctx, r.Authz)
-	if err != nil {
-		return nil, err
-	}
-	users, err := r.UserStore.GetByIDs(ctx, p.TenantID, []string{p.UserID})
-	if err != nil {
-		return nil, err
-	}
-	u, ok := users[p.UserID]
-	if !ok {
-		return nil, actor.ErrUnauthenticated
-	}
-	perms, native, err := r.UserStore.Access(ctx, p.TenantID, p.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	me := &Me{
-		UserID:          u.ID,
-		TenantID:        u.TenantID,
-		Email:           u.Email,
-		DisplayName:     u.DisplayName,
-		Role:            u.Role,
-		Permissions:     perms.Sorted(),
-		AssignableRoles: []string{},
-	}
-	for _, role := range authz.TenantRoles() {
-		if authz.CanAssignRole(perms, role, native) {
-			me.AssignableRoles = append(me.AssignableRoles, role)
-		}
-	}
-	return me, nil
-}
-
 // AdminUsers is the resolver for the adminUsers field.
 func (r *queryResolver) AdminUsers(ctx context.Context, first *int, after *string, search *string, sourceID *string, status *UserStatus) (*AdminUserConnection, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +110,7 @@ func (r *queryResolver) AdminUsers(ctx context.Context, first *int, after *strin
 
 // AdminIdentitySources is the resolver for the adminIdentitySources field.
 func (r *queryResolver) AdminIdentitySources(ctx context.Context) ([]*IdentitySource, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}

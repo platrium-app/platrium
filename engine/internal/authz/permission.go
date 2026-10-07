@@ -64,24 +64,29 @@ func (p Permission) Scope() (scope PermissionScope, ok bool) {
 	return ScopeTenant, false
 }
 
-// PermissionSet is a set of permissions. The zero value is empty and usable.
-type PermissionSet map[Permission]struct{}
+// PermissionSet is a set of permissions. It is immutable: there is no way to
+// add to or remove from one after it is built, so a set resolved once for a
+// request can be shared by everything in it. The zero value is empty and usable.
+type PermissionSet struct{ m map[Permission]struct{} }
 
 // NewPermissionSet returns a set holding the given permissions.
 func NewPermissionSet(perms ...Permission) PermissionSet {
-	s := make(PermissionSet, len(perms))
+	m := make(map[Permission]struct{}, len(perms))
 	for _, p := range perms {
-		s[p] = struct{}{}
+		m[p] = struct{}{}
 	}
-	return s
+	return PermissionSet{m: m}
 }
 
 // Has reports whether the set holds p.
-func (s PermissionSet) Has(p Permission) bool { _, ok := s[p]; return ok }
+func (s PermissionSet) Has(p Permission) bool { _, ok := s.m[p]; return ok }
+
+// Len is how many permissions the set holds.
+func (s PermissionSet) Len() int { return len(s.m) }
 
 // Covers reports whether the set holds every permission in other.
 func (s PermissionSet) Covers(other PermissionSet) bool {
-	for p := range other {
+	for p := range other.m {
 		if !s.Has(p) {
 			return false
 		}
@@ -89,10 +94,11 @@ func (s PermissionSet) Covers(other PermissionSet) bool {
 	return true
 }
 
-// Sorted lists the permissions in a stable order, for display and tests.
+// Sorted lists the permissions in a stable order, for display and tests. The
+// list is a copy; changing it changes nothing.
 func (s PermissionSet) Sorted() []Permission {
-	out := make([]Permission, 0, len(s))
-	for p := range s {
+	out := make([]Permission, 0, len(s.m))
+	for p := range s.m {
 		out = append(out, p)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
@@ -135,14 +141,14 @@ func KnownTenantRole(role string) bool { _, ok := builtinTenantRoles[role]; retu
 // permissions apply: an organization's super admin never holds them. An unknown
 // role holds nothing.
 func EffectivePermissions(role string, native bool) PermissionSet {
-	out := make(PermissionSet)
-	for p := range builtinTenantRoles[role] {
+	var perms []Permission
+	for p := range builtinTenantRoles[role].m {
 		if scope, _ := p.Scope(); scope == ScopeCluster && !native {
 			continue
 		}
-		out[p] = struct{}{}
+		perms = append(perms, p)
 	}
-	return out
+	return NewPermissionSet(perms...)
 }
 
 // CanAssignRole reports whether a user holding actor may give someone role.

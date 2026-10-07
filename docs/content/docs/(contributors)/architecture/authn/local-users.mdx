@@ -63,7 +63,16 @@ graph TD
 
 ## Password Resets
 
-`SetPassword` hashes the new password and updates the existing credential row. It preserves the second-factor settings and bumps `password_changed_at`.
+An administrator with `users.update` resets a local user's password through `UserAdmin.ResetLocalUserPassword`. In one transaction it:
+
+1. updates the credential row (keeping the second-factor settings and bumping `password_changed_at`), and
+2. sets the user's `sessions_valid_after`, which **signs them out everywhere**: every cookie session and token issued before the reset stops working, and they sign in again with the new password.
+
+Users from an external provider cannot be reset here, because Platrium never held their password. See [signing a user out everywhere](./requests-and-sessions#signing-a-user-out-everywhere).
+
+## One Set Of Rules
+
+Whoever creates a local user, an administrator or the setup flow that makes a tenant's first administrator, goes through the same validation (`local.NormalizeEmail`, `local.ValidatePassword`): a plain email address, stored lowercased, and a password of 8 to 72 characters. bcrypt ignores or rejects anything past 72 bytes, so a longer one would only look stronger.
 
 ## IdPAuthHandoff Integration (In-Progress)
 

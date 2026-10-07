@@ -207,7 +207,7 @@ func TestUserPermissions(t *testing.T) {
 
 	perms := func(tenantID, userID string) authz.PermissionSet {
 		t.Helper()
-		p, err := e.users.Permissions(ctx, tenantID, userID)
+		p, _, err := e.users.Access(ctx, tenantID, userID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,11 +219,11 @@ func TestUserPermissions(t *testing.T) {
 	if p := perms(acme.ID, orgAdmin.ID); p.Has(authz.PermTenantsManage) || !p.Has(authz.PermUsersCreate) {
 		t.Errorf("an org super admin administers only their org: %v", p.Sorted())
 	}
-	if p := perms(acme.ID, member.ID); len(p) != 0 {
+	if p := perms(acme.ID, member.ID); p.Len() != 0 {
 		t.Errorf("member: %v", p.Sorted())
 	}
 	// Tenant isolation: the same user ID under another tenant is nobody.
-	if p := perms(home.ID, orgAdmin.ID); len(p) != 0 {
+	if p := perms(home.ID, orgAdmin.ID); p.Len() != 0 {
 		t.Errorf("cross-tenant lookup must grant nothing: %v", p.Sorted())
 	}
 
@@ -231,7 +231,7 @@ func TestUserPermissions(t *testing.T) {
 	if _, err := e.users.SetDisabled(ctx, acme.ID, orgAdmin.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if p := perms(acme.ID, orgAdmin.ID); len(p) != 0 {
+	if p := perms(acme.ID, orgAdmin.ID); p.Len() != 0 {
 		t.Errorf("a disabled admin must hold nothing: %v", p.Sorted())
 	}
 }

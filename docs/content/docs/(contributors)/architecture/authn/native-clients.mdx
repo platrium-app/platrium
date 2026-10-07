@@ -86,7 +86,7 @@ GET /api/auth/me
 Authorization: Bearer plt_...
 ```
 
-`session.Bearer` (after `session.Middleware`) validates the token and puts the same `PlatriumSession` in the request context that a cookie would, with the tenant read from the token row. Authorization, resolvers and `actor.Principal` do not know the difference. `session.AuthInfoFromContext` says which credential was used (`SESSION`, `DEVICE` or `APP`).
+`session.Bearer` (after `session.Middleware`) validates the token and puts the same `PlatriumSession` in the request context that a cookie would, with the tenant read from the token row. Authorization, resolvers and the identity resolver (`actors.Identity`) do not know the difference. A token also stops working if its user is disabled or signed out everywhere, see [from request to identity](./requests-and-sessions). `session.AuthInfoFromContext` says which credential was used (`SESSION`, `DEVICE` or `APP`).
 
 - An invalid or revoked token gets `401` and **never falls back to a cookie**.
 - GraphQL subscriptions send `{"Authorization": "Bearer ..."}` in the `connection_init` payload.

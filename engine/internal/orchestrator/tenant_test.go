@@ -8,9 +8,11 @@ import (
 
 	"platrium/internal/auth"
 	"platrium/internal/auth/protocol/local"
+	"platrium/internal/authz"
 	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
+	"platrium/internal/infra/db"
 	"platrium/internal/infra/db/dbtest"
 	"platrium/internal/orchestrator"
 )
@@ -99,4 +101,44 @@ func TestProvisionNewTenantStoresTheLoginInLowercase(t *testing.T) {
 	if err != nil || u.Email != "admin@home.org" {
 		t.Fatalf("lookup by any casing must find the admin: %+v %v", u, err)
 	}
+}
+
+// The first administrator is held to the same rules as any local user, so the
+// setup flow cannot create an account an admin could not.
+func TestProvisionNewTenantValidatesTheAdmin(t *testing.T) {
+	ctx := context.Background()
+	d := dbtest.New(t)
+	users := identity.NewUserStore(d)
+	fs := fsops.NewFSOps(d, nil, sqlauthz.New(d))
+	to := orchestrator.NewTenantOrchestrator(d, identity.NewTenantStore(d), auth.NewIdpStore(d), local.NewLocalUserStore(d, orchestrator.NewUserOrchestrator(users, fs)))
+
+	for name, c := range map[string]struct{ email, password string }{
+		"short password": {"admin@home.org", "1"},
+		"long password":  {"admin@home.org", strings.Repeat("x", 73)},
+		"not an email":   {"admin", "pw-12345678"},
+		"name and email": {"Admin <admin@home.org>", "pw-12345678"},
+	} {
+		if _, err := to.ProvisionNewTenant(ctx, "Home", "home", c.email, c.password, true); !errors.Is(err, authz.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if n, _ := d.Tenant.Query().Count(ctx); n != 0 {
+		t.Errorf("a refused setup must leave nothing behind, found %d tenants", n)
+	}
+	// The email is stored in its normal form.
+	if _, err := to.ProvisionNewTenant(ctx, "Home", "home", "  Admin@Home.ORG ", "pw-12345678", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := users.GetUserByExternalId(ctx, mustLocalIdp(t, d), "admin@home.org"); err != nil {
+		t.Errorf("the admin must be stored under the normalized email: %v", err)
+	}
+}
+
+func mustLocalIdp(t *testing.T, d *db.DB) string {
+	t.Helper()
+	id, err := d.IdpProvider.Query().OnlyID(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

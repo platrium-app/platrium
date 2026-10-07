@@ -8,8 +8,6 @@ package graphql
 import (
 	"context"
 	"fmt"
-	"platrium/internal/auth/actor"
-	"platrium/internal/auth/session"
 	"platrium/internal/notifications/events"
 	"time"
 )
@@ -26,7 +24,7 @@ func (r *folderResolver) Path(ctx context.Context, obj *Folder) ([]*Folder, erro
 
 // CreateFolder is the resolver for the createFolder field.
 func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, name string) (*Folder, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +47,7 @@ func (r *mutationResolver) CreateFolder(ctx context.Context, parentID string, na
 
 // RenameItem is the resolver for the renameItem field.
 func (r *mutationResolver) RenameItem(ctx context.Context, id string, newName string) (DriveItem, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +70,7 @@ func (r *mutationResolver) RenameItem(ctx context.Context, id string, newName st
 
 // MoveItem is the resolver for the moveItem field.
 func (r *mutationResolver) MoveItem(ctx context.Context, id string, newParentID string) (DriveItem, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +93,7 @@ func (r *mutationResolver) MoveItem(ctx context.Context, id string, newParentID 
 
 // CopyFile is the resolver for the copyFile field.
 func (r *mutationResolver) CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*File, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +121,7 @@ func (r *mutationResolver) DeleteItem(ctx context.Context, id string) (bool, err
 
 // Item is the resolver for the item field.
 func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) {
-	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
+	p, err := r.Actors.PrincipalOrAnonymous(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +136,7 @@ func (r *queryResolver) Item(ctx context.Context, id string) (DriveItem, error) 
 
 // FolderContents is the resolver for the folderContents field.
 func (r *queryResolver) FolderContents(ctx context.Context, folderID string, first *int, after *string) (*DriveItemConnection, error) {
-	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
+	p, err := r.Actors.PrincipalOrAnonymous(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +193,7 @@ func (r *queryResolver) FolderContents(ctx context.Context, folderID string, fir
 
 // Drives is the resolver for the drives field.
 func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +213,7 @@ func (r *queryResolver) Drives(ctx context.Context) ([]*Folder, error) {
 
 // GetChanges is the resolver for the getChanges field.
 func (r *queryResolver) GetChanges(ctx context.Context, folderID string, since time.Time) ([]*DriveItemEvent, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,13 +236,16 @@ func (r *queryResolver) GetChanges(ctx context.Context, folderID string, since t
 
 // DriveItemChanged is the resolver for the driveItemChanged field.
 func (r *subscriptionResolver) DriveItemChanged(ctx context.Context) (<-chan *DriveItemEvent, error) {
-	sess, ok := session.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("unauthorized")
+	// A session that exists is not enough: the user must still be enabled and
+	// not signed out everywhere. This is checked when the subscription opens; an
+	// already open connection is not cut when that later changes.
+	p, err := r.Actors.Principal(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Subscribe to GraphQL WebSocket transport for the active User
-	ch, unsub := r.SubsManager.Subscribe(sess.UserID)
+	ch, unsub := r.SubsManager.Subscribe(p.UserID)
 
 	// Unsubscribe when connection closes
 	go func() {

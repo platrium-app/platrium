@@ -7,12 +7,11 @@ package graphql
 
 import (
 	"context"
-	"platrium/internal/auth/actor"
 )
 
 // CreateSharedDrive is the resolver for the createSharedDrive field.
 func (r *mutationResolver) CreateSharedDrive(ctx context.Context, name string) (*Folder, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +24,7 @@ func (r *mutationResolver) CreateSharedDrive(ctx context.Context, name string) (
 
 // SetSharedDriveCreators is the resolver for the setSharedDriveCreators field.
 func (r *mutationResolver) SetSharedDriveCreators(ctx context.Context, groupIds []string) ([]*DirectorySubject, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +36,7 @@ func (r *mutationResolver) SetSharedDriveCreators(ctx context.Context, groupIds 
 
 // CanCreateSharedDrive is the resolver for the canCreateSharedDrive field.
 func (r *queryResolver) CanCreateSharedDrive(ctx context.Context) (bool, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -46,7 +45,7 @@ func (r *queryResolver) CanCreateSharedDrive(ctx context.Context) (bool, error) 
 
 // SharedDriveCreators is the resolver for the sharedDriveCreators field.
 func (r *queryResolver) SharedDriveCreators(ctx context.Context) ([]*DirectorySubject, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}

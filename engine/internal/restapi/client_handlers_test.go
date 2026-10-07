@@ -8,11 +8,14 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/session"
 	"platrium/internal/auth/token"
+	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/identity"
 	"platrium/internal/infra/db"
 	"platrium/internal/infra/db/dbtest"
@@ -46,7 +49,8 @@ func newEnv(t *testing.T) *env {
 	devices := identity.NewEntDeviceStore(d)
 	tokens := token.NewStore(d, devices, 0)
 	sm := session.NewManager()
-	api := restapi.NewRestAPI(nil, nil, nil, nil, nil, nil, identity.NewUserStore(d), nil, sm, tokens, token.NewCodeStore(kv), devices)
+	users := identity.NewUserStore(d)
+	api := restapi.NewRestAPI(nil, actor.NewResolver(sqlauthz.New(d), users), nil, nil, nil, nil, users, nil, sm, tokens, token.NewCodeStore(kv), devices)
 
 	e := &env{t: t, db: d, tokens: tokens}
 	err = d.WithTx(ctx, func(tx *ent.Tx) error {
@@ -73,7 +77,7 @@ func newEnv(t *testing.T) *env {
 		r.Use(session.Bearer(tokens))
 		// Stand-in for the login handler: creates the browser session.
 		r.Post("/test-login", func(w http.ResponseWriter, r *http.Request) {
-			session.PutSession(sm, r, &session.PlatriumSession{UserID: e.userID, TenantID: e.tenantID, Email: "u@x.com"})
+			session.PutSession(sm, r, &session.PlatriumSession{UserID: e.userID, TenantID: e.tenantID, Email: "u@x.com", IssuedAt: time.Now().UTC()})
 		})
 		restapi.HandlerFromMux(restapi.NewStrictHandler(api, nil), r)
 	})
@@ -341,5 +345,68 @@ func TestDisabledUserLosesBrowserAndTokenAccess(t *testing.T) {
 		if status, _ := c.do("GET", "/auth/me", nil); status != 200 {
 			t.Errorf("re-enabled user's %s must work again: %d", name, status)
 		}
+	}
+}
+
+// Signing a user out everywhere voids the cookies and tokens issued before it,
+// including their ability to mint new tokens, and leaves later sign-ins alone.
+func TestRevokedSessionsAreDeadEverywhere(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	b := e.browser()
+	code := e.authorize(b, map[string]any{"platform": "ios", "app_version": "1.2"})
+	_, tok := (&client{e: e}).do("POST", "/auth/token", map[string]any{"code": code, "code_verifier": verifier})
+	app := &client{e: e, bearer: tok["token"].(string)}
+
+	if err := e.db.WithTx(ctx, func(tx *ent.Tx) error {
+		return identity.NewUserStore(e.db).RevokeSessionsTx(ctx, tx, e.tenantID, e.userID)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, c := range map[string]*client{"browser": b, "device": app} {
+		if status, _ := c.do("GET", "/auth/me", nil); status != 401 {
+			t.Errorf("revoked %s must be rejected: %d", name, status)
+		}
+	}
+	// The old cookie must not be able to use the client endpoints either: it
+	// could otherwise list devices or mint a fresh token that outlives the reset.
+	if status, _ := b.do("GET", "/auth/clients", nil); status != 401 {
+		t.Errorf("revoked cookie listing clients: %d", status)
+	}
+	body := map[string]any{"redirect_uri": "platrium://callback", "code_challenge": token.Challenge(verifier), "name": "x"}
+	if status, _ := b.do("POST", "/auth/authorize", body); status != 401 {
+		t.Errorf("revoked cookie minting a token: %d", status)
+	}
+
+	// Signing in again works, and so does a token issued after the revocation.
+	b2 := e.browser()
+	if status, _ := b2.do("GET", "/auth/me", nil); status != 200 {
+		t.Errorf("a new sign-in must work: %d", status)
+	}
+	code = e.authorize(b2, map[string]any{"platform": "ios", "app_version": "1.2"})
+	_, tok = (&client{e: e}).do("POST", "/auth/token", map[string]any{"code": code, "code_verifier": verifier})
+	if status, _ := (&client{e: e, bearer: tok["token"].(string)}).do("GET", "/auth/me", nil); status != 200 {
+		t.Errorf("a new token must work: %d", status)
+	}
+	if status, _ := app.do("GET", "/auth/me", nil); status != 401 {
+		t.Errorf("the old token stays dead: %d", status)
+	}
+}
+
+// A disabled user's old cookie cannot reach the client endpoints.
+func TestDisabledCookieCannotUseClientEndpoints(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	b := e.browser()
+	if _, err := identity.NewUserStore(e.db).SetDisabled(ctx, e.tenantID, e.userID, true); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := b.do("GET", "/auth/clients", nil); status != 401 {
+		t.Errorf("disabled cookie listing clients: %d", status)
+	}
+	body := map[string]any{"redirect_uri": "platrium://callback", "code_challenge": token.Challenge(verifier), "name": "x"}
+	if status, _ := b.do("POST", "/auth/authorize", body); status != 401 {
+		t.Errorf("disabled cookie minting a token: %d", status)
 	}
 }

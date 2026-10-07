@@ -7,7 +7,6 @@ package graphql
 
 import (
 	"context"
-	"platrium/internal/auth/actor"
 	"platrium/internal/authz"
 	"slices"
 	"strings"
@@ -15,7 +14,7 @@ import (
 
 // ShareItem is the resolver for the shareItem field.
 func (r *mutationResolver) ShareItem(ctx context.Context, input ShareInput) (*AccessGrant, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +43,7 @@ func (r *mutationResolver) ShareItem(ctx context.Context, input ShareInput) (*Ac
 
 // RevokeAccess is the resolver for the revokeAccess field.
 func (r *mutationResolver) RevokeAccess(ctx context.Context, grantID string) (bool, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -56,7 +55,7 @@ func (r *mutationResolver) RevokeAccess(ctx context.Context, grantID string) (bo
 
 // SetGeneralAccess is the resolver for the setGeneralAccess field.
 func (r *mutationResolver) SetGeneralAccess(ctx context.Context, input GeneralAccessInput) (*GeneralAccess, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +87,7 @@ func (r *mutationResolver) SetGeneralAccess(ctx context.Context, input GeneralAc
 
 // SetInheritance is the resolver for the setInheritance field.
 func (r *mutationResolver) SetInheritance(ctx context.Context, itemID string, inherit bool) (bool, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -100,7 +99,7 @@ func (r *mutationResolver) SetInheritance(ctx context.Context, itemID string, in
 
 // ShareRoles is the resolver for the shareRoles field.
 func (r *queryResolver) ShareRoles(ctx context.Context, itemID string) ([]*RoleOption, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +122,7 @@ func (r *queryResolver) ShareRoles(ctx context.Context, itemID string) ([]*RoleO
 
 // GeneralAccessOptions is the resolver for the generalAccessOptions field.
 func (r *queryResolver) GeneralAccessOptions(ctx context.Context, itemID string) ([]*AccessLevelOption, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +143,7 @@ func (r *queryResolver) GeneralAccessOptions(ctx context.Context, itemID string)
 
 // SearchDirectory is the resolver for the searchDirectory field.
 func (r *queryResolver) SearchDirectory(ctx context.Context, query string, first *int, excludeAccessToItemID *string) ([]*DirectorySubject, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +210,7 @@ func (r *queryResolver) SearchDirectory(ctx context.Context, query string, first
 
 // ItemAccess is the resolver for the itemAccess field.
 func (r *queryResolver) ItemAccess(ctx context.Context, itemID string) (*ItemAccess, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +257,7 @@ func (r *queryResolver) ItemAccess(ctx context.Context, itemID string) (*ItemAcc
 
 // SharedWithMe is the resolver for the sharedWithMe field.
 func (r *queryResolver) SharedWithMe(ctx context.Context, first *int, after *string) (*SharedItemConnection, error) {
-	p, err := actor.Principal(ctx, r.Authz)
+	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/session"
 	"platrium/internal/auth/token"
 	"platrium/internal/identity"
@@ -37,9 +38,18 @@ type callerAuth struct {
 	info session.AuthInfo
 }
 
-func authFrom(ctx context.Context) (callerAuth, bool) {
+// authFrom reports who is calling. A session whose user has since been
+// disabled, removed or signed out everywhere is no session: otherwise an old
+// cookie could still list devices or mint a fresh token.
+func (a *RestAPI) authFrom(ctx context.Context) (callerAuth, bool) {
 	sess, ok := session.FromContext(ctx)
 	if !ok {
+		return callerAuth{}, false
+	}
+	if _, err := a.Actors.Identity(ctx); err != nil {
+		if !errors.Is(err, actor.ErrUnauthenticated) {
+			log.Printf("resolving caller: %v", err)
+		}
 		return callerAuth{}, false
 	}
 	info, _ := session.AuthInfoFromContext(ctx)
@@ -48,7 +58,7 @@ func authFrom(ctx context.Context) (callerAuth, bool) {
 
 // AuthAuthorize implements POST /auth/authorize.
 func (a *RestAPI) AuthAuthorize(ctx context.Context, request AuthAuthorizeRequestObject) (AuthAuthorizeResponseObject, error) {
-	caller, ok := authFrom(ctx)
+	caller, ok := a.authFrom(ctx)
 	if !ok {
 		return AuthAuthorize401JSONResponse{Message: str("Sign in to continue")}, nil
 	}
@@ -139,7 +149,7 @@ func (a *RestAPI) AuthToken(ctx context.Context, request AuthTokenRequestObject)
 
 // AuthListClients implements GET /auth/clients.
 func (a *RestAPI) AuthListClients(ctx context.Context, request AuthListClientsRequestObject) (AuthListClientsResponseObject, error) {
-	caller, ok := authFrom(ctx)
+	caller, ok := a.authFrom(ctx)
 	if !ok {
 		return AuthListClients401JSONResponse{}, nil
 	}
@@ -168,7 +178,7 @@ func (a *RestAPI) AuthListClients(ctx context.Context, request AuthListClientsRe
 
 // AuthCreateClient implements POST /auth/clients.
 func (a *RestAPI) AuthCreateClient(ctx context.Context, request AuthCreateClientRequestObject) (AuthCreateClientResponseObject, error) {
-	caller, ok := authFrom(ctx)
+	caller, ok := a.authFrom(ctx)
 	if !ok {
 		return AuthCreateClient401JSONResponse{}, nil
 	}
@@ -201,7 +211,7 @@ func (a *RestAPI) AuthCreateClient(ctx context.Context, request AuthCreateClient
 
 // AuthDeleteClient implements DELETE /auth/clients/{id}.
 func (a *RestAPI) AuthDeleteClient(ctx context.Context, request AuthDeleteClientRequestObject) (AuthDeleteClientResponseObject, error) {
-	caller, ok := authFrom(ctx)
+	caller, ok := a.authFrom(ctx)
 	if !ok {
 		return AuthDeleteClient401JSONResponse{}, nil
 	}
@@ -217,7 +227,7 @@ func (a *RestAPI) AuthDeleteClient(ctx context.Context, request AuthDeleteClient
 
 // AuthSetPush implements PUT /auth/device/push.
 func (a *RestAPI) AuthSetPush(ctx context.Context, request AuthSetPushRequestObject) (AuthSetPushResponseObject, error) {
-	caller, ok := authFrom(ctx)
+	caller, ok := a.authFrom(ctx)
 	if !ok {
 		return AuthSetPush401JSONResponse{}, nil
 	}
@@ -236,7 +246,7 @@ func (a *RestAPI) AuthSetPush(ctx context.Context, request AuthSetPushRequestObj
 
 // AuthClearPush implements DELETE /auth/device/push.
 func (a *RestAPI) AuthClearPush(ctx context.Context, request AuthClearPushRequestObject) (AuthClearPushResponseObject, error) {
-	caller, ok := authFrom(ctx)
+	caller, ok := a.authFrom(ctx)
 	if !ok {
 		return AuthClearPush401JSONResponse{}, nil
 	}
@@ -251,7 +261,7 @@ func (a *RestAPI) AuthClearPush(ctx context.Context, request AuthClearPushReques
 
 // AuthLogout implements POST /auth/logout.
 func (a *RestAPI) AuthLogout(ctx context.Context, request AuthLogoutRequestObject) (AuthLogoutResponseObject, error) {
-	if caller, ok := authFrom(ctx); ok && caller.info.Kind != session.AuthKindSession {
+	if caller, ok := a.authFrom(ctx); ok && caller.info.Kind != session.AuthKindSession {
 		err := a.TokenStore.Delete(ctx, caller.sess.TenantID, caller.sess.UserID, caller.info.TokenID)
 		if err != nil && !errors.Is(err, identity.ErrNotFound) {
 			return AuthLogout500JSONResponse{Debuginfo: internalErr("failed to revoke token", err)}, nil
