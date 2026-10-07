@@ -2,14 +2,13 @@ package graphql
 
 import (
 	"context"
-	"platrium/internal/auth/actor"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 )
 
 // TODO: Too many helpers, organize this!
 func (r *Resolver) resolveItemPath(ctx context.Context, itemID string) ([]*Folder, error) {
-	p, err := actor.PrincipalOrAnonymous(ctx, r.Authz)
+	p, err := r.Actors.PrincipalOrAnonymous(ctx)
 	if err != nil {
 		return nil, err
 	}

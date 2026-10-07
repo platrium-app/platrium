@@ -26,6 +26,10 @@ type PlatriumSession struct {
 	UserID   string `json:"user_id"`
 	TenantID string `json:"tenant_id"`
 	Email    string `json:"email"`
+	// IssuedAt is when the user signed in (or, for a bearer token, when it was
+	// created). A user's sessions_valid_after voids sessions issued before it.
+	// Sessions saved before it existed read as zero and so predate any revocation.
+	IssuedAt time.Time `json:"issued_at"`
 }
 
 // NewManager initializes a new SCS SessionManager with platrium_sid cookie settings.

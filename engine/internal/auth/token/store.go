@@ -66,6 +66,9 @@ type Principal struct {
 	TenantID string
 	UserID   string
 	Email    string
+	// IssuedAt is when the token was created. A user's sessions_valid_after
+	// voids tokens issued before it.
+	IssuedAt time.Time
 }
 
 // Client is one entry in a user's list of signed-in devices and apps.
@@ -164,7 +167,7 @@ func (s *Store) Validate(ctx context.Context, secret string) (*Principal, error)
 		return nil, ErrInvalidToken
 	}
 
-	p := &Principal{TokenID: row.ID, TenantID: row.TenantID, UserID: row.UserID}
+	p := &Principal{TokenID: row.ID, TenantID: row.TenantID, UserID: row.UserID, IssuedAt: row.CreatedAt}
 	if row.DeviceID != nil {
 		p.DeviceID = *row.DeviceID
 	}

@@ -28,23 +28,6 @@ func NewDriveOrchestrator(d *db.DB, fs *fsops.FSOps, az authz.Authorizer, us *id
 	return &DriveOrchestrator{db: d, fsOps: fs, authz: az, users: us, policies: ps}
 }
 
-// canCreateAnywhere reports whether the actor holds the permission to create
-// shared drives without a policy grant.
-func (o *DriveOrchestrator) canCreateAnywhere(ctx context.Context, p authz.Principal) (bool, error) {
-	perms, err := o.users.Permissions(ctx, p.TenantID, p.UserID)
-	if err != nil {
-		return false, err
-	}
-	return perms.Has(authz.PermSharedDrivesCreate), nil
-}
-
-func requireSignedIn(p authz.Principal) error {
-	if p.IsAnonymous() || p.TenantID == "" {
-		return fmt.Errorf("%w: sign in required", authz.ErrForbidden)
-	}
-	return nil
-}
-
 // CanCreateSharedDrive reports whether the actor may create shared drives:
 // tenant admins always may, and so may members of the groups the admin has
 // allowed. Clients use it to decide whether to offer the action.
@@ -52,8 +35,12 @@ func (o *DriveOrchestrator) CanCreateSharedDrive(ctx context.Context, p authz.Pr
 	if err := requireSignedIn(p); err != nil {
 		return false, nil
 	}
-	if ok, err := o.canCreateAnywhere(ctx, p); err != nil || ok {
-		return ok, err
+	perms, _, err := o.users.Access(ctx, p.TenantID, p.UserID)
+	if err != nil {
+		return false, err
+	}
+	if perms.Has(authz.PermSharedDrivesCreate) {
+		return true, nil
 	}
 	return o.policies.AppliesTo(ctx, p.TenantID, identity.PolicySharedDriveCreators, p.GroupIDs)
 }
@@ -123,16 +110,13 @@ func (o *DriveOrchestrator) SetSharedDriveCreators(ctx context.Context, p authz.
 	return o.policies.SetGroups(ctx, p.TenantID, identity.PolicySharedDriveCreators, groupIDs)
 }
 
-func (o *DriveOrchestrator) requirePermission(ctx context.Context, p authz.Principal, perm authz.Permission) error {
+func (o *DriveOrchestrator) requirePermission(ctx context.Context, p authz.Principal, need authz.Permission) error {
 	if err := requireSignedIn(p); err != nil {
 		return err
 	}
-	perms, err := o.users.Permissions(ctx, p.TenantID, p.UserID)
+	perms, _, err := o.users.Access(ctx, p.TenantID, p.UserID)
 	if err != nil {
 		return err
 	}
-	if !perms.Has(perm) {
-		return fmt.Errorf("%w: you do not have the %s permission", authz.ErrForbidden, perm)
-	}
-	return nil
+	return needPermission(perms, need)
 }

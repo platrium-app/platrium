@@ -64,42 +64,51 @@ type RoleOption struct {
 	DownloadOptional bool
 }
 
+// roleOptions is the table behind RoleOptions, built once: the rules ask
+// whether a role is offered on every write, so it must not allocate per call.
+var roleOptions = func() map[RoleContext][]RoleOption {
+	type entry struct {
+		role         Role
+		label, words string
+	}
+	build := func(entries ...entry) []RoleOption {
+		out := make([]RoleOption, 0, len(entries))
+		for _, e := range entries {
+			caps, _ := e.role.Caps()
+			out = append(out, RoleOption{Role: e.role, Label: e.label, Description: e.words, Caps: caps, DownloadOptional: e.role == RoleViewer})
+		}
+		return out
+	}
+	return map[RoleContext][]RoleOption{
+		ContextItemShare: build(
+			entry{RoleViewer, "Viewer", "Can view and download"},
+			entry{RoleFullEditor, "Editor", "Can add, edit, move and delete files and folders"},
+		),
+		ContextDriveMember: build(
+			entry{RoleViewer, "Viewer", "Can view and download"},
+			entry{RoleCommenter, "Commenter", "Can view, download and comment"},
+			entry{RoleRestrictedEditor, "Restricted Editor", "Can add and edit files, but cannot move or delete them"},
+			entry{RoleFullEditor, "Full Editor", "Can add, edit, move and trash files and folders"},
+			entry{RoleDriveAdmin, "Drive Admin", "Can do everything in this drive, including managing members and deleting the drive"},
+		),
+	}
+}()
+
 // RoleOptions lists the roles to offer in a context, least privileged first,
 // with the wording to show. The backend owns both the list and the wording, so
 // every client says the same thing and the server can refuse a role that does
-// not belong (see Offers).
+// not belong (see Offers). The result is a copy; callers may change it.
 func RoleOptions(c RoleContext) []RoleOption {
-	type text struct{ label, description string }
-	var roles []Role
-	words := map[Role]text{}
-
-	switch c {
-	case ContextItemShare:
-		roles = []Role{RoleViewer, RoleFullEditor}
-		words[RoleViewer] = text{"Viewer", "Can view and download"}
-		words[RoleFullEditor] = text{"Editor", "Can add, edit, move and delete files and folders"}
-	case ContextDriveMember:
-		roles = []Role{RoleViewer, RoleCommenter, RoleRestrictedEditor, RoleFullEditor, RoleDriveAdmin}
-		words[RoleViewer] = text{"Viewer", "Can view and download"}
-		words[RoleCommenter] = text{"Commenter", "Can view, download and comment"}
-		words[RoleRestrictedEditor] = text{"Restricted Editor", "Can add and edit files, but cannot move or delete them"}
-		words[RoleFullEditor] = text{"Full Editor", "Can add, edit, move and trash files and folders"}
-		words[RoleDriveAdmin] = text{"Drive Admin", "Can do everything in this drive, including managing members and deleting the drive"}
-	default:
+	opts, ok := roleOptions[c]
+	if !ok {
 		return nil
 	}
-
-	out := make([]RoleOption, 0, len(roles))
-	for _, r := range roles {
-		caps, _ := r.Caps()
-		out = append(out, RoleOption{Role: r, Label: words[r].label, Description: words[r].description, Caps: caps, DownloadOptional: r == RoleViewer})
-	}
-	return out
+	return append([]RoleOption(nil), opts...)
 }
 
 // Offers reports whether a role may be assigned in a context.
 func (c RoleContext) Offers(r Role) bool {
-	for _, o := range RoleOptions(c) {
+	for _, o := range roleOptions[c] {
 		if o.Role == r {
 			return true
 		}

@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/mail"
 	"strings"
 
 	"platrium/internal/auth"
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/authz"
 	"platrium/internal/identity"
@@ -16,11 +16,7 @@ import (
 	"platrium/internal/infra/db/ent"
 )
 
-const (
-	minPasswordLen = 8
-	maxPasswordLen = 72 // bcrypt ignores (or rejects) anything longer
-	maxNameLen     = 255
-)
+const maxNameLen = 255
 
 // UserAdmin is how an organization's administrators manage its people. It
 // composes identity (who the users are), the built-in provider (passwords) and
@@ -53,30 +49,21 @@ type ManagedUser struct {
 	Manageable bool
 }
 
-func (ac *actor) view(it *identity.UserListItem) *ManagedUser {
-	return &ManagedUser{UserListItem: it, Manageable: ac.canManage(it)}
+// require reads the administrator's permissions now and checks they include
+// need. It is deliberately not the identity a transport resolved for the
+// request: this is the authoritative gate (see the type's comment).
+func (a *UserAdmin) require(ctx context.Context, p authz.Principal, need authz.Permission) (*actor.Identity, error) {
+	return a.requireWith(ctx, p, need, a.users.Access)
 }
 
-// actor is the administrator making a call, with what they may do.
-type actor struct {
-	tenantID string
-	userID   string
-	perms    authz.PermissionSet
-	native   bool
-}
-
-func (a *UserAdmin) actor(ctx context.Context, p authz.Principal, need authz.Permission) (*actor, error) {
-	return a.actorWith(ctx, p, need, a.users.Access)
-}
-
-// actorTx is actor read inside a transaction.
-func (a *UserAdmin) actorTx(ctx context.Context, tx *ent.Tx, p authz.Principal, need authz.Permission) (*actor, error) {
-	return a.actorWith(ctx, p, need, func(ctx context.Context, tenantID, userID string) (authz.PermissionSet, bool, error) {
+// requireTx is require read inside a transaction.
+func (a *UserAdmin) requireTx(ctx context.Context, tx *ent.Tx, p authz.Principal, need authz.Permission) (*actor.Identity, error) {
+	return a.requireWith(ctx, p, need, func(ctx context.Context, tenantID, userID string) (authz.PermissionSet, bool, error) {
 		return a.users.AccessTx(ctx, tx, tenantID, userID)
 	})
 }
 
-func (a *UserAdmin) actorWith(ctx context.Context, p authz.Principal, need authz.Permission, access func(context.Context, string, string) (authz.PermissionSet, bool, error)) (*actor, error) {
+func (a *UserAdmin) requireWith(ctx context.Context, p authz.Principal, need authz.Permission, access func(context.Context, string, string) (authz.PermissionSet, bool, error)) (*actor.Identity, error) {
 	if err := requireSignedIn(p); err != nil {
 		return nil, err
 	}
@@ -84,15 +71,20 @@ func (a *UserAdmin) actorWith(ctx context.Context, p authz.Principal, need authz
 	if err != nil {
 		return nil, err
 	}
-	if !perms.Has(need) {
-		return nil, fmt.Errorf("%w: you do not have the %s permission", authz.ErrForbidden, need)
+	if err := needPermission(perms, need); err != nil {
+		return nil, err
 	}
-	return &actor{tenantID: p.TenantID, userID: p.UserID, perms: perms, native: native}, nil
+	return &actor.Identity{Principal: authz.Principal{TenantID: p.TenantID, UserID: p.UserID}, Perms: perms, Native: native}, nil
 }
 
-// canManage reports whether the actor holds everything the target's role does.
-func (ac *actor) canManage(target *identity.UserListItem) bool {
-	return ac.perms.Covers(authz.EffectivePermissions(target.Role, ac.native))
+// canManage reports whether the administrator holds everything the target's role does.
+func canManage(ac *actor.Identity, target *identity.UserListItem) bool {
+	return ac.Perms.Covers(authz.EffectivePermissions(target.Role, ac.Native))
+}
+
+// view is a user as the administrator sees them.
+func view(ac *actor.Identity, it *identity.UserListItem) *ManagedUser {
+	return &ManagedUser{UserListItem: it, Manageable: canManage(ac, it)}
 }
 
 func invalid(format string, args ...any) error {
@@ -105,34 +97,34 @@ func forbidden(format string, args ...any) error {
 
 // ListUsers returns a page of the organization's users and the total matching.
 func (a *UserAdmin) ListUsers(ctx context.Context, p authz.Principal, f identity.UserFilter, after *identity.UserCursor, limit int) (items []*ManagedUser, hasNext bool, total int, err error) {
-	ac, err := a.actor(ctx, p, authz.PermUsersRead)
+	ac, err := a.require(ctx, p, authz.PermUsersRead)
 	if err != nil {
 		return nil, false, 0, err
 	}
-	rows, err := a.users.List(ctx, ac.tenantID, f, after, limit+1) // one extra says whether there is more
+	rows, err := a.users.List(ctx, ac.TenantID, f, after, limit+1) // one extra says whether there is more
 	if err != nil {
 		return nil, false, 0, err
 	}
 	if hasNext = len(rows) > limit; hasNext {
 		rows = rows[:limit]
 	}
-	if total, err = a.users.Count(ctx, ac.tenantID, f); err != nil {
+	if total, err = a.users.Count(ctx, ac.TenantID, f); err != nil {
 		return nil, false, 0, err
 	}
 	items = make([]*ManagedUser, 0, len(rows))
 	for _, r := range rows {
-		items = append(items, ac.view(r))
+		items = append(items, view(ac, r))
 	}
 	return items, hasNext, total, nil
 }
 
 // IdentitySources lists the identity providers the organization's users can come from.
 func (a *UserAdmin) IdentitySources(ctx context.Context, p authz.Principal) ([]*auth.IdpProvider, error) {
-	ac, err := a.actor(ctx, p, authz.PermUsersRead)
+	ac, err := a.require(ctx, p, authz.PermUsersRead)
 	if err != nil {
 		return nil, err
 	}
-	return a.idps.ListForTenant(ctx, ac.tenantID)
+	return a.idps.ListForTenant(ctx, ac.TenantID)
 }
 
 // CreateLocalUserInput describes a user to create on the built-in provider.
@@ -145,11 +137,11 @@ type CreateLocalUserInput struct {
 
 // CreateLocalUser creates a user who signs in with an email and password.
 func (a *UserAdmin) CreateLocalUser(ctx context.Context, p authz.Principal, in CreateLocalUserInput) (*ManagedUser, error) {
-	ac, err := a.actor(ctx, p, authz.PermUsersCreate)
+	ac, err := a.require(ctx, p, authz.PermUsersCreate)
 	if err != nil {
 		return nil, err
 	}
-	email, err := normalizeEmail(in.Email)
+	email, err := local.NormalizeEmail(in.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +149,7 @@ func (a *UserAdmin) CreateLocalUser(ctx context.Context, p authz.Principal, in C
 	if err != nil {
 		return nil, err
 	}
-	if err := validatePassword(in.Password); err != nil {
+	if err := local.ValidatePassword(in.Password); err != nil {
 		return nil, err
 	}
 	role := in.Role
@@ -168,11 +160,11 @@ func (a *UserAdmin) CreateLocalUser(ctx context.Context, p authz.Principal, in C
 		return nil, invalid("unknown role %q", role)
 	}
 	// Anything above an ordinary member is a promotion, and needs the right to give it.
-	if role != authz.TenantRoleMember && !authz.CanAssignRole(ac.perms, role, ac.native) {
+	if role != authz.TenantRoleMember && !authz.CanAssignRole(ac.Perms, role, ac.Native) {
 		return nil, forbidden("you cannot give the %s role", role)
 	}
 
-	idp, err := a.idps.LocalForTenant(ctx, ac.tenantID)
+	idp, err := a.idps.LocalForTenant(ctx, ac.TenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +178,7 @@ func (a *UserAdmin) CreateLocalUser(ctx context.Context, p authz.Principal, in C
 	err = a.db.WithTx(ctx, func(tx *ent.Tx) error {
 		var err error
 		created, err = a.local.CreateUserTx(ctx, tx, identity.CreateUserParams{
-			TenantID:    ac.tenantID,
+			TenantID:    ac.TenantID,
 			IdpID:       idp.ID,
 			ExternalID:  email, // the sign-in name
 			Email:       email,
@@ -201,11 +193,11 @@ func (a *UserAdmin) CreateLocalUser(ctx context.Context, p authz.Principal, in C
 	if err != nil {
 		return nil, err
 	}
-	it, err := a.users.GetItem(ctx, ac.tenantID, created.ID)
+	it, err := a.users.GetItem(ctx, ac.TenantID, created.ID)
 	if err != nil {
 		return nil, err
 	}
-	return ac.view(it), nil
+	return view(ac, it), nil
 }
 
 // UpdateLocalUser changes a built-in user's display name and/or role. A user
@@ -220,40 +212,60 @@ func (a *UserAdmin) UpdateLocalUser(ctx context.Context, p authz.Principal, id s
 	}
 
 	var out *ManagedUser
-	err := a.serialized(ctx, p, authz.PermUsersUpdate, func(tx *ent.Tx, ac *actor) error {
+	apply := func(tx *ent.Tx, ac *actor.Identity) error {
 		target, err := a.localTarget(ctx, tx, ac, id)
 		if err != nil {
 			return err
 		}
 		if role != nil && *role != target.Role {
-			if !ac.perms.Has(authz.PermRolesAssign) {
+			if !ac.Perms.Has(authz.PermRolesAssign) {
 				return forbidden("you do not have the %s permission", authz.PermRolesAssign)
 			}
-			if !authz.CanAssignRole(ac.perms, *role, ac.native) {
+			if !authz.CanAssignRole(ac.Perms, *role, ac.Native) {
 				return forbidden("you cannot give the %s role", *role)
 			}
-			if err := a.keepAnAdmin(ctx, tx, ac, target, authz.EffectivePermissions(*role, ac.native)); err != nil {
+			if err := a.keepAnAdmin(ctx, tx, ac, target, authz.EffectivePermissions(*role, ac.Native)); err != nil {
 				return err
 			}
 		} else {
 			role = nil
 		}
-		if err := a.users.UpdateProfileTx(ctx, tx, ac.tenantID, id, displayName, role); err != nil {
+		if err := a.users.UpdateProfileTx(ctx, tx, ac.TenantID, id, displayName, role); err != nil {
 			return err
 		}
-		it, err := a.users.GetItemTx(ctx, tx, ac.tenantID, id)
+		it, err := a.users.GetItemTx(ctx, tx, ac.TenantID, id)
 		if err != nil {
 			return err
 		}
-		out = ac.view(it)
+		out = view(ac, it)
 		return nil
-	})
+	}
+
+	var err error
+	if role != nil {
+		// A role change can remove an administrator, so it takes the tenant lock.
+		err = a.serialized(ctx, p, authz.PermUsersUpdate, apply)
+	} else {
+		// A name changes nobody's permissions, so it needs no lock.
+		err = a.db.WithTx(ctx, func(tx *ent.Tx) error {
+			ac, err := a.requireTx(ctx, tx, p, authz.PermUsersUpdate)
+			if err != nil {
+				return err
+			}
+			return apply(tx, ac)
+		})
+	}
+	if err == nil {
+		actor.Invalidate(ctx)
+	}
 	return out, err
 }
 
-// ResetLocalUserPassword sets a new password for a built-in user.
+// ResetLocalUserPassword sets a new password for a built-in user and signs them
+// out everywhere: a reset usually means the old password is no longer trusted,
+// so no session or token issued before it survives.
 func (a *UserAdmin) ResetLocalUserPassword(ctx context.Context, p authz.Principal, id, password string) error {
-	if err := validatePassword(password); err != nil {
+	if err := local.ValidatePassword(password); err != nil {
 		return err
 	}
 	// Hash before the transaction: bcrypt is slow and must not hold a connection.
@@ -262,47 +274,57 @@ func (a *UserAdmin) ResetLocalUserPassword(ctx context.Context, p authz.Principa
 		return err
 	}
 	// A password does not change anyone's permissions, so this needs no lock.
-	return a.db.WithTx(ctx, func(tx *ent.Tx) error {
-		ac, err := a.actorTx(ctx, tx, p, authz.PermUsersUpdate)
+	err = a.db.WithTx(ctx, func(tx *ent.Tx) error {
+		ac, err := a.requireTx(ctx, tx, p, authz.PermUsersUpdate)
 		if err != nil {
 			return err
 		}
 		if _, err := a.localTarget(ctx, tx, ac, id); err != nil {
 			return err
 		}
-		return a.local.SetPasswordHashTx(ctx, tx, id, hash)
+		if err := a.local.SetPasswordHashTx(ctx, tx, id, hash); err != nil {
+			return err
+		}
+		return a.users.RevokeSessionsTx(ctx, tx, ac.TenantID, id)
 	})
+	if err == nil {
+		actor.Invalidate(ctx)
+	}
+	return err
 }
 
 // SetUserDisabled blocks or restores sign-in for a user of any provider.
 func (a *UserAdmin) SetUserDisabled(ctx context.Context, p authz.Principal, id string, disabled bool) (*ManagedUser, error) {
 	var out *ManagedUser
-	err := a.serialized(ctx, p, authz.PermUsersDisable, func(tx *ent.Tx, ac *actor) error {
-		target, err := a.users.GetItemTx(ctx, tx, ac.tenantID, id)
+	err := a.serialized(ctx, p, authz.PermUsersDisable, func(tx *ent.Tx, ac *actor.Identity) error {
+		target, err := a.users.GetItemTx(ctx, tx, ac.TenantID, id)
 		if err != nil {
 			return err
 		}
-		if !ac.canManage(target) {
+		if !canManage(ac, target) {
 			return forbidden("you cannot manage a user with more permissions than you hold")
 		}
 		if disabled {
-			if id == ac.userID {
+			if id == ac.UserID {
 				return forbidden("you cannot disable your own account")
 			}
 			if err := a.keepAnAdmin(ctx, tx, ac, target, authz.NewPermissionSet()); err != nil {
 				return err
 			}
 		}
-		if _, err := a.users.SetDisabledTx(ctx, tx, ac.tenantID, id, disabled); err != nil {
+		if err := a.users.SetDisabledTx(ctx, tx, ac.TenantID, id, disabled); err != nil {
 			return err
 		}
-		it, err := a.users.GetItemTx(ctx, tx, ac.tenantID, id)
+		it, err := a.users.GetItemTx(ctx, tx, ac.TenantID, id)
 		if err != nil {
 			return err
 		}
-		out = ac.view(it)
+		out = view(ac, it)
 		return nil
 	})
+	if err == nil {
+		actor.Invalidate(ctx)
+	}
 	return out, err
 }
 
@@ -311,7 +333,7 @@ func (a *UserAdmin) SetUserDisabled(ctx context.Context, p authz.Principal, id s
 // admins demoting each other would each see the other still in place, both
 // checks would pass, and nobody would be left. The actor's own permissions are
 // read after the lock, so a concurrent demotion of the actor counts too.
-func (a *UserAdmin) serialized(ctx context.Context, p authz.Principal, need authz.Permission, fn func(tx *ent.Tx, ac *actor) error) error {
+func (a *UserAdmin) serialized(ctx context.Context, p authz.Principal, need authz.Permission, fn func(tx *ent.Tx, ac *actor.Identity) error) error {
 	if err := requireSignedIn(p); err != nil {
 		return err
 	}
@@ -319,7 +341,7 @@ func (a *UserAdmin) serialized(ctx context.Context, p authz.Principal, need auth
 		if err := a.users.LockTenantTx(ctx, tx, p.TenantID); err != nil {
 			return err
 		}
-		ac, err := a.actorTx(ctx, tx, p, need)
+		ac, err := a.requireTx(ctx, tx, p, need)
 		if err != nil {
 			return err
 		}
@@ -329,15 +351,15 @@ func (a *UserAdmin) serialized(ctx context.Context, p authz.Principal, need auth
 
 // localTarget loads a user the actor wants to edit: it must belong to the
 // built-in provider and be one the actor may manage.
-func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor, id string) (*identity.UserListItem, error) {
-	target, err := a.users.GetItemTx(ctx, tx, ac.tenantID, id)
+func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor.Identity, id string) (*identity.UserListItem, error) {
+	target, err := a.users.GetItemTx(ctx, tx, ac.TenantID, id)
 	if err != nil {
 		return nil, err
 	}
-	if target.IdpType != "LOCAL" {
+	if !target.IsLocal() {
 		return nil, invalid("this user is managed by %s and cannot be edited here", target.IdpName)
 	}
-	if !ac.canManage(target) {
+	if !canManage(ac, target) {
 		return nil, forbidden("you cannot manage a user with more permissions than you hold")
 	}
 	return target, nil
@@ -346,14 +368,14 @@ func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor, id s
 // keepAnAdmin refuses a change that would leave the organization with nobody
 // who can assign roles: afterwards the target would hold `after` instead of
 // what their role carries today. Callers hold the tenant lock.
-func (a *UserAdmin) keepAnAdmin(ctx context.Context, tx *ent.Tx, ac *actor, target *identity.UserListItem, after authz.PermissionSet) error {
+func (a *UserAdmin) keepAnAdmin(ctx context.Context, tx *ent.Tx, ac *actor.Identity, target *identity.UserListItem, after authz.PermissionSet) error {
 	if target.Disabled() {
 		return nil // already not counted
 	}
-	if !authz.EffectivePermissions(target.Role, ac.native).Has(authz.PermRolesAssign) || after.Has(authz.PermRolesAssign) {
+	if !authz.EffectivePermissions(target.Role, ac.Native).Has(authz.PermRolesAssign) || after.Has(authz.PermRolesAssign) {
 		return nil
 	}
-	others, err := a.users.CountActiveWithRolesTx(ctx, tx, ac.tenantID, authz.RolesHolding(authz.PermRolesAssign, ac.native), target.ID)
+	others, err := a.users.CountActiveWithRolesTx(ctx, tx, ac.TenantID, authz.RolesHolding(authz.PermRolesAssign, ac.Native), target.ID)
 	if err != nil {
 		return err
 	}
@@ -363,26 +385,10 @@ func (a *UserAdmin) keepAnAdmin(ctx context.Context, tx *ent.Tx, ac *actor, targ
 	return nil
 }
 
-func normalizeEmail(s string) (string, error) {
-	s = local.NormalizeLogin(s)
-	addr, err := mail.ParseAddress(s)
-	if err != nil || addr.Address != s || len(s) > 255 {
-		return "", invalid("%q is not a valid email address", s)
-	}
-	return s, nil
-}
-
 func normalizeName(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" || len(s) > maxNameLen {
 		return "", invalid("a name is required, up to %d characters", maxNameLen)
 	}
 	return s, nil
-}
-
-func validatePassword(s string) error {
-	if len(s) < minPasswordLen || len(s) > maxPasswordLen {
-		return invalid("a password must be %d to %d characters", minPasswordLen, maxPasswordLen)
-	}
-	return nil
 }

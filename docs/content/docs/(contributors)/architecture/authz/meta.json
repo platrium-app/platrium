@@ -2,6 +2,8 @@
     "title": "Authorization",
     "pages": [
         "overview",
+        "capabilities",
+        "permissions",
         "sharing",
         "scaling-and-openfga",
         "security-backlog"

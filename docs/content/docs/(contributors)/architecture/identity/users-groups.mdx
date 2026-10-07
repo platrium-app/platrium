@@ -20,9 +20,13 @@ Every user in Platrium is a row in the `users` table, and they belong to exactly
   "email": "admin@acme.com",
   "displayName": "Admin",
   "role": "SUPER_ADMIN",
-  "createdAt": "2026-10-03T14:20:00Z"
+  "createdAt": "2026-10-03T14:20:00Z",
+  "disabledAt": null,
+  "sessionsValidAfter": null
 }
 ```
+
+`role` says what the user may administer, see [roles and permissions](../authz/permissions). `disabledAt` is set when an administrator blocks the account: the user keeps their data and identity but cannot sign in, and every session and token they hold stops working. Re-enabling restores them. `sessionsValidAfter` is the moment before which every session and token the user was issued is void, set by things like a password reset, see [from request to identity](../authn/requests-and-sessions#signing-a-user-out-everywhere).
 
 A user is identified on the platform by the pair `(idpId, externalId)`: the IdP that authenticated them and their subject at that IdP. A unique constraint guarantees one user per pair. External IDs are compared byte-for-byte, because identity providers treat them as case-sensitive.
 

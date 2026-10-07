@@ -60,6 +60,11 @@ func (User) Fields() []ent.Field {
 		// A disabled user keeps their data and identity but cannot sign in,
 		// and every credential they hold stops working at once.
 		field.Time("disabled_at").SchemaType(timestampType).Optional().Nillable(),
+		// Every session and token issued to the user before this moment is void.
+		// It is the one place "sign this user out everywhere" lands, whatever
+		// triggered it (a password reset, an identity provider's logout notice),
+		// so enforcing it needs no list of sessions. NULL means none was revoked.
+		field.Time("sessions_valid_after").SchemaType(timestampType).Optional().Nillable(),
 	}
 }
 
@@ -88,6 +93,8 @@ func (User) Indexes() []ent.Index {
 		// One platform identity per (IdP, subject).
 		index.Fields("idp_id", "external_id").Unique(),
 		index.Fields("tenant_id", "email"),
+		// The admin user list pages by (display name, id) within a tenant.
+		index.Fields("tenant_id", "display_name", "id"),
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	nanoid "github.com/matoous/go-nanoid/v2"
 
-	"platrium/internal/auth/actor"
 	"platrium/internal/auth/session"
 	"platrium/internal/authz"
 	"platrium/internal/fsops"
@@ -135,7 +134,7 @@ func (api *RestAPI) UploadSessionInitialize(ctx context.Context, request UploadS
 	}
 
 	// Fail early: there is no point streaming chunks to a folder the user cannot write to.
-	principal, err := actor.Principal(ctx, api.Authz)
+	principal, err := api.Actors.Principal(ctx)
 	if err != nil {
 		return UploadSessionInitialize500JSONResponse{Debuginfo: "unauthorized"}, nil
 	}
@@ -257,10 +256,13 @@ func (api *RestAPI) UploadSessionCommit(ctx context.Context, request UploadSessi
 
 	// 2. Commit file node and chunk manifest sequence to database / Manifest KV Store,
 	// authorized as the user who opened the session, with their current access.
-	uploader, err := api.Authz.Principal(ctx, claims.TenantID, claims.UserID)
+	// ForUser applies the same rules as a session: a user disabled since they
+	// opened the upload cannot finish it.
+	caller, err := api.Actors.ForUser(ctx, claims.TenantID, claims.UserID)
 	if err != nil {
 		return UploadSessionCommit500JSONResponse{Debuginfo: "unauthorized"}, nil
 	}
+	uploader := caller.Principal
 	fileId, err := api.FSOps.CreateFile(ctx, fsops.CreateFileParams{
 		Actor:     uploader,
 		ParentID:  claims.ParentFolderID,
@@ -299,7 +301,7 @@ func (api *RestAPI) DownloadSessionInitialize(ctx context.Context, request Downl
 
 	// 1. Fetch File Metadata from FSOps, which verifies the user may download it
 	// Visitors without a session may download what is shared publicly.
-	principal, err := actor.PrincipalOrAnonymous(ctx, api.Authz)
+	principal, err := api.Actors.PrincipalOrAnonymous(ctx)
 	if err != nil {
 		return DownloadSessionInitialize404JSONResponse{}, nil
 	}

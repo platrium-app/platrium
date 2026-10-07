@@ -58,7 +58,7 @@ func (a *Authorizer) inheritedGrants(ctx context.Context, actor authz.Principal,
 		if g.ExpiresAt != nil && !g.ExpiresAt.After(now) {
 			continue
 		}
-		if cut[g.ItemID] && !g.Caps.Has(authz.CapManage) {
+		if cut[g.ItemID] && !survivesRestriction(g.Caps) {
 			continue
 		}
 		if g.Subject.Type == authz.SubjectPublic && !publicOK {

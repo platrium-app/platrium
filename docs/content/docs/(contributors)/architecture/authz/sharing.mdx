@@ -129,14 +129,14 @@ Everything is GraphQL. The management surface is small and the resolvers are one
 `itemAccess` is built so a client doesn't have to work anything out:
 
 - **`inherited`** lists the access that reaches the item from folders and the drive above, nearest first. Each entry has `inheritedFrom { id, name }` and is read-only here, since it's changed where it was granted. It follows the same rules as the check, so above a restriction only a drive's admins appear. `id` is null, and the name generic, when you can't open that ancestor.
-- **`isYou`** is on each grant and on the owner. The server computes it from who is asking, so every client can show "(you)" and leave out the role menu and remove button on your own row, as the [no-self-edit rule](./overview#changing-access-the-rules) requires anyway.
+- **`isYou`** is on each grant and on the owner. The server computes it from who is asking, so every client can show "(you)" and leave out the role menu and remove button on your own row, as the [no-self-edit rule](./capabilities#changing-access-the-rules) requires anyway.
 
 Neither is stored. Both are computed per request.
 
 Every item also carries `myCapabilities`, so the UI shows only what you can do. Errors carry a stable `extensions.code`: `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT` or `BAD_REQUEST`.
 
 :::warning
-The server enforces every sharing rule, whatever the UI shows. You can never grant more than you hold, and only someone with `SHARE` can share. See the full list in [changing access](./overview#changing-access-the-rules).
+The server enforces every sharing rule, whatever the UI shows. You can never grant more than you hold, and only someone with `SHARE` can share. See the full list in [changing access](./capabilities#changing-access-the-rules).
 :::
 
 ## Safety Rails

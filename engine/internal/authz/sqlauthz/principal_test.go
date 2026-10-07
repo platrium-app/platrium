@@ -2,10 +2,8 @@ package sqlauthz_test
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
-	"time"
 
 	"platrium/internal/authz"
 )
@@ -36,35 +34,18 @@ func TestPrincipal(t *testing.T) {
 		t.Fatalf("groups = %v, want %v", p.GroupIDs, want)
 	}
 
-	if _, err := e.az.Principal(ctx, acme.id, "missing"); !errors.Is(err, authz.ErrNotFound) {
-		t.Errorf("unknown user: %v", err)
-	}
-	// A user from another tenant is not a principal of this one.
-	if _, err := e.az.Principal(ctx, other.id, alice); !errors.Is(err, authz.ErrNotFound) {
-		t.Errorf("cross-tenant user: %v", err)
+	// The engine only expands groups. Whether the user exists or may sign in is
+	// package actor's question, so a stranger is a principal with no groups.
+	for name, in := range map[string][2]string{"unknown user": {acme.id, "missing"}, "user of another tenant": {other.id, alice}} {
+		p, err := e.az.Principal(ctx, in[0], in[1])
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+		if len(p.GroupIDs) != 0 {
+			t.Errorf("%s must hold no groups, got %v", name, p.GroupIDs)
+		}
 	}
 	if !authz.Anonymous().IsAnonymous() {
 		t.Error("Anonymous must be anonymous")
-	}
-}
-
-func TestPrincipalRejectsDisabledUser(t *testing.T) {
-	ctx := context.Background()
-	e := newEnv(t)
-	acme := e.tenant(t, "acme")
-	alice := e.user(t, acme, "alice")
-
-	if err := e.db.User.UpdateOneID(alice).SetDisabledAt(time.Now()).Exec(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.az.Principal(ctx, acme.id, alice); !errors.Is(err, authz.ErrDisabled) {
-		t.Fatalf("a disabled user is not a principal: %v", err)
-	}
-
-	if err := e.db.User.UpdateOneID(alice).ClearDisabledAt().Exec(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.az.Principal(ctx, acme.id, alice); err != nil {
-		t.Fatalf("re-enabled user must work again: %v", err)
 	}
 }

@@ -4,11 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"platrium/internal/auth"
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/protocol/local"
+	"platrium/internal/auth/session"
 	"platrium/internal/authz"
 	"platrium/internal/authz/sqlauthz"
 	"platrium/internal/fsops"
@@ -412,3 +417,88 @@ func TestListUsers(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// sessionAt is a request context signed in as the principal, session issued at the given time.
+func sessionAt(p authz.Principal, issued time.Time) context.Context {
+	return session.WithSession(context.Background(), &session.PlatriumSession{UserID: p.UserID, TenantID: p.TenantID, IssuedAt: issued})
+}
+
+func (e *adminEnv) actors() *actor.Resolver {
+	return actor.NewResolver(sqlauthz.New(e.db), e.users)
+}
+
+// A password reset usually means the old password is no longer trusted, so it
+// ends every session the user has. Disabling and re-enabling must not.
+func TestResetPasswordSignsTheUserOutEverywhere(t *testing.T) {
+	ctx := context.Background()
+	e := newAdminEnv(t)
+	admin := e.user(t, "ada", identity.RoleSuperAdmin)
+	bob := e.user(t, "bob", identity.RoleMember)
+	actors := e.actors()
+	old := time.Now().UTC().Add(-time.Second)
+
+	if _, err := actors.Identity(sessionAt(bob, old)); err != nil {
+		t.Fatalf("signed in before the reset: %v", err)
+	}
+
+	// Disabling and re-enabling leaves earlier sessions usable: devices come back.
+	if _, err := e.admin.SetUserDisabled(ctx, admin, bob.UserID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := actors.Identity(sessionAt(bob, old)); !errors.Is(err, actor.ErrUnauthenticated) {
+		t.Fatalf("disabled: %v", err)
+	}
+	if _, err := e.admin.SetUserDisabled(ctx, admin, bob.UserID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := actors.Identity(sessionAt(bob, old)); err != nil {
+		t.Fatalf("re-enabled users keep their sessions: %v", err)
+	}
+
+	if err := e.admin.ResetLocalUserPassword(ctx, admin, bob.UserID, "brand-new-pass"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := actors.Identity(sessionAt(bob, old)); !errors.Is(err, actor.ErrUnauthenticated) {
+		t.Fatalf("a session from before the reset must be dead: %v", err)
+	}
+	if _, err := actors.Identity(sessionAt(bob, time.Now().UTC())); err != nil {
+		t.Fatalf("signing in with the new password must work: %v", err)
+	}
+	// Nobody else is signed out.
+	if _, err := actors.Identity(sessionAt(admin, old)); err != nil {
+		t.Fatalf("the administrator's own session: %v", err)
+	}
+}
+
+// One GraphQL request can carry several mutations. If the first changes the
+// caller's own role, the next must see the new role, not the one remembered
+// from the start of the request.
+func TestLaterFieldsOfARequestSeeAnEarlierRoleChange(t *testing.T) {
+	e := newAdminEnv(t)
+	sue := e.user(t, "sue", identity.RoleSuperAdmin)
+	e.user(t, "sam", identity.RoleSuperAdmin) // so sue may step down
+	actors := e.actors()
+
+	h := actors.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		ctx := session.WithSession(r.Context(), &session.PlatriumSession{UserID: sue.UserID, TenantID: sue.TenantID, IssuedAt: time.Now().UTC()})
+
+		id, err := actors.Identity(ctx)
+		if err != nil || !id.Perms.Has(authz.PermUsersCreate) {
+			t.Fatalf("field 1 sees a super admin: %v %+v", err, id)
+		}
+		if _, err := e.admin.UpdateLocalUser(ctx, sue, sue.UserID, nil, ptr(identity.RoleMember)); err != nil {
+			t.Fatalf("stepping down: %v", err)
+		}
+		id, err = actors.Identity(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id.Perms.Has(authz.PermUsersCreate) || id.Role != identity.RoleMember {
+			t.Errorf("field 2 must see the demotion, got role %s perms %v", id.Role, id.Perms.Sorted())
+		}
+		// And the orchestrator, which reads fresh, refuses too.
+		_, err = e.admin.CreateLocalUser(ctx, sue, orchestrator.CreateLocalUserInput{Email: "n@acme.com", DisplayName: "N", Password: "password-2"})
+		wantErr(t, "acting after stepping down", err, authz.ErrForbidden)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/graphql", nil))
+}

@@ -10,6 +10,7 @@ import (
 
 	"platrium/internal/api"
 	"platrium/internal/auth"
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
 	"platrium/internal/auth/token"
@@ -116,7 +117,8 @@ func main() {
 	gqlTransport := transports.NewGraphQLTransport()
 	notifBroker := notifications.NewBroker(gqlTransport)
 
-	restAPI := restapi.NewRestAPI(fsOps, authorizer, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager, tokenStore, codeStore, deviceStore)
+	actors := actor.NewResolver(authorizer, userStore)
+	restAPI := restapi.NewRestAPI(fsOps, actors, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager, tokenStore, codeStore, deviceStore)
 	strictHandler := restapi.NewStrictHandler(restAPI, nil)
 
 	router := chi.NewRouter()
@@ -136,6 +138,7 @@ func main() {
 	gqlResolver := &graphql.Resolver{
 		FSOps:       fsOps,
 		Authz:       authorizer,
+		Actors:      actors,
 		DriveOrch:   orchestrator.NewDriveOrchestrator(database, fsOps, authorizer, userStore, policyStore),
 		Broker:      notifBroker,
 		SubsManager: gqlTransport,
@@ -154,6 +157,7 @@ func main() {
 		r.Use(sessionManager.LoadAndSave)
 		r.Use(session.Middleware(sessionManager))
 		r.Use(session.Bearer(tokenStore))
+		r.Use(actors.Middleware)
 		r.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Header.Get("Upgrade") == "websocket" {
@@ -172,6 +176,7 @@ func main() {
 		r.Use(sessionManager.LoadAndSave)
 		r.Use(session.Middleware(sessionManager))
 		r.Use(session.Bearer(tokenStore))
+		r.Use(actors.Middleware)
 		r.Use(rateLimitPath("/api/auth/token", httprate.LimitByIP(20, time.Minute)))
 
 		r.Get("/health", HealthHandler)

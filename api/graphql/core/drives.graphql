@@ -5,12 +5,12 @@ extend type Query {
   "Whether the signed-in user may create shared drives."
   canCreateSharedDrive: Boolean!
   "The groups whose members may create shared drives. Organization admins only."
-  sharedDriveCreators: [DirectorySubject!]!
+  sharedDriveCreators: [DirectorySubject!]! @requires(permission: POLICIES_MANAGE)
 }
 
 extend type Mutation {
   "Create a shared drive. The creator becomes its Drive Admin."
   createSharedDrive(name: String!): Folder!
   "Replace the groups allowed to create shared drives. Organization admins only."
-  setSharedDriveCreators(groupIds: [ID!]!): [DirectorySubject!]!
+  setSharedDriveCreators(groupIds: [ID!]!): [DirectorySubject!]! @requires(permission: POLICIES_MANAGE)
 }

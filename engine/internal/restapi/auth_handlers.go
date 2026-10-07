@@ -2,6 +2,10 @@ package restapi
 
 import (
 	"context"
+	"errors"
+	"time"
+
+	"platrium/internal/auth/actor"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
 )
@@ -16,22 +20,31 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		}, nil
 	}
 
-	if idp.Type != "LOCAL" {
+	if !idp.IsLocal() {
 		msg := "Identity Provider does not support password authentication"
 		return AuthLocalUserLogin401JSONResponse{
 			Message: &msg,
 		}, nil
 	}
 
+	password := ""
+	if request.Body.Password != nil {
+		password = *request.Body.Password
+	}
+
 	user, tenantId, err := a.UserStore.GetUserByExternalId(ctx, idp.ID, local.NormalizeLogin(request.Body.Email))
 	if err != nil {
+		local.BurnVerify(password) // so an unknown email takes as long as a wrong password
 		msg := "Invalid credentials"
 		return AuthLocalUserLogin401JSONResponse{
 			Message: &msg,
 		}, nil
 	}
 
-	valid, err := a.LocalUserStore.VerifyPassword(ctx, user.ID, *request.Body.Password)
+	valid, err := a.LocalUserStore.VerifyPassword(ctx, user.ID, password)
+	if err != nil {
+		local.BurnVerify(password) // no credential on file: same cost as a wrong password
+	}
 	if err != nil || !valid {
 		msg := "Invalid credentials"
 		return AuthLocalUserLogin401JSONResponse{
@@ -53,6 +66,7 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		UserID:   user.ID,
 		TenantID: tenantId,
 		Email:    user.Email,
+		IssuedAt: time.Now().UTC(),
 	}
 
 	a.SessionManager.Put(ctx, session.StoreKey, sess)
@@ -74,7 +88,7 @@ func (a *RestAPI) AuthIdpRedirect(ctx context.Context, request AuthIdpRedirectRe
 		}, nil
 	}
 
-	if idp.Type == "LOCAL" {
+	if idp.IsLocal() {
 		msg := "Identity Provider does not support SSO redirection"
 		return AuthIdpRedirect404JSONResponse{ // Or 400, but TypeSpec says 404 for missing SSO config
 			Message: &msg,
@@ -106,11 +120,11 @@ func (a *RestAPI) AuthMe(ctx context.Context, request AuthMeRequestObject) (Auth
 		return AuthMe401JSONResponse{}, nil
 	}
 
-	// Browser cookies outlive a disabled account, so check it here too.
-	if users, err := a.UserStore.GetByIDs(ctx, sess.TenantID, []string{sess.UserID}); err != nil {
-		return nil, err
-	} else if u, ok := users[sess.UserID]; !ok || u.Disabled() {
+	// Browser cookies outlive a disabled or signed-out-everywhere account.
+	if _, err := a.Actors.Identity(ctx); errors.Is(err, actor.ErrUnauthenticated) {
 		return AuthMe401JSONResponse{}, nil
+	} else if err != nil {
+		return nil, err
 	}
 
 	info, _ := session.AuthInfoFromContext(ctx)

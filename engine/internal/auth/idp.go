@@ -36,6 +36,9 @@ type IdpAuthHandoff struct {
 	JITGroupIDs   []string // TODO: See if needed Groups claimed in the token (if JIT is enabled)
 }
 
+// IsLocal reports whether this is the built-in provider.
+func (i *IdpProvider) IsLocal() bool { return i.Type == identity.IdpTypeLocal }
+
 func idpFromEnt(i *ent.IdpProvider) *IdpProvider {
 	return &IdpProvider{
 		ID:          i.ID,
