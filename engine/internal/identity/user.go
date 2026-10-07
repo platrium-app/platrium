@@ -235,14 +235,16 @@ func (r *UserStore) GetByIDs(ctx context.Context, tenantID string, ids []string)
 }
 
 // Search finds users in a tenant by name or email, case-insensitively, ordered
-// by name. Every member of a tenant may search its directory.
+// by name. Every member of a tenant may search its directory. It shares its
+// match rule with List (see userPredicates) but skips loading each user's
+// provider, which a typeahead does not show.
 func (r *UserStore) Search(ctx context.Context, tenantID, query string, limit int) ([]*User, error) {
 	query = strings.TrimSpace(query)
 	if query == "" || limit <= 0 {
 		return nil, nil
 	}
 	rows, err := r.db.User.Query().
-		Where(user.TenantID(tenantID), user.Or(user.DisplayNameContainsFold(query), user.EmailContainsFold(query))).
+		Where(userPredicates(tenantID, UserFilter{Search: query})...).
 		Order(user.ByDisplayName(), user.ByID()).
 		Limit(limit).
 		All(ctx)

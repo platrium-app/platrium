@@ -2,15 +2,26 @@ package authz
 
 import "context"
 
-// Authorizer decides what a principal may do and stores the data it decides
-// from. It owns writes as well as reads, so each engine keeps its own data and
-// nothing is ever dual-written: the default SQL engine writes SQL tables, and
-// an OpenFGA engine would write tuples. Switching engines is a one-time
-// migration, not a sync.
-type Authorizer interface {
-	// Principal resolves a signed-in user, including every group they belong to.
-	Principal(ctx context.Context, tenantID, userID string) (Principal, error)
+// An authz engine is the contract below, assembled from four small interfaces.
+// An engine implements all of them, and each engine keeps its own data and
+// owns writes as well as reads, so nothing is ever dual-written: the default
+// SQL engine writes SQL tables, and an OpenFGA engine would write tuples.
+// Switching engines is a one-time migration, not a sync. Callers depend on
+// only the part they use (the file layer needs Checker, not Sharing), which
+// keeps them easy to fake in tests.
 
+// Resolver turns a signed-in user into the principal checks run as.
+type Resolver interface {
+	// Principal resolves a signed-in user, including every group they belong
+	// to. How membership is expanded is the engine's business: the SQL engine
+	// reads a flattened closure table, another engine may not need the list.
+	// A disabled account yields ErrDisabled. TODO: that check is identity's, not
+	// the engine's; it moves to package actor with the resolved caller.
+	Principal(ctx context.Context, tenantID, userID string) (Principal, error)
+}
+
+// Checker answers what a principal may do to an item.
+type Checker interface {
 	// Caps returns the capabilities p holds on an item. An item that does not
 	// exist, or is not visible to p, yields no capabilities and no error, so
 	// callers cannot probe for existence.
@@ -20,7 +31,10 @@ type Authorizer interface {
 	CapsMany(ctx context.Context, p Principal, itemIDs []string) (map[string]Capability, error)
 	// Check reports whether p holds every capability in need on the item.
 	Check(ctx context.Context, p Principal, itemID string, need Capability) (bool, error)
+}
 
+// Sharing reads and changes who can open an item.
+type Sharing interface {
 	// SharedWithMe lists items shared directly with p or p's groups, as entry
 	// points. Pass the last ItemID of the previous page as after.
 	SharedWithMe(ctx context.Context, p Principal, limit int, after string) ([]SharedItem, error)
@@ -56,9 +70,20 @@ type Authorizer interface {
 	// carries MANAGE, a Drive Admin's, still applies, so restricting cannot lock
 	// a drive's admins out.
 	SetInheritance(ctx context.Context, actor Principal, itemID string, inherit bool) error
+}
 
+// Membership maintains group membership.
+type Membership interface {
 	// AddMember and RemoveMember maintain group membership. They are
 	// administrative (tenant admin or SCIM), not file operations.
 	AddMember(ctx context.Context, tenantID, groupID string, mt MemberType, memberID string) error
 	RemoveMember(ctx context.Context, tenantID, groupID string, mt MemberType, memberID string) error
+}
+
+// Authorizer is what an authz engine implements: every part of the contract.
+type Authorizer interface {
+	Resolver
+	Checker
+	Sharing
+	Membership
 }

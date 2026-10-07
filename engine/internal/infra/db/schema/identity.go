@@ -88,6 +88,8 @@ func (User) Indexes() []ent.Index {
 		// One platform identity per (IdP, subject).
 		index.Fields("idp_id", "external_id").Unique(),
 		index.Fields("tenant_id", "email"),
+		// The admin user list pages by (display name, id) within a tenant.
+		index.Fields("tenant_id", "display_name", "id"),
 	}
 }
 

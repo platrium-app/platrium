@@ -17,7 +17,7 @@ var ErrUnauthenticated = errors.New("unauthorized")
 // memberships, into the principal that authorization checks run as. It reads
 // membership fresh on every call, so a removed member loses access on their
 // very next request. It is two indexed lookups.
-func Principal(ctx context.Context, az authz.Authorizer) (authz.Principal, error) {
+func Principal(ctx context.Context, az authz.Resolver) (authz.Principal, error) {
 	sess, ok := session.FromContext(ctx)
 	if !ok {
 		return authz.Principal{}, ErrUnauthenticated
@@ -32,7 +32,7 @@ func Principal(ctx context.Context, az authz.Authorizer) (authz.Principal, error
 // PrincipalOrAnonymous is Principal for operations open to visitors who are not
 // signed in, such as opening a publicly shared item. Without a session the
 // caller is anonymous and can only see what is shared publicly.
-func PrincipalOrAnonymous(ctx context.Context, az authz.Authorizer) (authz.Principal, error) {
+func PrincipalOrAnonymous(ctx context.Context, az authz.Resolver) (authz.Principal, error) {
 	if _, ok := session.FromContext(ctx); !ok {
 		return authz.Anonymous(), nil
 	}

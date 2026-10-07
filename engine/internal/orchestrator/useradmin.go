@@ -334,7 +334,7 @@ func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor, id s
 	if err != nil {
 		return nil, err
 	}
-	if target.IdpType != "LOCAL" {
+	if !target.IsLocal() {
 		return nil, invalid("this user is managed by %s and cannot be edited here", target.IdpName)
 	}
 	if !ac.canManage(target) {

@@ -16,7 +16,7 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		}, nil
 	}
 
-	if idp.Type != "LOCAL" {
+	if !idp.IsLocal() {
 		msg := "Identity Provider does not support password authentication"
 		return AuthLocalUserLogin401JSONResponse{
 			Message: &msg,
@@ -74,7 +74,7 @@ func (a *RestAPI) AuthIdpRedirect(ctx context.Context, request AuthIdpRedirectRe
 		}, nil
 	}
 
-	if idp.Type == "LOCAL" {
+	if idp.IsLocal() {
 		msg := "Identity Provider does not support SSO redirection"
 		return AuthIdpRedirect404JSONResponse{ // Or 400, but TypeSpec says 404 for missing SSO config
 			Message: &msg,

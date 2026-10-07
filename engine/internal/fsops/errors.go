@@ -1,21 +1,17 @@
 package fsops
 
-import (
-	"errors"
-
-	"platrium/internal/authz"
-)
+import "platrium/internal/apperr"
 
 var (
 	// ErrNotFound means the item does not exist or is not visible to the
 	// caller. The two are deliberately indistinguishable.
-	ErrNotFound = errors.New("not found")
+	ErrNotFound = apperr.ErrNotFound
 	// ErrForbidden means the caller can see the item but lacks the capability
 	// the operation needs.
-	ErrForbidden = authz.ErrForbidden
+	ErrForbidden = apperr.ErrForbidden
 	// ErrConflict means a uniqueness rule rejected the request.
-	ErrConflict = authz.ErrConflict
+	ErrConflict = apperr.ErrConflict
 	// ErrInvalid means the request is well-formed but not allowed, such as
 	// moving a folder into its own subtree.
-	ErrInvalid = errors.New("invalid operation")
+	ErrInvalid = apperr.ErrInvalid
 )

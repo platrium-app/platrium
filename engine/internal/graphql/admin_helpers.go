@@ -54,8 +54,8 @@ func mapAdminUser(m *orchestrator.ManagedUser) *AdminUser {
 		Disabled:    u.Disabled(),
 		DisabledAt:  u.DisabledAt,
 		CreatedAt:   u.CreatedAt,
-		Source:      &IdentitySource{ID: u.IdpID, Name: u.IdpName, Type: u.IdpType, IsLocal: u.IdpType == "LOCAL"},
-		Editable:    u.IdpType == "LOCAL",
+		Source:      &IdentitySource{ID: u.IdpID, Name: u.IdpName, Type: u.IdpType, IsLocal: u.IsLocal()},
+		Editable:    u.IsLocal(),
 		Manageable:  m.Manageable,
 	}
 }

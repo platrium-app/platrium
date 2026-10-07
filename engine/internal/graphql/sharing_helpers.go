@@ -9,10 +9,9 @@ import (
 	gqlgraphql "github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"platrium/internal/apperr"
 	"platrium/internal/auth/actor"
 	"platrium/internal/authz"
-	"platrium/internal/fsops"
-	"platrium/internal/identity"
 )
 
 // ErrorPresenter adds a stable machine-readable code to errors, so clients can
@@ -24,13 +23,13 @@ func ErrorPresenter(ctx context.Context, err error) *gqlerror.Error {
 	switch {
 	case errors.Is(err, actor.ErrUnauthenticated), errors.Is(err, authz.ErrDisabled):
 		code = "UNAUTHENTICATED"
-	case errors.Is(err, authz.ErrForbidden): // fsops.ErrForbidden is the same error
+	case errors.Is(err, apperr.ErrForbidden):
 		code = "FORBIDDEN"
-	case errors.Is(err, authz.ErrNotFound), errors.Is(err, fsops.ErrNotFound), errors.Is(err, identity.ErrNotFound):
+	case errors.Is(err, apperr.ErrNotFound):
 		code = "NOT_FOUND"
-	case errors.Is(err, authz.ErrConflict), errors.Is(err, identity.ErrConflict):
+	case errors.Is(err, apperr.ErrConflict):
 		code = "CONFLICT"
-	case errors.Is(err, authz.ErrInvalid), errors.Is(err, fsops.ErrInvalid):
+	case errors.Is(err, apperr.ErrInvalid):
 		code = "BAD_REQUEST"
 	}
 	if code != "" {

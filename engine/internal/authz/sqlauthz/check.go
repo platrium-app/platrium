@@ -56,6 +56,8 @@ func (a *Authorizer) Caps(ctx context.Context, p authz.Principal, itemID string)
 //  4. Past that point, a restriction hides ancestors' grants from everyone
 //     except managers: a grant that carries MANAGE (a Drive Admin) still applies
 //     in full. Restricting an item cuts out members, never the drive's admins.
+//  5. The root of a private drive never carries SHARE or MANAGE, for anyone
+//     (see withholdPrivateRootSharing).
 //
 // Items that do not exist or are not visible yield no capabilities and no
 // error, so callers cannot probe for existence.
@@ -73,9 +75,6 @@ func (a *Authorizer) CapsMany(ctx context.Context, p authz.Principal, itemIDs []
 		if err := a.capsChunk(ctx, p, chunk, out); err != nil {
 			return nil, err
 		}
-		if err := a.withholdPrivateRootSharing(ctx, chunk, out); err != nil {
-			return nil, err
-		}
 	}
 	return out, nil
 }
@@ -88,31 +87,20 @@ func (a *Authorizer) CapsMany(ctx context.Context, p authz.Principal, itemIDs []
 // or MANAGE on its item, so enforcing it here covers granting, revoking,
 // listing, general access and inheritance, and clients that offer sharing only
 // where SHARE is held never show it for a private drive.
-func (a *Authorizer) withholdPrivateRootSharing(ctx context.Context, ids []string, out map[string]authz.Capability) error {
+//
+// It reads the items and drives capsChunk already loaded, so it costs no query.
+// Anonymous principals have no drives loaded and are skipped: public access is
+// Viewer-only (see the levels table), so they never hold SHARE or MANAGE.
+func withholdPrivateRootSharing(items []*ent.DriveItem, drives map[string]*ent.Drive, out map[string]authz.Capability) {
 	const sharing = authz.CapShare | authz.CapManage
-	var candidates []string
-	for _, id := range ids {
-		if out[id]&sharing != 0 {
-			candidates = append(candidates, id)
+	for _, it := range items {
+		if it.ParentID != nil {
+			continue
+		}
+		if d := drives[it.DriveID]; d != nil && d.Type == drive.TypePRIVATE {
+			out[it.ID] = out[it.ID].Without(sharing)
 		}
 	}
-	if len(candidates) == 0 {
-		return nil
-	}
-	roots, err := a.db.DriveItem.Query().
-		Where(
-			driveitem.IDIn(candidates...),
-			driveitem.ParentIDIsNil(),
-			driveitem.HasDriveWith(drive.TypeEQ(drive.TypePRIVATE)),
-		).
-		IDs(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to find private drive roots: %w", err)
-	}
-	for _, id := range roots {
-		out[id] = out[id].Without(sharing)
-	}
-	return nil
 }
 
 func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []string, out map[string]authz.Capability) error {
@@ -120,7 +108,7 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 	if p.TenantID != "" {
 		q = q.Where(driveitem.TenantID(p.TenantID)) // tenant isolation
 	}
-	items, err := q.All(ctx)
+	items, err := q.Select(driveitem.FieldID, driveitem.FieldDriveID, driveitem.FieldParentID).All(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load items: %w", err)
 	}
@@ -128,38 +116,50 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 		return nil
 	}
 
-	// Drive owners hold every capability on their drive.
-	owners := map[string]string{}
+	// Drives say who owns an item and whether it is private. An anonymous
+	// principal owns nothing and holds no sharing capabilities, so skip them.
+	drives := map[string]*ent.Drive{}
 	if !p.IsAnonymous() {
 		driveIDs := make([]string, 0, len(items))
 		for _, it := range items {
 			driveIDs = append(driveIDs, it.DriveID)
 		}
-		drives, err := a.db.Drive.Query().Where(drive.IDIn(driveIDs...)).All(ctx)
+		rows, err := a.db.Drive.Query().
+			Where(drive.IDIn(driveIDs...)).
+			Select(drive.FieldID, drive.FieldOwnerID, drive.FieldType).
+			All(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to load drives: %w", err)
 		}
-		for _, d := range drives {
-			// Only user-owned drives have an implicit owner. A tenant-owned
-			// drive grants access through grants alone.
-			if d.OwnerID != nil {
-				owners[d.ID] = *d.OwnerID
-			}
+		for _, d := range rows {
+			drives[d.ID] = d
 		}
 	}
 
+	// Drive owners hold every capability on their drive. Only user-owned drives
+	// have an implicit owner; a tenant-owned drive grants access through grants
+	// alone.
 	pending := make([]string, 0, len(items))
 	for _, it := range items {
-		if owner, ok := owners[it.DriveID]; ok && !p.IsAnonymous() && owner == p.UserID {
+		if d := drives[it.DriveID]; d != nil && d.OwnerID != nil && *d.OwnerID == p.UserID {
 			out[it.ID] = authz.AllCaps
 			continue
 		}
 		pending = append(pending, it.ID)
 	}
-	if len(pending) == 0 {
-		return nil
+	if len(pending) > 0 {
+		if err := a.grantCaps(ctx, p, pending, out); err != nil {
+			return err
+		}
 	}
 
+	withholdPrivateRootSharing(items, drives, out)
+	return nil
+}
+
+// grantCaps decides the capabilities of items that have no owner shortcut, from
+// the grants on them and on their ancestors.
+func (a *Authorizer) grantCaps(ctx context.Context, p authz.Principal, pending []string, out map[string]authz.Capability) error {
 	chains, err := a.ancestorChains(ctx, pending)
 	if err != nil {
 		return err
@@ -200,7 +200,7 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 			}
 			caps := authz.Capability(g.Caps)
 			byResource[g.ResourceID] |= caps
-			if caps.Has(authz.CapManage) {
+			if survivesRestriction(caps) {
 				managerOnly[g.ResourceID] |= caps
 			}
 		}
@@ -219,6 +219,12 @@ func (a *Authorizer) capsChunk(ctx context.Context, p authz.Principal, ids []str
 	}
 	return nil
 }
+
+// survivesRestriction is the one definition of what a restriction (an item that
+// does not inherit) leaves in place: only grants that carry MANAGE, a Drive
+// Admin's, still apply from above it. Both the capability check and the list of
+// inherited grants use it, so they cannot disagree.
+func survivesRestriction(caps authz.Capability) bool { return caps.Has(authz.CapManage) }
 
 // hop is one item on an ancestor chain.
 type hop struct {

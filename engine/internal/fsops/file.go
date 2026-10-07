@@ -19,7 +19,7 @@ import (
 type FSOps struct {
 	db           *db.DB
 	manifestRepo *ManifestRepo
-	authz        authz.Authorizer
+	authz        authz.Checker
 }
 
 // File represents a file in a drive's tree.
@@ -46,7 +46,7 @@ type CreateFileParams struct {
 	HexHashes []string
 }
 
-func NewFSOps(d *db.DB, m *ManifestRepo, az authz.Authorizer) *FSOps {
+func NewFSOps(d *db.DB, m *ManifestRepo, az authz.Checker) *FSOps {
 	return &FSOps{db: d, manifestRepo: m, authz: az}
 }
 
