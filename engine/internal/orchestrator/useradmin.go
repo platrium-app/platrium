@@ -63,7 +63,16 @@ func (a *UserAdmin) requireTx(ctx context.Context, tx *ent.Tx, p authz.Principal
 	})
 }
 
-func (a *UserAdmin) requireWith(ctx context.Context, p authz.Principal, need authz.Permission, access func(context.Context, string, string) (authz.PermissionSet, bool, error)) (*actor.Identity, error) {
+func (a *UserAdmin) requireWith(ctx context.Context, p authz.Principal, need authz.Permission, access accessFunc) (*actor.Identity, error) {
+	return requirePermission(ctx, p, need, access)
+}
+
+// accessFunc reads a user's permissions (and whether they are in the native tenant).
+type accessFunc = func(ctx context.Context, tenantID, userID string) (authz.PermissionSet, bool, error)
+
+// requirePermission is the authoritative gate shared by every administration
+// orchestrator: it reads the caller's permissions now and checks need.
+func requirePermission(ctx context.Context, p authz.Principal, need authz.Permission, access accessFunc) (*actor.Identity, error) {
 	if err := requireSignedIn(p); err != nil {
 		return nil, err
 	}
@@ -356,7 +365,7 @@ func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor.Ident
 	if err != nil {
 		return nil, err
 	}
-	if !target.IsLocal() {
+	if !auth.IdpType(target.IdpType).IsLocal() {
 		return nil, invalid("this user is managed by %s and cannot be edited here", target.IdpName)
 	}
 	if !canManage(ac, target) {

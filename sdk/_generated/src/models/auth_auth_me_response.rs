@@ -17,8 +17,12 @@ pub struct AuthAuthMeResponse {
     pub user_id: String,
     #[serde(rename = "tenant_id")]
     pub tenant_id: String,
+    /// The address the user is signed in with, as the database has it now (an external provider keeps it current).
     #[serde(rename = "email")]
     pub email: String,
+    /// The user's name as the database has it now, not as it was at sign-in.
+    #[serde(rename = "display_name")]
+    pub display_name: String,
     /// How this request authenticated: SESSION (browser), DEVICE or APP (bearer token).
     #[serde(rename = "auth_kind")]
     pub auth_kind: AuthKind,
@@ -28,11 +32,12 @@ pub struct AuthAuthMeResponse {
 }
 
 impl AuthAuthMeResponse {
-    pub fn new(user_id: String, tenant_id: String, email: String, auth_kind: AuthKind) -> AuthAuthMeResponse {
+    pub fn new(user_id: String, tenant_id: String, email: String, display_name: String, auth_kind: AuthKind) -> AuthAuthMeResponse {
         AuthAuthMeResponse {
             user_id,
             tenant_id,
             email,
+            display_name,
             auth_kind,
             device_id: None,
         }

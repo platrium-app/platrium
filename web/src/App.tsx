@@ -23,6 +23,7 @@ import { AuthProvider } from "./contexts/AuthContext"
 import { RequireAuth } from "./components/auth/RequireAuth"
 import { RequirePermission } from "./components/auth/RequirePermission"
 import AdminUsersView from "./pages/admin/users/AdminUsersView"
+import AdminIdentityProvidersView from "./pages/admin/identity-providers/AdminIdentityProvidersView"
 
 export function App() {
   return (
@@ -69,6 +70,14 @@ export function App() {
                   >
                     <Route index element={<Navigate to="users" replace />} />
                     <Route path="users" element={<AdminUsersView />} />
+                    <Route
+                      path="identity-providers"
+                      element={
+                        <RequirePermission permission="IDP_MANAGE">
+                          <AdminIdentityProvidersView />
+                        </RequirePermission>
+                      }
+                    />
                   </Route>
                   <Route
                     path="/rawcontent/*"

@@ -38,6 +38,7 @@ type env struct {
 // newEnv serves the real REST handlers behind the real session and bearer middleware.
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	t.Setenv("PLATRIUM_SECRET_KEY", "test-secret-key")
 	ctx := context.Background()
 	d := dbtest.New(t)
 	kv, err := kvstore.NewInMemoryStore()

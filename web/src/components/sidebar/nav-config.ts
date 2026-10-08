@@ -1,5 +1,5 @@
 import type { ElementType } from "react"
-import { Clock, Home, ShieldCheck, Users, Trash2 } from "lucide-react"
+import { Clock, Home, KeyRound, ShieldCheck, Users, Trash2 } from "lucide-react"
 import type { Permission } from "@/graphql/graphql"
 
 export type NavItem = {
@@ -53,5 +53,16 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
     icon: Users,
     path: `${ADMIN_PATH_PREFIX}/users`,
     requires: "USERS_READ",
+  },
+]
+
+/** How people sign in. */
+export const ADMIN_SIGN_IN_NAV_ITEMS: NavItem[] = [
+  {
+    id: "admin-identity-providers",
+    label: "Identity providers",
+    icon: KeyRound,
+    path: `${ADMIN_PATH_PREFIX}/identity-providers`,
+    requires: "IDP_MANAGE",
   },
 ]

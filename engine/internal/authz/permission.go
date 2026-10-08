@@ -23,6 +23,8 @@ const (
 	PermSharedDrivesCreate Permission = "shared_drives.create" // create shared drives without a policy grant
 	PermPoliciesManage     Permission = "policies.manage"      // choose which groups a tenant policy applies to
 
+	PermIdpManage Permission = "idp.manage" // configure the organization's identity providers (who can sign in, and how)
+
 	PermTenantsManage Permission = "tenants.manage" // cluster: configure tenants (native tenant only)
 )
 
@@ -51,6 +53,7 @@ var permissionRegistry = []permissionDef{
 	{PermRolesAssign, ScopeTenant},
 	{PermSharedDrivesCreate, ScopeTenant},
 	{PermPoliciesManage, ScopeTenant},
+	{PermIdpManage, ScopeTenant},
 	{PermTenantsManage, ScopeCluster},
 }
 
@@ -124,7 +127,7 @@ var builtinTenantRoles = func() map[string]PermissionSet {
 	return map[string]PermissionSet{
 		TenantRoleMember:     NewPermissionSet(),
 		TenantRoleAdmin:      NewPermissionSet(admin...),
-		TenantRoleSuperAdmin: NewPermissionSet(append(slices.Clone(admin), PermRolesAssign, PermTenantsManage)...),
+		TenantRoleSuperAdmin: NewPermissionSet(append(slices.Clone(admin), PermRolesAssign, PermIdpManage, PermTenantsManage)...),
 	}
 }()
 

@@ -88,6 +88,11 @@ type ComplexityRoot struct {
 		Node   func(childComplexity int) int
 	}
 
+	AuthParam struct {
+		Name  func(childComplexity int) int
+		Value func(childComplexity int) int
+	}
+
 	DirectorySubject struct {
 		Email func(childComplexity int) int
 		ID    func(childComplexity int) int
@@ -160,6 +165,19 @@ type ComplexityRoot struct {
 		Role       func(childComplexity int) int
 	}
 
+	IdentityProvider struct {
+		AllowedEmailDomains func(childComplexity int) int
+		Config              func(childComplexity int) int
+		DefaultRole         func(childComplexity int) int
+		Enabled             func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		IsLocal             func(childComplexity int) int
+		JitUsers            func(childComplexity int) int
+		Name                func(childComplexity int) int
+		Type                func(childComplexity int) int
+		UserCount           func(childComplexity int) int
+	}
+
 	IdentitySource struct {
 		ID      func(childComplexity int) int
 		IsLocal func(childComplexity int) int
@@ -198,21 +216,50 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CopyFile               func(childComplexity int, fileID string, newParentID string, newName string) int
-		CreateFolder           func(childComplexity int, parentID string, name string) int
-		CreateLocalUser        func(childComplexity int, input graphql1.CreateLocalUserInput) int
-		CreateSharedDrive      func(childComplexity int, name string) int
-		DeleteItem             func(childComplexity int, id string) int
-		MoveItem               func(childComplexity int, id string, newParentID string) int
-		RenameItem             func(childComplexity int, id string, newName string) int
-		ResetLocalUserPassword func(childComplexity int, id string, password string) int
-		RevokeAccess           func(childComplexity int, grantID string) int
-		SetGeneralAccess       func(childComplexity int, input graphql1.GeneralAccessInput) int
-		SetInheritance         func(childComplexity int, itemID string, inherit bool) int
-		SetSharedDriveCreators func(childComplexity int, groupIds []string) int
-		SetUserDisabled        func(childComplexity int, id string, disabled bool) int
-		ShareItem              func(childComplexity int, input graphql1.ShareInput) int
-		UpdateLocalUser        func(childComplexity int, id string, input graphql1.UpdateLocalUserInput) int
+		CopyFile                   func(childComplexity int, fileID string, newParentID string, newName string) int
+		CreateFolder               func(childComplexity int, parentID string, name string) int
+		CreateIdentityProvider     func(childComplexity int, input graphql1.CreateIdentityProviderInput) int
+		CreateLocalUser            func(childComplexity int, input graphql1.CreateLocalUserInput) int
+		CreateSharedDrive          func(childComplexity int, name string) int
+		DeleteIdentityProvider     func(childComplexity int, id string) int
+		DeleteItem                 func(childComplexity int, id string) int
+		MoveItem                   func(childComplexity int, id string, newParentID string) int
+		RenameItem                 func(childComplexity int, id string, newName string) int
+		ResetLocalUserPassword     func(childComplexity int, id string, password string) int
+		RevokeAccess               func(childComplexity int, grantID string) int
+		SetGeneralAccess           func(childComplexity int, input graphql1.GeneralAccessInput) int
+		SetIdentityProviderEnabled func(childComplexity int, id string, enabled bool) int
+		SetInheritance             func(childComplexity int, itemID string, inherit bool) int
+		SetSharedDriveCreators     func(childComplexity int, groupIds []string) int
+		SetUserDisabled            func(childComplexity int, id string, disabled bool) int
+		ShareItem                  func(childComplexity int, input graphql1.ShareInput) int
+		TestOidcDiscovery          func(childComplexity int, issuer string) int
+		UpdateIdentityProvider     func(childComplexity int, id string, input graphql1.UpdateIdentityProviderInput) int
+		UpdateLocalUser            func(childComplexity int, id string, input graphql1.UpdateLocalUserInput) int
+		UpdateOidcConfig           func(childComplexity int, id string, input graphql1.UpdateOidcConfigInput) int
+	}
+
+	OidcConfig struct {
+		ClientID             func(childComplexity int) int
+		EmailClaim           func(childComplexity int) int
+		ExtraAuthParams      func(childComplexity int) int
+		Issuer               func(childComplexity int) int
+		NameClaim            func(childComplexity int) int
+		PictureClaim         func(childComplexity int) int
+		RedirectURI          func(childComplexity int) int
+		RequireEmailVerified func(childComplexity int) int
+		Scopes               func(childComplexity int) int
+	}
+
+	OidcDiscoveryResult struct {
+		AuthorizationEndpoint func(childComplexity int) int
+		ClaimsSupported       func(childComplexity int) int
+		JwksURI               func(childComplexity int) int
+		Message               func(childComplexity int) int
+		Ok                    func(childComplexity int) int
+		ScopesSupported       func(childComplexity int) int
+		SupportsPkce          func(childComplexity int) int
+		TokenEndpoint         func(childComplexity int) int
 	}
 
 	PageInfo struct {
@@ -228,6 +275,8 @@ type ComplexityRoot struct {
 		FolderContents          func(childComplexity int, folderID string, first *int, after *string) int
 		GeneralAccessOptions    func(childComplexity int, itemID string) int
 		GetChanges              func(childComplexity int, folderID string, since time.Time) int
+		IdentityProvider        func(childComplexity int, id string) int
+		IdentityProviders       func(childComplexity int) int
 		Item                    func(childComplexity int, id string) int
 		ItemAccess              func(childComplexity int, itemID string) int
 		Me                      func(childComplexity int) int
@@ -305,6 +354,12 @@ type MutationResolver interface {
 	SetUserDisabled(ctx context.Context, id string, disabled bool) (*graphql1.AdminUser, error)
 	CreateSharedDrive(ctx context.Context, name string) (*graphql1.Folder, error)
 	SetSharedDriveCreators(ctx context.Context, groupIds []string) ([]*graphql1.DirectorySubject, error)
+	CreateIdentityProvider(ctx context.Context, input graphql1.CreateIdentityProviderInput) (*graphql1.IdentityProvider, error)
+	UpdateIdentityProvider(ctx context.Context, id string, input graphql1.UpdateIdentityProviderInput) (*graphql1.IdentityProvider, error)
+	UpdateOidcConfig(ctx context.Context, id string, input graphql1.UpdateOidcConfigInput) (*graphql1.IdentityProvider, error)
+	SetIdentityProviderEnabled(ctx context.Context, id string, enabled bool) (*graphql1.IdentityProvider, error)
+	DeleteIdentityProvider(ctx context.Context, id string) (bool, error)
+	TestOidcDiscovery(ctx context.Context, issuer string) (*graphql1.OidcDiscoveryResult, error)
 	ShareItem(ctx context.Context, input graphql1.ShareInput) (*graphql1.AccessGrant, error)
 	RevokeAccess(ctx context.Context, grantID string) (bool, error)
 	SetGeneralAccess(ctx context.Context, input graphql1.GeneralAccessInput) (*graphql1.GeneralAccess, error)
@@ -319,6 +374,8 @@ type QueryResolver interface {
 	CanCreateSharedDrive(ctx context.Context) (bool, error)
 	SharedDriveCreators(ctx context.Context) ([]*graphql1.DirectorySubject, error)
 	GetChanges(ctx context.Context, folderID string, since time.Time) ([]*graphql1.DriveItemEvent, error)
+	IdentityProviders(ctx context.Context) ([]*graphql1.IdentityProvider, error)
+	IdentityProvider(ctx context.Context, id string) (*graphql1.IdentityProvider, error)
 	Me(ctx context.Context) (*graphql1.Me, error)
 	ServerInfo(ctx context.Context) (*graphql1.ServerInfo, error)
 	ShareRoles(ctx context.Context, itemID string) ([]*graphql1.RoleOption, error)
@@ -541,6 +598,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AdminUserEdge.Node(childComplexity), true
+
+	case "AuthParam.name":
+		if e.ComplexityRoot.AuthParam.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuthParam.Name(childComplexity), true
+	case "AuthParam.value":
+		if e.ComplexityRoot.AuthParam.Value == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuthParam.Value(childComplexity), true
 
 	case "DirectorySubject.email":
 		if e.ComplexityRoot.DirectorySubject.Email == nil {
@@ -821,6 +891,67 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.GeneralAccess.Role(childComplexity), true
 
+	case "IdentityProvider.allowedEmailDomains":
+		if e.ComplexityRoot.IdentityProvider.AllowedEmailDomains == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.AllowedEmailDomains(childComplexity), true
+	case "IdentityProvider.config":
+		if e.ComplexityRoot.IdentityProvider.Config == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.Config(childComplexity), true
+	case "IdentityProvider.defaultRole":
+		if e.ComplexityRoot.IdentityProvider.DefaultRole == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.DefaultRole(childComplexity), true
+	case "IdentityProvider.enabled":
+		if e.ComplexityRoot.IdentityProvider.Enabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.Enabled(childComplexity), true
+	case "IdentityProvider.id":
+		if e.ComplexityRoot.IdentityProvider.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.ID(childComplexity), true
+	case "IdentityProvider.isLocal":
+		if e.ComplexityRoot.IdentityProvider.IsLocal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.IsLocal(childComplexity), true
+	case "IdentityProvider.jitUsers":
+		if e.ComplexityRoot.IdentityProvider.JitUsers == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.JitUsers(childComplexity), true
+	case "IdentityProvider.name":
+		if e.ComplexityRoot.IdentityProvider.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.Name(childComplexity), true
+	case "IdentityProvider.type":
+		if e.ComplexityRoot.IdentityProvider.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.Type(childComplexity), true
+	case "IdentityProvider.userCount":
+		if e.ComplexityRoot.IdentityProvider.UserCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.IdentityProvider.UserCount(childComplexity), true
+
 	case "IdentitySource.id":
 		if e.ComplexityRoot.IdentitySource.ID == nil {
 			break
@@ -980,6 +1111,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateFolder(childComplexity, args["parentId"].(string), args["name"].(string)), true
+	case "Mutation.createIdentityProvider":
+		if e.ComplexityRoot.Mutation.CreateIdentityProvider == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createIdentityProvider_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateIdentityProvider(childComplexity, args["input"].(graphql1.CreateIdentityProviderInput)), true
 	case "Mutation.createLocalUser":
 		if e.ComplexityRoot.Mutation.CreateLocalUser == nil {
 			break
@@ -1002,6 +1144,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateSharedDrive(childComplexity, args["name"].(string)), true
+	case "Mutation.deleteIdentityProvider":
+		if e.ComplexityRoot.Mutation.DeleteIdentityProvider == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteIdentityProvider_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteIdentityProvider(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteItem":
 		if e.ComplexityRoot.Mutation.DeleteItem == nil {
 			break
@@ -1068,6 +1221,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetGeneralAccess(childComplexity, args["input"].(graphql1.GeneralAccessInput)), true
+	case "Mutation.setIdentityProviderEnabled":
+		if e.ComplexityRoot.Mutation.SetIdentityProviderEnabled == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setIdentityProviderEnabled_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetIdentityProviderEnabled(childComplexity, args["id"].(string), args["enabled"].(bool)), true
 	case "Mutation.setInheritance":
 		if e.ComplexityRoot.Mutation.SetInheritance == nil {
 			break
@@ -1112,6 +1276,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ShareItem(childComplexity, args["input"].(graphql1.ShareInput)), true
+	case "Mutation.testOidcDiscovery":
+		if e.ComplexityRoot.Mutation.TestOidcDiscovery == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_testOidcDiscovery_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.TestOidcDiscovery(childComplexity, args["issuer"].(string)), true
+	case "Mutation.updateIdentityProvider":
+		if e.ComplexityRoot.Mutation.UpdateIdentityProvider == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateIdentityProvider_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateIdentityProvider(childComplexity, args["id"].(string), args["input"].(graphql1.UpdateIdentityProviderInput)), true
 	case "Mutation.updateLocalUser":
 		if e.ComplexityRoot.Mutation.UpdateLocalUser == nil {
 			break
@@ -1123,6 +1309,121 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateLocalUser(childComplexity, args["id"].(string), args["input"].(graphql1.UpdateLocalUserInput)), true
+	case "Mutation.updateOidcConfig":
+		if e.ComplexityRoot.Mutation.UpdateOidcConfig == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateOidcConfig_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateOidcConfig(childComplexity, args["id"].(string), args["input"].(graphql1.UpdateOidcConfigInput)), true
+
+	case "OidcConfig.clientId":
+		if e.ComplexityRoot.OidcConfig.ClientID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.ClientID(childComplexity), true
+	case "OidcConfig.emailClaim":
+		if e.ComplexityRoot.OidcConfig.EmailClaim == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.EmailClaim(childComplexity), true
+	case "OidcConfig.extraAuthParams":
+		if e.ComplexityRoot.OidcConfig.ExtraAuthParams == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.ExtraAuthParams(childComplexity), true
+	case "OidcConfig.issuer":
+		if e.ComplexityRoot.OidcConfig.Issuer == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.Issuer(childComplexity), true
+	case "OidcConfig.nameClaim":
+		if e.ComplexityRoot.OidcConfig.NameClaim == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.NameClaim(childComplexity), true
+	case "OidcConfig.pictureClaim":
+		if e.ComplexityRoot.OidcConfig.PictureClaim == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.PictureClaim(childComplexity), true
+	case "OidcConfig.redirectUri":
+		if e.ComplexityRoot.OidcConfig.RedirectURI == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.RedirectURI(childComplexity), true
+	case "OidcConfig.requireEmailVerified":
+		if e.ComplexityRoot.OidcConfig.RequireEmailVerified == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.RequireEmailVerified(childComplexity), true
+	case "OidcConfig.scopes":
+		if e.ComplexityRoot.OidcConfig.Scopes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcConfig.Scopes(childComplexity), true
+
+	case "OidcDiscoveryResult.authorizationEndpoint":
+		if e.ComplexityRoot.OidcDiscoveryResult.AuthorizationEndpoint == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.AuthorizationEndpoint(childComplexity), true
+	case "OidcDiscoveryResult.claimsSupported":
+		if e.ComplexityRoot.OidcDiscoveryResult.ClaimsSupported == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.ClaimsSupported(childComplexity), true
+	case "OidcDiscoveryResult.jwksUri":
+		if e.ComplexityRoot.OidcDiscoveryResult.JwksURI == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.JwksURI(childComplexity), true
+	case "OidcDiscoveryResult.message":
+		if e.ComplexityRoot.OidcDiscoveryResult.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.Message(childComplexity), true
+	case "OidcDiscoveryResult.ok":
+		if e.ComplexityRoot.OidcDiscoveryResult.Ok == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.Ok(childComplexity), true
+	case "OidcDiscoveryResult.scopesSupported":
+		if e.ComplexityRoot.OidcDiscoveryResult.ScopesSupported == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.ScopesSupported(childComplexity), true
+	case "OidcDiscoveryResult.supportsPkce":
+		if e.ComplexityRoot.OidcDiscoveryResult.SupportsPkce == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.SupportsPkce(childComplexity), true
+	case "OidcDiscoveryResult.tokenEndpoint":
+		if e.ComplexityRoot.OidcDiscoveryResult.TokenEndpoint == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OidcDiscoveryResult.TokenEndpoint(childComplexity), true
 
 	case "PageInfo.endCursor":
 		if e.ComplexityRoot.PageInfo.EndCursor == nil {
@@ -1199,6 +1500,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.GetChanges(childComplexity, args["folderId"].(string), args["since"].(time.Time)), true
+	case "Query.identityProvider":
+		if e.ComplexityRoot.Query.IdentityProvider == nil {
+			break
+		}
+
+		args, err := ec.field_Query_identityProvider_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.IdentityProvider(childComplexity, args["id"].(string)), true
+	case "Query.identityProviders":
+		if e.ComplexityRoot.Query.IdentityProviders == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.IdentityProviders(childComplexity), true
 
 	case "Query.item":
 		if e.ComplexityRoot.Query.Item == nil {
@@ -1432,10 +1750,16 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputAuthParamInput,
+		ec.unmarshalInputCreateIdentityProviderInput,
 		ec.unmarshalInputCreateLocalUserInput,
 		ec.unmarshalInputGeneralAccessInput,
+		ec.unmarshalInputOidcConfigInput,
+		ec.unmarshalInputProviderConfigInput,
 		ec.unmarshalInputShareInput,
+		ec.unmarshalInputUpdateIdentityProviderInput,
 		ec.unmarshalInputUpdateLocalUserInput,
+		ec.unmarshalInputUpdateOidcConfigInput,
 	)
 	first := true
 
@@ -1750,6 +2074,145 @@ extend type Query {
   getChanges(folderId: ID!, since: DateTime!): [DriveItemEvent!]!
 }
 `, BuiltIn: false},
+	{Name: "../../../../api/graphql/core/idp.graphql", Input: `# Administration of an organization's identity providers: where its users sign
+# in. Every field is gated by IDP_MANAGE (see admin.graphql for @requires).
+#
+# The settings every provider shares (name, enabled, how users are created) are
+# the same for every type. Only the connection settings are specific to a
+# protocol: they live in ` + "`" + `config` + "`" + `, a union with one member per protocol, so a
+# client renders the common part once and picks a form by the member's type.
+#
+# The built-in (LOCAL) provider is created with the organization, can not be
+# edited, disabled or deleted, and is listed so users can be filtered by it.
+
+type IdentityProvider {
+  id: ID!
+  name: String!
+  "LOCAL, OIDC or SAML."
+  type: String!
+  "True for the built-in provider: read-only and permanent."
+  isLocal: Boolean!
+  "A disabled provider refuses sign-ins. Its users and their files stay."
+  enabled: Boolean!
+  "Whether a first sign-in creates the user. When false only existing users can sign in."
+  jitUsers: Boolean!
+  "The role users created on first sign-in start with. Never an administrative role."
+  defaultRole: String!
+  "When not empty, only these email domains may sign in."
+  allowedEmailDomains: [String!]!
+  "How many users sign in through this provider."
+  userCount: Int!
+  "Null for the built-in provider."
+  config: IdentityProviderConfig
+}
+
+union IdentityProviderConfig = OidcConfig
+
+"An extra parameter sent on the authorization request, e.g. Auth0's ` + "`" + `audience` + "`" + `."
+type AuthParam {
+  name: String!
+  value: String!
+}
+
+type OidcConfig {
+  issuer: String!
+  clientId: String!
+  "Scopes requested in addition to ` + "`" + `openid` + "`" + `."
+  scopes: [String!]!
+  emailClaim: String!
+  nameClaim: String!
+  pictureClaim: String!
+  requireEmailVerified: Boolean!
+  extraAuthParams: [AuthParam!]!
+  "Register this address with the provider as an allowed redirect (callback) URL."
+  redirectUri: String!
+}
+
+input AuthParamInput {
+  name: String!
+  value: String!
+}
+
+input OidcConfigInput {
+  "The provider's issuer URL, e.g. https://acme.auth0.com. A trailing slash is ignored. Can not be changed later."
+  issuer: String!
+  clientId: String!
+  clientSecret: String!
+  scopes: [String!]
+  "Which claim holds each attribute. Default: email, name, picture."
+  emailClaim: String
+  nameClaim: String
+  pictureClaim: String
+  "Refuse sign-ins the provider has not verified the email of. Default: true."
+  requireEmailVerified: Boolean = true
+  extraAuthParams: [AuthParamInput!]
+}
+
+"The connection settings of a new provider: exactly one member, for its type."
+input ProviderConfigInput @oneOf {
+  oidc: OidcConfigInput
+}
+
+input CreateIdentityProviderInput {
+  name: String!
+  jitUsers: Boolean!
+  "Must be a role without administrative permissions."
+  defaultRole: String!
+  allowedEmailDomains: [String!]
+  config: ProviderConfigInput!
+}
+
+input UpdateIdentityProviderInput {
+  name: String
+  jitUsers: Boolean
+  defaultRole: String
+  allowedEmailDomains: [String!]
+}
+
+input UpdateOidcConfigInput {
+  clientId: String
+  "Leave out to keep the current secret."
+  clientSecret: String
+  scopes: [String!]
+  emailClaim: String
+  nameClaim: String
+  pictureClaim: String
+  requireEmailVerified: Boolean
+  extraAuthParams: [AuthParamInput!]
+}
+
+"What reading a provider's discovery document found."
+type OidcDiscoveryResult {
+  ok: Boolean!
+  "Why it failed, when it did."
+  message: String
+  authorizationEndpoint: String
+  tokenEndpoint: String
+  jwksUri: String
+  scopesSupported: [String!]
+  claimsSupported: [String!]
+  "False when the provider lists its PKCE methods and S256 is not one of them."
+  supportsPkce: Boolean
+}
+
+extend type Query {
+  identityProviders: [IdentityProvider!]! @requires(permission: IDP_MANAGE)
+  identityProvider(id: ID!): IdentityProvider! @requires(permission: IDP_MANAGE)
+}
+
+extend type Mutation {
+  createIdentityProvider(input: CreateIdentityProviderInput!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  "The settings every provider type shares."
+  updateIdentityProvider(id: ID!, input: UpdateIdentityProviderInput!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  "The connection settings of an OIDC provider. The issuer is fixed at creation."
+  updateOidcConfig(id: ID!, input: UpdateOidcConfigInput!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  setIdentityProviderEnabled(id: ID!, enabled: Boolean!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  "Only a provider with no users can be deleted; disable it otherwise."
+  deleteIdentityProvider(id: ID!): Boolean! @requires(permission: IDP_MANAGE)
+  "Checks that an issuer URL is a working OpenID provider. Saves nothing."
+  testOidcDiscovery(issuer: String!): OidcDiscoveryResult! @requires(permission: IDP_MANAGE)
+}
+`, BuiltIn: false},
 	{Name: "../../../../api/graphql/core/me.graphql", Input: `# The signed-in user and what they may do. Clients show or hide features from
 # ` + "`" + `permissions` + "`" + `, never from ` + "`" + `role` + "`" + `. The gate that enforces them is ` + "`" + `@requires` + "`" + `
 # (see admin.graphql); every field it protects is also checked on the server.
@@ -1763,6 +2226,7 @@ enum Permission {
   ROLES_ASSIGN
   SHARED_DRIVES_CREATE
   POLICIES_MANAGE
+  IDP_MANAGE
   TENANTS_MANAGE
 }
 
@@ -2060,6 +2524,16 @@ func (ec *executionContext) childFields_AdminUserEdge(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type AdminUserEdge", field.Name)
 }
 
+func (ec *executionContext) childFields_AuthParam(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "name":
+		return ec.fieldContext_AuthParam_name(ctx, field)
+	case "value":
+		return ec.fieldContext_AuthParam_value(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AuthParam", field.Name)
+}
+
 func (ec *executionContext) childFields_DirectorySubject(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "type":
@@ -2204,6 +2678,32 @@ func (ec *executionContext) childFields_GeneralAccess(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type GeneralAccess", field.Name)
 }
 
+func (ec *executionContext) childFields_IdentityProvider(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_IdentityProvider_id(ctx, field)
+	case "name":
+		return ec.fieldContext_IdentityProvider_name(ctx, field)
+	case "type":
+		return ec.fieldContext_IdentityProvider_type(ctx, field)
+	case "isLocal":
+		return ec.fieldContext_IdentityProvider_isLocal(ctx, field)
+	case "enabled":
+		return ec.fieldContext_IdentityProvider_enabled(ctx, field)
+	case "jitUsers":
+		return ec.fieldContext_IdentityProvider_jitUsers(ctx, field)
+	case "defaultRole":
+		return ec.fieldContext_IdentityProvider_defaultRole(ctx, field)
+	case "allowedEmailDomains":
+		return ec.fieldContext_IdentityProvider_allowedEmailDomains(ctx, field)
+	case "userCount":
+		return ec.fieldContext_IdentityProvider_userCount(ctx, field)
+	case "config":
+		return ec.fieldContext_IdentityProvider_config(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type IdentityProvider", field.Name)
+}
+
 func (ec *executionContext) childFields_IdentitySource(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -2276,6 +2776,28 @@ func (ec *executionContext) childFields_Me(ctx context.Context, field graphql.Co
 		return ec.fieldContext_Me_assignableRoles(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Me", field.Name)
+}
+
+func (ec *executionContext) childFields_OidcDiscoveryResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "ok":
+		return ec.fieldContext_OidcDiscoveryResult_ok(ctx, field)
+	case "message":
+		return ec.fieldContext_OidcDiscoveryResult_message(ctx, field)
+	case "authorizationEndpoint":
+		return ec.fieldContext_OidcDiscoveryResult_authorizationEndpoint(ctx, field)
+	case "tokenEndpoint":
+		return ec.fieldContext_OidcDiscoveryResult_tokenEndpoint(ctx, field)
+	case "jwksUri":
+		return ec.fieldContext_OidcDiscoveryResult_jwksUri(ctx, field)
+	case "scopesSupported":
+		return ec.fieldContext_OidcDiscoveryResult_scopesSupported(ctx, field)
+	case "claimsSupported":
+		return ec.fieldContext_OidcDiscoveryResult_claimsSupported(ctx, field)
+	case "supportsPkce":
+		return ec.fieldContext_OidcDiscoveryResult_supportsPkce(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type OidcDiscoveryResult", field.Name)
 }
 
 func (ec *executionContext) childFields_PageInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -2546,6 +3068,20 @@ func (ec *executionContext) field_Mutation_createFolder_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createIdentityProvider_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (graphql1.CreateIdentityProviderInput, error) {
+			return ec.unmarshalNCreateIdentityProviderInput2platriumᚋinternalᚋgraphqlᚐCreateIdentityProviderInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createLocalUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2571,6 +3107,20 @@ func (ec *executionContext) field_Mutation_createSharedDrive_args(ctx context.Co
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteIdentityProvider_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -2682,6 +3232,28 @@ func (ec *executionContext) field_Mutation_setGeneralAccess_args(ctx context.Con
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_setIdentityProviderEnabled_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "enabled",
+		func(ctx context.Context, v any) (bool, error) {
+			return ec.unmarshalNBoolean2bool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["enabled"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_setInheritance_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2754,6 +3326,42 @@ func (ec *executionContext) field_Mutation_shareItem_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_testOidcDiscovery_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "issuer",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["issuer"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateIdentityProvider_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (graphql1.UpdateIdentityProviderInput, error) {
+			return ec.unmarshalNUpdateIdentityProviderInput2platriumᚋinternalᚋgraphqlᚐUpdateIdentityProviderInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateLocalUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2768,6 +3376,28 @@ func (ec *executionContext) field_Mutation_updateLocalUser_args(ctx context.Cont
 	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
 		func(ctx context.Context, v any) (graphql1.UpdateLocalUserInput, error) {
 			return ec.unmarshalNUpdateLocalUserInput2platriumᚋinternalᚋgraphqlᚐUpdateLocalUserInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateOidcConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (graphql1.UpdateOidcConfigInput, error) {
+			return ec.unmarshalNUpdateOidcConfigInput2platriumᚋinternalᚋgraphqlᚐUpdateOidcConfigInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -2899,6 +3529,20 @@ func (ec *executionContext) field_Query_getChanges_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["since"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_identityProvider_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -3826,6 +4470,52 @@ func (ec *executionContext) fieldContext_AdminUserEdge_node(_ context.Context, f
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _AuthParam_name(ctx context.Context, field graphql.CollectedField, obj *graphql1.AuthParam) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuthParam_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuthParam_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuthParam", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuthParam_value(ctx context.Context, field graphql.CollectedField, obj *graphql1.AuthParam) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuthParam_value(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuthParam_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuthParam", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _DirectorySubject_type(ctx context.Context, field graphql.CollectedField, obj *graphql1.DirectorySubject) (ret graphql.Marshaler) {
@@ -4933,6 +5623,236 @@ func (ec *executionContext) _GeneralAccess_expiresAt(ctx context.Context, field 
 }
 func (ec *executionContext) fieldContext_GeneralAccess_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("GeneralAccess", field, false, false, errors.New("field of type DateTime does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_id(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_name(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_type(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_isLocal(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_isLocal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsLocal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_isLocal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_enabled(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_enabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_jitUsers(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_jitUsers(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.JitUsers, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_jitUsers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_defaultRole(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_defaultRole(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DefaultRole, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_defaultRole(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_allowedEmailDomains(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_allowedEmailDomains(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AllowedEmailDomains, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_allowedEmailDomains(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_userCount(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_userCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UserCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_userCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _IdentityProvider_config(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentityProvider) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_IdentityProvider_config(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Config, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v graphql1.IdentityProviderConfig) graphql.Marshaler {
+			return ec.marshalOIdentityProviderConfig2platriumᚋinternalᚋgraphqlᚐIdentityProviderConfig(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_IdentityProvider_config(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("IdentityProvider", field, false, false, errors.New("field of type IdentityProviderConfig does not have child fields"))
 }
 
 func (ec *executionContext) _IdentitySource_id(ctx context.Context, field graphql.CollectedField, obj *graphql1.IdentitySource) (ret graphql.Marshaler) {
@@ -6051,6 +6971,378 @@ func (ec *executionContext) fieldContext_Mutation_setSharedDriveCreators(ctx con
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_createIdentityProvider(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createIdentityProvider(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateIdentityProvider(ctx, fc.Args["input"].(graphql1.CreateIdentityProviderInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.IdentityProvider) graphql.Marshaler {
+			return ec.marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createIdentityProvider(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentityProvider(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createIdentityProvider_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateIdentityProvider(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateIdentityProvider(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateIdentityProvider(ctx, fc.Args["id"].(string), fc.Args["input"].(graphql1.UpdateIdentityProviderInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.IdentityProvider) graphql.Marshaler {
+			return ec.marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateIdentityProvider(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentityProvider(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateIdentityProvider_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateOidcConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateOidcConfig(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateOidcConfig(ctx, fc.Args["id"].(string), fc.Args["input"].(graphql1.UpdateOidcConfigInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.IdentityProvider) graphql.Marshaler {
+			return ec.marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateOidcConfig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentityProvider(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateOidcConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setIdentityProviderEnabled(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setIdentityProviderEnabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetIdentityProviderEnabled(ctx, fc.Args["id"].(string), fc.Args["enabled"].(bool))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.IdentityProvider) graphql.Marshaler {
+			return ec.marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setIdentityProviderEnabled(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentityProvider(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setIdentityProviderEnabled_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteIdentityProvider(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteIdentityProvider(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteIdentityProvider(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteIdentityProvider(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteIdentityProvider_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_testOidcDiscovery(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_testOidcDiscovery(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().TestOidcDiscovery(ctx, fc.Args["issuer"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal *graphql1.OidcDiscoveryResult
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *graphql1.OidcDiscoveryResult
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.OidcDiscoveryResult) graphql.Marshaler {
+			return ec.marshalNOidcDiscoveryResult2ᚖplatriumᚋinternalᚋgraphqlᚐOidcDiscoveryResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_testOidcDiscovery(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_OidcDiscoveryResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_testOidcDiscovery_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_shareItem(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6225,6 +7517,406 @@ func (ec *executionContext) fieldContext_Mutation_setInheritance(ctx context.Con
 		return fc, err
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _OidcConfig_issuer(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_issuer(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Issuer, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_issuer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_clientId(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_clientId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ClientID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_clientId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_scopes(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_scopes(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Scopes, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_scopes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_emailClaim(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_emailClaim(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EmailClaim, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_emailClaim(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_nameClaim(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_nameClaim(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NameClaim, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_nameClaim(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_pictureClaim(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_pictureClaim(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PictureClaim, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_pictureClaim(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_requireEmailVerified(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_requireEmailVerified(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequireEmailVerified, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_requireEmailVerified(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _OidcConfig_extraAuthParams(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_extraAuthParams(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExtraAuthParams, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*graphql1.AuthParam) graphql.Marshaler {
+			return ec.marshalNAuthParam2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAuthParamᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_extraAuthParams(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OidcConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AuthParam(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OidcConfig_redirectUri(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcConfig_redirectUri(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RedirectURI, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcConfig_redirectUri(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcConfig", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_ok(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_ok(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ok, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_ok(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_message(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_authorizationEndpoint(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_authorizationEndpoint(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AuthorizationEndpoint, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_authorizationEndpoint(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_tokenEndpoint(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_tokenEndpoint(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TokenEndpoint, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_tokenEndpoint(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_jwksUri(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_jwksUri(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.JwksURI, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_jwksUri(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_scopesSupported(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_scopesSupported(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ScopesSupported, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalOString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_scopesSupported(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_claimsSupported(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_claimsSupported(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ClaimsSupported, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalOString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_claimsSupported(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OidcDiscoveryResult_supportsPkce(ctx context.Context, field graphql.CollectedField, obj *graphql1.OidcDiscoveryResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OidcDiscoveryResult_supportsPkce(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SupportsPkce, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *bool) graphql.Marshaler {
+			return ec.marshalOBoolean2ᚖbool(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_OidcDiscoveryResult_supportsPkce(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OidcDiscoveryResult", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _PageInfo_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *graphql1.PageInfo) (ret graphql.Marshaler) {
@@ -6616,6 +8308,118 @@ func (ec *executionContext) fieldContext_Query_getChanges(ctx context.Context, f
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_getChanges_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_identityProviders(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_identityProviders(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().IdentityProviders(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal []*graphql1.IdentityProvider
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal []*graphql1.IdentityProvider
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []*graphql1.IdentityProvider) graphql.Marshaler {
+			return ec.marshalNIdentityProvider2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdentityProviderᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_identityProviders(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentityProvider(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_identityProvider(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_identityProvider(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().IdentityProvider(ctx, fc.Args["id"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				permission, err := ec.unmarshalNPermission2platriumᚋinternalᚋauthzᚐPermission(ctx, "IDP_MANAGE")
+				if err != nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, err
+				}
+				if ec.Directives.Requires == nil {
+					var zeroVal *graphql1.IdentityProvider
+					return zeroVal, errors.New("directive requires is not implemented")
+				}
+				return ec.Directives.Requires(ctx, nil, directive0, permission)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.IdentityProvider) graphql.Marshaler {
+			return ec.marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_identityProvider(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_IdentityProvider(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_identityProvider_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8654,6 +10458,101 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputAuthParamInput(ctx context.Context, obj any) (graphql1.AuthParamInput, error) {
+	var it graphql1.AuthParamInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "value"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateIdentityProviderInput(ctx context.Context, obj any) (graphql1.CreateIdentityProviderInput, error) {
+	var it graphql1.CreateIdentityProviderInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "jitUsers", "defaultRole", "allowedEmailDomains", "config"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "jitUsers":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jitUsers"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JitUsers = data
+		case "defaultRole":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("defaultRole"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DefaultRole = data
+		case "allowedEmailDomains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowedEmailDomains"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowedEmailDomains = data
+		case "config":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
+			data, err := ec.unmarshalNProviderConfigInput2ᚖplatriumᚋinternalᚋgraphqlᚐProviderConfigInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Config = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateLocalUserInput(ctx context.Context, obj any) (graphql1.CreateLocalUserInput, error) {
 	var it graphql1.CreateLocalUserInput
 	if obj == nil {
@@ -8763,6 +10662,126 @@ func (ec *executionContext) unmarshalInputGeneralAccessInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputOidcConfigInput(ctx context.Context, obj any) (graphql1.OidcConfigInput, error) {
+	var it graphql1.OidcConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["requireEmailVerified"]; !present {
+		asMap["requireEmailVerified"] = true
+	}
+
+	fieldsInOrder := [...]string{"issuer", "clientId", "clientSecret", "scopes", "emailClaim", "nameClaim", "pictureClaim", "requireEmailVerified", "extraAuthParams"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "issuer":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("issuer"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Issuer = data
+		case "clientId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientID = data
+		case "clientSecret":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientSecret"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientSecret = data
+		case "scopes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scopes"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Scopes = data
+		case "emailClaim":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailClaim"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EmailClaim = data
+		case "nameClaim":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("nameClaim"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NameClaim = data
+		case "pictureClaim":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pictureClaim"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PictureClaim = data
+		case "requireEmailVerified":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requireEmailVerified"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequireEmailVerified = data
+		case "extraAuthParams":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("extraAuthParams"))
+			data, err := ec.unmarshalOAuthParamInput2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAuthParamInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ExtraAuthParams = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputProviderConfigInput(ctx context.Context, obj any) (graphql1.ProviderConfigInput, error) {
+	var it graphql1.ProviderConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"oidc"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "oidc":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("oidc"))
+			data, err := ec.unmarshalOOidcConfigInput2ᚖplatriumᚋinternalᚋgraphqlᚐOidcConfigInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Oidc = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputShareInput(ctx context.Context, obj any) (graphql1.ShareInput, error) {
 	var it graphql1.ShareInput
 	if obj == nil {
@@ -8828,6 +10847,57 @@ func (ec *executionContext) unmarshalInputShareInput(ctx context.Context, obj an
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateIdentityProviderInput(ctx context.Context, obj any) (graphql1.UpdateIdentityProviderInput, error) {
+	var it graphql1.UpdateIdentityProviderInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "jitUsers", "defaultRole", "allowedEmailDomains"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "jitUsers":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jitUsers"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JitUsers = data
+		case "defaultRole":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("defaultRole"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DefaultRole = data
+		case "allowedEmailDomains":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowedEmailDomains"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowedEmailDomains = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateLocalUserInput(ctx context.Context, obj any) (graphql1.UpdateLocalUserInput, error) {
 	var it graphql1.UpdateLocalUserInput
 	if obj == nil {
@@ -8865,6 +10935,85 @@ func (ec *executionContext) unmarshalInputUpdateLocalUserInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateOidcConfigInput(ctx context.Context, obj any) (graphql1.UpdateOidcConfigInput, error) {
+	var it graphql1.UpdateOidcConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"clientId", "clientSecret", "scopes", "emailClaim", "nameClaim", "pictureClaim", "requireEmailVerified", "extraAuthParams"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "clientId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientID = data
+		case "clientSecret":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientSecret"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientSecret = data
+		case "scopes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scopes"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Scopes = data
+		case "emailClaim":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailClaim"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EmailClaim = data
+		case "nameClaim":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("nameClaim"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NameClaim = data
+		case "pictureClaim":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pictureClaim"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PictureClaim = data
+		case "requireEmailVerified":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requireEmailVerified"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequireEmailVerified = data
+		case "extraAuthParams":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("extraAuthParams"))
+			data, err := ec.unmarshalOAuthParamInput2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAuthParamInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ExtraAuthParams = data
+		}
+	}
+	return it, nil
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
@@ -8892,6 +11041,26 @@ func (ec *executionContext) _DriveItem(ctx context.Context, sel ast.SelectionSet
 			return typedObj
 		} else {
 			panic(fmt.Errorf("unexpected type %T; non-generated variants of DriveItem must implement graphql.Marshaler", obj))
+		}
+	}
+}
+
+func (ec *executionContext) _IdentityProviderConfig(ctx context.Context, sel ast.SelectionSet, obj graphql1.IdentityProviderConfig) graphql.Marshaler {
+	switch obj := (obj).(type) {
+	case nil:
+		return graphql.Null
+	case graphql1.OidcConfig:
+		return ec._OidcConfig(ctx, sel, &obj)
+	case *graphql1.OidcConfig:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._OidcConfig(ctx, sel, obj)
+	default:
+		if typedObj, ok := obj.(graphql.Marshaler); ok {
+			return typedObj
+		} else {
+			panic(fmt.Errorf("unexpected type %T; non-generated variants of IdentityProviderConfig must implement graphql.Marshaler", obj))
 		}
 	}
 }
@@ -9196,6 +11365,49 @@ func (ec *executionContext) _AdminUserEdge(ctx context.Context, sel ast.Selectio
 			}
 		case "node":
 			out.Values[i] = ec._AdminUserEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var authParamImplementors = []string{"AuthParam"}
+
+func (ec *executionContext) _AuthParam(ctx context.Context, sel ast.SelectionSet, obj *graphql1.AuthParam) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, authParamImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AuthParam")
+		case "name":
+			out.Values[i] = ec._AuthParam_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._AuthParam_value(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -9808,6 +12020,89 @@ func (ec *executionContext) _GeneralAccess(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var identityProviderImplementors = []string{"IdentityProvider"}
+
+func (ec *executionContext) _IdentityProvider(ctx context.Context, sel ast.SelectionSet, obj *graphql1.IdentityProvider) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, identityProviderImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("IdentityProvider")
+		case "id":
+			out.Values[i] = ec._IdentityProvider_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._IdentityProvider_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "type":
+			out.Values[i] = ec._IdentityProvider_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isLocal":
+			out.Values[i] = ec._IdentityProvider_isLocal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "enabled":
+			out.Values[i] = ec._IdentityProvider_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jitUsers":
+			out.Values[i] = ec._IdentityProvider_jitUsers(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "defaultRole":
+			out.Values[i] = ec._IdentityProvider_defaultRole(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "allowedEmailDomains":
+			out.Values[i] = ec._IdentityProvider_allowedEmailDomains(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "userCount":
+			out.Values[i] = ec._IdentityProvider_userCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "config":
+			out.Values[i] = ec._IdentityProvider_config(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var identitySourceImplementors = []string{"IdentitySource"}
 
 func (ec *executionContext) _IdentitySource(ctx context.Context, sel ast.SelectionSet, obj *graphql1.IdentitySource) graphql.Marshaler {
@@ -10180,6 +12475,48 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createIdentityProvider":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createIdentityProvider(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateIdentityProvider":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateIdentityProvider(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateOidcConfig":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateOidcConfig(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setIdentityProviderEnabled":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setIdentityProviderEnabled(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteIdentityProvider":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteIdentityProvider(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "testOidcDiscovery":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_testOidcDiscovery(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "shareItem":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_shareItem(ctx, field)
@@ -10206,6 +12543,157 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 				return ec._Mutation_setInheritance(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var oidcConfigImplementors = []string{"OidcConfig", "IdentityProviderConfig"}
+
+func (ec *executionContext) _OidcConfig(ctx context.Context, sel ast.SelectionSet, obj *graphql1.OidcConfig) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oidcConfigImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OidcConfig")
+		case "issuer":
+			out.Values[i] = ec._OidcConfig_issuer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientId":
+			out.Values[i] = ec._OidcConfig_clientId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "scopes":
+			out.Values[i] = ec._OidcConfig_scopes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "emailClaim":
+			out.Values[i] = ec._OidcConfig_emailClaim(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nameClaim":
+			out.Values[i] = ec._OidcConfig_nameClaim(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pictureClaim":
+			out.Values[i] = ec._OidcConfig_pictureClaim(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requireEmailVerified":
+			out.Values[i] = ec._OidcConfig_requireEmailVerified(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "extraAuthParams":
+			out.Values[i] = ec._OidcConfig_extraAuthParams(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "redirectUri":
+			out.Values[i] = ec._OidcConfig_redirectUri(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var oidcDiscoveryResultImplementors = []string{"OidcDiscoveryResult"}
+
+func (ec *executionContext) _OidcDiscoveryResult(ctx context.Context, sel ast.SelectionSet, obj *graphql1.OidcDiscoveryResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oidcDiscoveryResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OidcDiscoveryResult")
+		case "ok":
+			out.Values[i] = ec._OidcDiscoveryResult_ok(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._OidcDiscoveryResult_message(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "authorizationEndpoint":
+			out.Values[i] = ec._OidcDiscoveryResult_authorizationEndpoint(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "tokenEndpoint":
+			out.Values[i] = ec._OidcDiscoveryResult_tokenEndpoint(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "jwksUri":
+			out.Values[i] = ec._OidcDiscoveryResult_jwksUri(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "scopesSupported":
+			out.Values[i] = ec._OidcDiscoveryResult_scopesSupported(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "claimsSupported":
+			out.Values[i] = ec._OidcDiscoveryResult_claimsSupported(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "supportsPkce":
+			out.Values[i] = ec._OidcDiscoveryResult_supportsPkce(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -10456,6 +12944,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_getChanges(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "identityProviders":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_identityProviders(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "identityProvider":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_identityProvider(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -11509,6 +14041,37 @@ func (ec *executionContext) marshalNAdminUserEdge2ᚖplatriumᚋinternalᚋgraph
 	return ec._AdminUserEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNAuthParam2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAuthParamᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql1.AuthParam) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAuthParam2ᚖplatriumᚋinternalᚋgraphqlᚐAuthParam(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAuthParam2ᚖplatriumᚋinternalᚋgraphqlᚐAuthParam(ctx context.Context, sel ast.SelectionSet, v *graphql1.AuthParam) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AuthParam(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAuthParamInput2ᚖplatriumᚋinternalᚋgraphqlᚐAuthParamInput(ctx context.Context, v any) (*graphql1.AuthParamInput, error) {
+	res, err := ec.unmarshalInputAuthParamInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -11523,6 +14086,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNCreateIdentityProviderInput2platriumᚋinternalᚋgraphqlᚐCreateIdentityProviderInput(ctx context.Context, v any) (graphql1.CreateIdentityProviderInput, error) {
+	res, err := ec.unmarshalInputCreateIdentityProviderInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNCreateLocalUserInput2platriumᚋinternalᚋgraphqlᚐCreateLocalUserInput(ctx context.Context, v any) (graphql1.CreateLocalUserInput, error) {
@@ -11780,6 +14348,32 @@ func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast
 	return ret
 }
 
+func (ec *executionContext) marshalNIdentityProvider2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdentityProviderᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql1.IdentityProvider) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNIdentityProvider2ᚖplatriumᚋinternalᚋgraphqlᚐIdentityProvider(ctx context.Context, sel ast.SelectionSet, v *graphql1.IdentityProvider) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._IdentityProvider(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNIdentitySource2ᚕᚖplatriumᚋinternalᚋgraphqlᚐIdentitySourceᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql1.IdentitySource) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -11884,6 +14478,16 @@ func (ec *executionContext) marshalNMe2ᚖplatriumᚋinternalᚋgraphqlᚐMe(ctx
 	return ec._Me(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNOidcDiscoveryResult2ᚖplatriumᚋinternalᚋgraphqlᚐOidcDiscoveryResult(ctx context.Context, sel ast.SelectionSet, v *graphql1.OidcDiscoveryResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OidcDiscoveryResult(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖplatriumᚋinternalᚋgraphqlᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *graphql1.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -11920,6 +14524,7 @@ var (
 		"ROLES_ASSIGN":         authz.PermRolesAssign,
 		"SHARED_DRIVES_CREATE": authz.PermSharedDrivesCreate,
 		"POLICIES_MANAGE":      authz.PermPoliciesManage,
+		"IDP_MANAGE":           authz.PermIdpManage,
 		"TENANTS_MANAGE":       authz.PermTenantsManage,
 	}
 	marshalNPermission2platriumᚋinternalᚋauthzᚐPermission = map[authz.Permission]string{
@@ -11930,6 +14535,7 @@ var (
 		authz.PermRolesAssign:        "ROLES_ASSIGN",
 		authz.PermSharedDrivesCreate: "SHARED_DRIVES_CREATE",
 		authz.PermPoliciesManage:     "POLICIES_MANAGE",
+		authz.PermIdpManage:          "IDP_MANAGE",
 		authz.PermTenantsManage:      "TENANTS_MANAGE",
 	}
 )
@@ -11962,6 +14568,11 @@ func (ec *executionContext) marshalNPermission2ᚕplatriumᚋinternalᚋauthzᚐ
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalNProviderConfigInput2ᚖplatriumᚋinternalᚋgraphqlᚐProviderConfigInput(ctx context.Context, v any) (*graphql1.ProviderConfigInput, error) {
+	res, err := ec.unmarshalInputProviderConfigInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNRoleOption2ᚕᚖplatriumᚋinternalᚋgraphqlᚐRoleOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*graphql1.RoleOption) graphql.Marshaler {
@@ -12106,8 +14717,18 @@ func (ec *executionContext) marshalNTenantAuthConfig2ᚖplatriumᚋinternalᚋgr
 	return ec._TenantAuthConfig(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNUpdateIdentityProviderInput2platriumᚋinternalᚋgraphqlᚐUpdateIdentityProviderInput(ctx context.Context, v any) (graphql1.UpdateIdentityProviderInput, error) {
+	res, err := ec.unmarshalInputUpdateIdentityProviderInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateLocalUserInput2platriumᚋinternalᚋgraphqlᚐUpdateLocalUserInput(ctx context.Context, v any) (graphql1.UpdateLocalUserInput, error) {
 	res, err := ec.unmarshalInputUpdateLocalUserInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateOidcConfigInput2platriumᚋinternalᚋgraphqlᚐUpdateOidcConfigInput(ctx context.Context, v any) (graphql1.UpdateOidcConfigInput, error) {
+	res, err := ec.unmarshalInputUpdateOidcConfigInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -12251,6 +14872,23 @@ func (ec *executionContext) marshalN__TypeKind2string(ctx context.Context, sel a
 	return res
 }
 
+func (ec *executionContext) unmarshalOAuthParamInput2ᚕᚖplatriumᚋinternalᚋgraphqlᚐAuthParamInputᚄ(ctx context.Context, v any) ([]*graphql1.AuthParamInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]*graphql1.AuthParamInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNAuthParamInput2ᚖplatriumᚋinternalᚋgraphqlᚐAuthParamInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 func (ec *executionContext) unmarshalOBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -12350,6 +14988,13 @@ func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) marshalOIdentityProviderConfig2platriumᚋinternalᚋgraphqlᚐIdentityProviderConfig(ctx context.Context, sel ast.SelectionSet, v graphql1.IdentityProviderConfig) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._IdentityProviderConfig(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -12391,6 +15036,49 @@ func (ec *executionContext) marshalOItemRef2ᚖplatriumᚋinternalᚋgraphqlᚐI
 		return graphql.Null
 	}
 	return ec._ItemRef(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOOidcConfigInput2ᚖplatriumᚋinternalᚋgraphqlᚐOidcConfigInput(ctx context.Context, v any) (*graphql1.OidcConfigInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputOidcConfigInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {

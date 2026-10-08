@@ -24,6 +24,10 @@ type DriveItem interface {
 	GetUpdatedAt() time.Time
 }
 
+type IdentityProviderConfig interface {
+	IsIdentityProviderConfig()
+}
+
 type AccessGrant struct {
 	ID          string `json:"id"`
 	SubjectType string `json:"subjectType"`
@@ -78,6 +82,26 @@ type AdminUserConnection struct {
 type AdminUserEdge struct {
 	Cursor string     `json:"cursor"`
 	Node   *AdminUser `json:"node"`
+}
+
+// An extra parameter sent on the authorization request, e.g. Auth0's `audience`.
+type AuthParam struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type AuthParamInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type CreateIdentityProviderInput struct {
+	Name     string `json:"name"`
+	JitUsers bool   `json:"jitUsers"`
+	// Must be a role without administrative permissions.
+	DefaultRole         string               `json:"defaultRole"`
+	AllowedEmailDomains []string             `json:"allowedEmailDomains,omitempty"`
+	Config              *ProviderConfigInput `json:"config"`
 }
 
 type CreateLocalUserInput struct {
@@ -234,6 +258,27 @@ type GeneralAccessInput struct {
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
+type IdentityProvider struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// LOCAL, OIDC or SAML.
+	Type string `json:"type"`
+	// True for the built-in provider: read-only and permanent.
+	IsLocal bool `json:"isLocal"`
+	// A disabled provider refuses sign-ins. Its users and their files stay.
+	Enabled bool `json:"enabled"`
+	// Whether a first sign-in creates the user. When false only existing users can sign in.
+	JitUsers bool `json:"jitUsers"`
+	// The role users created on first sign-in start with. Never an administrative role.
+	DefaultRole string `json:"defaultRole"`
+	// When not empty, only these email domains may sign in.
+	AllowedEmailDomains []string `json:"allowedEmailDomains"`
+	// How many users sign in through this provider.
+	UserCount int `json:"userCount"`
+	// Null for the built-in provider.
+	Config IdentityProviderConfig `json:"config,omitempty"`
+}
+
 // Where a user (or group) comes from: the built-in provider, or an external one.
 type IdentitySource struct {
 	ID   string `json:"id"`
@@ -285,9 +330,59 @@ type Me struct {
 type Mutation struct {
 }
 
+type OidcConfig struct {
+	Issuer   string `json:"issuer"`
+	ClientID string `json:"clientId"`
+	// Scopes requested in addition to `openid`.
+	Scopes               []string     `json:"scopes"`
+	EmailClaim           string       `json:"emailClaim"`
+	NameClaim            string       `json:"nameClaim"`
+	PictureClaim         string       `json:"pictureClaim"`
+	RequireEmailVerified bool         `json:"requireEmailVerified"`
+	ExtraAuthParams      []*AuthParam `json:"extraAuthParams"`
+	// Register this address with the provider as an allowed redirect (callback) URL.
+	RedirectURI string `json:"redirectUri"`
+}
+
+func (OidcConfig) IsIdentityProviderConfig() {}
+
+type OidcConfigInput struct {
+	// The provider's issuer URL, e.g. https://acme.auth0.com. A trailing slash is ignored. Can not be changed later.
+	Issuer       string   `json:"issuer"`
+	ClientID     string   `json:"clientId"`
+	ClientSecret string   `json:"clientSecret"`
+	Scopes       []string `json:"scopes,omitempty"`
+	// Which claim holds each attribute. Default: email, name, picture.
+	EmailClaim   *string `json:"emailClaim,omitempty"`
+	NameClaim    *string `json:"nameClaim,omitempty"`
+	PictureClaim *string `json:"pictureClaim,omitempty"`
+	// Refuse sign-ins the provider has not verified the email of. Default: true.
+	RequireEmailVerified *bool             `json:"requireEmailVerified,omitempty"`
+	ExtraAuthParams      []*AuthParamInput `json:"extraAuthParams,omitempty"`
+}
+
+// What reading a provider's discovery document found.
+type OidcDiscoveryResult struct {
+	Ok bool `json:"ok"`
+	// Why it failed, when it did.
+	Message               *string  `json:"message,omitempty"`
+	AuthorizationEndpoint *string  `json:"authorizationEndpoint,omitempty"`
+	TokenEndpoint         *string  `json:"tokenEndpoint,omitempty"`
+	JwksURI               *string  `json:"jwksUri,omitempty"`
+	ScopesSupported       []string `json:"scopesSupported,omitempty"`
+	ClaimsSupported       []string `json:"claimsSupported,omitempty"`
+	// False when the provider lists its PKCE methods and S256 is not one of them.
+	SupportsPkce *bool `json:"supportsPkce,omitempty"`
+}
+
 type PageInfo struct {
 	HasNextPage bool    `json:"hasNextPage"`
 	EndCursor   *string `json:"endCursor,omitempty"`
+}
+
+// The connection settings of a new provider: exactly one member, for its type.
+type ProviderConfigInput struct {
+	Oidc *OidcConfigInput `json:"oidc,omitempty"`
 }
 
 type Query struct {
@@ -345,9 +440,28 @@ type TenantAuthConfig struct {
 	Providers    []*IdpProvider `json:"providers"`
 }
 
+type UpdateIdentityProviderInput struct {
+	Name                *string  `json:"name,omitempty"`
+	JitUsers            *bool    `json:"jitUsers,omitempty"`
+	DefaultRole         *string  `json:"defaultRole,omitempty"`
+	AllowedEmailDomains []string `json:"allowedEmailDomains,omitempty"`
+}
+
 type UpdateLocalUserInput struct {
 	DisplayName *string `json:"displayName,omitempty"`
 	Role        *string `json:"role,omitempty"`
+}
+
+type UpdateOidcConfigInput struct {
+	ClientID *string `json:"clientId,omitempty"`
+	// Leave out to keep the current secret.
+	ClientSecret         *string           `json:"clientSecret,omitempty"`
+	Scopes               []string          `json:"scopes,omitempty"`
+	EmailClaim           *string           `json:"emailClaim,omitempty"`
+	NameClaim            *string           `json:"nameClaim,omitempty"`
+	PictureClaim         *string           `json:"pictureClaim,omitempty"`
+	RequireEmailVerified *bool             `json:"requireEmailVerified,omitempty"`
+	ExtraAuthParams      []*AuthParamInput `json:"extraAuthParams,omitempty"`
 }
 
 type DriveItemEventType string

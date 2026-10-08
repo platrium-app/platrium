@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -75,9 +76,11 @@ function RowMenu({
           </>
         )}
         {!user.editable && (
-          <DropdownMenuLabel className="max-w-64 font-normal whitespace-normal text-muted-foreground">
-            Managed by {user.source.name}. Edit this user there.
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="max-w-64 font-normal whitespace-normal text-muted-foreground">
+              Managed by {user.source.name}. Edit this user there.
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
         )}
         {canToggle && (canEdit || !user.editable) && <DropdownMenuSeparator />}
         {canToggle &&

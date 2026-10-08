@@ -8,6 +8,7 @@ import (
 
 	gqlgraphql "github.com/99designs/gqlgen/graphql"
 
+	"platrium/internal/auth"
 	"platrium/internal/authz"
 	"platrium/internal/identity"
 	"platrium/internal/orchestrator"
@@ -49,8 +50,8 @@ func mapAdminUser(m *orchestrator.ManagedUser) *AdminUser {
 		Disabled:    u.Disabled(),
 		DisabledAt:  u.DisabledAt,
 		CreatedAt:   u.CreatedAt,
-		Source:      &IdentitySource{ID: u.IdpID, Name: u.IdpName, Type: u.IdpType, IsLocal: u.IsLocal()},
-		Editable:    u.IsLocal(),
+		Source:      &IdentitySource{ID: u.IdpID, Name: u.IdpName, Type: u.IdpType, IsLocal: auth.IdpType(u.IdpType).IsLocal()},
+		Editable:    auth.IdpType(u.IdpType).IsLocal(),
 		Manageable:  m.Manageable,
 	}
 }

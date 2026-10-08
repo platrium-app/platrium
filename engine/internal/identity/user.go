@@ -117,6 +117,23 @@ func (r *UserStore) CreateUserTx(ctx context.Context, tx *ent.Tx, p CreateUserPa
 	return userFromEnt(u), nil
 }
 
+// SyncProfile updates the email address and display name of a user whose
+// identity provider owns them. Nothing else about the user changes.
+func (r *UserStore) SyncProfile(ctx context.Context, tenantID, userID, email, displayName string) error {
+	n, err := r.db.User.Update().
+		Where(user.ID(userID), user.TenantID(tenantID)).
+		SetEmail(email).
+		SetDisplayName(displayName).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update profile: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: user", ErrNotFound)
+	}
+	return nil
+}
+
 // Account is the part of a user that decides whether and how they may act:
 // what their role carries, whether they are blocked, and when their sessions
 // were last revoked. It is one row read, whatever is asked of it.

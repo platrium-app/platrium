@@ -23,7 +23,8 @@ Foreign key relationships enforce the hierarchy (e.g., all identities and storag
 
 | Entity | Description | Relationships |
 |---|---|---|
-| `idp_providers` | Identity Providers (e.g., Azure AD, Local). | Belongs to `tenants` (`tenant_id`). |
+| `idp_providers` | Identity Providers (OIDC, SAML, Local): name, type, enabled flag and the provisioning policy (JIT users, default role, allowed email domains). | Belongs to `tenants` (`tenant_id`). |
+| `idp_oidc_configs` | The OpenID Connect settings of an OIDC provider: issuer, client ID, the client secret (sealed with `PLATRIUM_SECRET_KEY`), scopes and the claim names it reads. One row per provider, deleted with it. | Belongs to `idp_providers` (`idp_id`, unique). |
 | `users` | Individuals authenticated via an IdP. | Belongs to `tenants` (`tenant_id`) and `idp_providers` (`idp_id`). |
 | `groups` | Collections of users. | Belongs to `tenants` (`tenant_id`) and `idp_providers` (`idp_id`). |
 | `local_credentials` | Password hashes for local IdP users. | Belongs to `users` (`user_id`). |

@@ -1,0 +1,138 @@
+# Administration of an organization's identity providers: where its users sign
+# in. Every field is gated by IDP_MANAGE (see admin.graphql for @requires).
+#
+# The settings every provider shares (name, enabled, how users are created) are
+# the same for every type. Only the connection settings are specific to a
+# protocol: they live in `config`, a union with one member per protocol, so a
+# client renders the common part once and picks a form by the member's type.
+#
+# The built-in (LOCAL) provider is created with the organization, can not be
+# edited, disabled or deleted, and is listed so users can be filtered by it.
+
+type IdentityProvider {
+  id: ID!
+  name: String!
+  "LOCAL, OIDC or SAML."
+  type: String!
+  "True for the built-in provider: read-only and permanent."
+  isLocal: Boolean!
+  "A disabled provider refuses sign-ins. Its users and their files stay."
+  enabled: Boolean!
+  "Whether a first sign-in creates the user. When false only existing users can sign in."
+  jitUsers: Boolean!
+  "The role users created on first sign-in start with. Never an administrative role."
+  defaultRole: String!
+  "When not empty, only these email domains may sign in."
+  allowedEmailDomains: [String!]!
+  "How many users sign in through this provider."
+  userCount: Int!
+  "Null for the built-in provider."
+  config: IdentityProviderConfig
+}
+
+union IdentityProviderConfig = OidcConfig
+
+"An extra parameter sent on the authorization request, e.g. Auth0's `audience`."
+type AuthParam {
+  name: String!
+  value: String!
+}
+
+type OidcConfig {
+  issuer: String!
+  clientId: String!
+  "Scopes requested in addition to `openid`."
+  scopes: [String!]!
+  emailClaim: String!
+  nameClaim: String!
+  pictureClaim: String!
+  requireEmailVerified: Boolean!
+  extraAuthParams: [AuthParam!]!
+  "Register this address with the provider as an allowed redirect (callback) URL."
+  redirectUri: String!
+}
+
+input AuthParamInput {
+  name: String!
+  value: String!
+}
+
+input OidcConfigInput {
+  "The provider's issuer URL, e.g. https://acme.auth0.com. A trailing slash is ignored. Can not be changed later."
+  issuer: String!
+  clientId: String!
+  clientSecret: String!
+  scopes: [String!]
+  "Which claim holds each attribute. Default: email, name, picture."
+  emailClaim: String
+  nameClaim: String
+  pictureClaim: String
+  "Refuse sign-ins the provider has not verified the email of. Default: true."
+  requireEmailVerified: Boolean = true
+  extraAuthParams: [AuthParamInput!]
+}
+
+"The connection settings of a new provider: exactly one member, for its type."
+input ProviderConfigInput @oneOf {
+  oidc: OidcConfigInput
+}
+
+input CreateIdentityProviderInput {
+  name: String!
+  jitUsers: Boolean!
+  "Must be a role without administrative permissions."
+  defaultRole: String!
+  allowedEmailDomains: [String!]
+  config: ProviderConfigInput!
+}
+
+input UpdateIdentityProviderInput {
+  name: String
+  jitUsers: Boolean
+  defaultRole: String
+  allowedEmailDomains: [String!]
+}
+
+input UpdateOidcConfigInput {
+  clientId: String
+  "Leave out to keep the current secret."
+  clientSecret: String
+  scopes: [String!]
+  emailClaim: String
+  nameClaim: String
+  pictureClaim: String
+  requireEmailVerified: Boolean
+  extraAuthParams: [AuthParamInput!]
+}
+
+"What reading a provider's discovery document found."
+type OidcDiscoveryResult {
+  ok: Boolean!
+  "Why it failed, when it did."
+  message: String
+  authorizationEndpoint: String
+  tokenEndpoint: String
+  jwksUri: String
+  scopesSupported: [String!]
+  claimsSupported: [String!]
+  "False when the provider lists its PKCE methods and S256 is not one of them."
+  supportsPkce: Boolean
+}
+
+extend type Query {
+  identityProviders: [IdentityProvider!]! @requires(permission: IDP_MANAGE)
+  identityProvider(id: ID!): IdentityProvider! @requires(permission: IDP_MANAGE)
+}
+
+extend type Mutation {
+  createIdentityProvider(input: CreateIdentityProviderInput!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  "The settings every provider type shares."
+  updateIdentityProvider(id: ID!, input: UpdateIdentityProviderInput!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  "The connection settings of an OIDC provider. The issuer is fixed at creation."
+  updateOidcConfig(id: ID!, input: UpdateOidcConfigInput!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  setIdentityProviderEnabled(id: ID!, enabled: Boolean!): IdentityProvider! @requires(permission: IDP_MANAGE)
+  "Only a provider with no users can be deleted; disable it otherwise."
+  deleteIdentityProvider(id: ID!): Boolean! @requires(permission: IDP_MANAGE)
+  "Checks that an issuer URL is a working OpenID provider. Saves nothing."
+  testOidcDiscovery(issuer: String!): OidcDiscoveryResult! @requires(permission: IDP_MANAGE)
+}

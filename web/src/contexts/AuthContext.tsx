@@ -4,6 +4,8 @@ export interface AuthUser {
   user_id: string
   tenant_id: string
   email: string
+  /** The user's name as the server has it now. */
+  display_name: string
   auth_kind?: "SESSION" | "DEVICE" | "APP"
 }
 

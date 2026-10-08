@@ -120,7 +120,7 @@ func (r *queryResolver) AdminIdentitySources(ctx context.Context) ([]*IdentitySo
 	}
 	out := make([]*IdentitySource, 0, len(idps))
 	for _, i := range idps {
-		out = append(out, &IdentitySource{ID: i.ID, Name: i.Name, Type: i.Type, IsLocal: i.IsLocal()})
+		out = append(out, &IdentitySource{ID: i.ID, Name: i.Name, Type: string(i.Type), IsLocal: i.IsLocal()})
 	}
 	return out, nil
 }

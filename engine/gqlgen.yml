@@ -30,4 +30,5 @@ models:
       ROLES_ASSIGN: { value: platrium/internal/authz.PermRolesAssign }
       SHARED_DRIVES_CREATE: { value: platrium/internal/authz.PermSharedDrivesCreate }
       POLICIES_MANAGE: { value: platrium/internal/authz.PermPoliciesManage }
+      IDP_MANAGE: { value: platrium/internal/authz.PermIdpManage }
       TENANTS_MANAGE: { value: platrium/internal/authz.PermTenantsManage }

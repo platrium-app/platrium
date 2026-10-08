@@ -247,11 +247,17 @@ paths:
     get:
       operationId: Auth_idp_redirect
       summary: SSO Login Redirect
-      description: Initiates an external SSO handshake (SAML/OIDC) and redirects the user.
+      description: Initiates an external SSO handshake (SAML/OIDC) and redirects the user. return_to is a same-origin path to land on after signing in.
       parameters:
         - name: idp
           in: query
           required: true
+          schema:
+            type: string
+          explode: false
+        - name: return_to
+          in: query
+          required: false
           schema:
             type: string
           explode: false
@@ -556,6 +562,7 @@ components:
         - user_id
         - tenant_id
         - email
+        - display_name
         - auth_kind
       properties:
         user_id:
@@ -564,6 +571,10 @@ components:
           type: string
         email:
           type: string
+          description: The address the user is signed in with, as the database has it now (an external provider keeps it current).
+        display_name:
+          type: string
+          description: The user's name as the database has it now, not as it was at sign-in.
         auth_kind:
           type: string
           enum:

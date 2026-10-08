@@ -2,3 +2,24 @@
 title: Dev Environment Setup
 description: The super-awesome guide to setup your local dev env and contribute to Platrium!
 ---
+
+## Settings The Engine Needs
+
+The engine reads its configuration from environment variables, and it **refuses to start** if a required one is missing. Here are the ones you will always need:
+
+| Variable | What it is |
+|---|---|
+| `DB_DRIVER`, `DB_DSN` | The database. `sqlite` is fine for development. See [the database](../architecture/database/overview). |
+| `KV_BADGER_PATH` | Where the embedded key-value store keeps its files. |
+| `APP_URL` | The public address you open Platrium at, for example `http://localhost:3000`. Upload URLs and identity-provider redirect addresses are built from it. |
+| `PLATRIUM_SECRET_KEY` | One secret the whole cluster shares. It signs upload receipts and seals secrets stored in the database (like an identity provider's client secret). |
+
+A throwaway key for development is one command away:
+
+```bash
+export PLATRIUM_SECRET_KEY="$(openssl rand -base64 32)"
+```
+
+:::warning
+There is deliberately **no default** for `PLATRIUM_SECRET_KEY`: a built-in key would make everything sealed under it effectively plaintext. Change it later and anything already sealed (provider client secrets) can no longer be read, so keep it somewhere safe.
+:::

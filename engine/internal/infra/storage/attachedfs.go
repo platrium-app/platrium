@@ -18,12 +18,12 @@ import (
 
 	"platrium/internal/fsops"
 	"platrium/internal/pipelines"
+	"platrium/internal/secrets"
 )
 
 // AttachedFSEnv reads global infrastructure details from the host server environment.
 type AttachedFSEnv struct {
-	AppURL     string `env:"APP_URL"`
-	HMACSecret string `env:"HMAC_SECRET" envDefault:"changeinprod"`
+	AppURL string `env:"APP_URL,required"`
 }
 
 // AttachedFSConfig holds the unique database parameters per isolated volume layout.
@@ -54,6 +54,8 @@ func AttachedFSBackendFactory(store AttachedFSStore) BackendFactory {
 		panic(fmt.Sprintf("failed to parse global AFS environment setup: %v", err))
 	}
 
+	signingSecret := secrets.FromEnv().SigningSecret()
+
 	return func(ctx context.Context, backendId string, rawConfig json.RawMessage) (Backend, error) {
 		var instanceCfg AttachedFSConfig
 		if err := json.Unmarshal(rawConfig, &instanceCfg); err != nil {
@@ -69,7 +71,7 @@ func AttachedFSBackendFactory(store AttachedFSStore) BackendFactory {
 			backendId:  backendId,
 			mountPath:  instanceCfg.MountPath,
 			apiBaseURL: envCfg.AppURL,
-			hmacSecret: envCfg.HMACSecret,
+			hmacSecret: signingSecret,
 		}, nil
 	}
 }

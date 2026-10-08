@@ -5,11 +5,6 @@ description: The bulletproof password vault that keeps the lights on when SSO go
 
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 
-:::warning
-**Work in Progress**
-The architectural integration for the `IdPAuthHandoff` engine is actively being developed. The flows and interfaces described here regarding SSO handoffs may change as the feature stabilizes.
-:::
-
 While Platrium is designed to support Enterprise SSO (SAML, OIDC) out of the box, every system needs a reliable fallback. **Cluster Local Users** represent identities whose authentication secrets (Bcrypt hashes, TOTP seeds) are securely managed directly by Platrium itself, rather than delegated to an external identity provider.
 
 ## The LocalCredential Table
@@ -74,12 +69,15 @@ Users from an external provider cannot be reset here, because Platrium never hel
 
 Whoever creates a local user, an administrator or the setup flow that makes a tenant's first administrator, goes through the same validation (`local.NormalizeEmail`, `local.ValidatePassword`): a plain email address, stored lowercased, and a password of 8 to 72 characters. bcrypt ignores or rejects anything past 72 bytes, so a longer one would only look stronger.
 
-## IdPAuthHandoff Integration (In-Progress)
+## Signing In
 
-When a Local User attempts to log in via the web UI, the request first hits the HRD (Home Realm Discovery) router. Once HRD confirms the target Tenant uses a `LOCAL` IdpProvider, it triggers the `IdPAuthHandoff` flow.
+A local user signs in through the same front door as everyone else. The login page asks the tenant which providers it offers; the built-in one is the email and password form.
 
-The handoff engine ties the identity and the secret together:
-1. It looks up the user by their IdP binding (`idp_id` plus `external_id`).
-2. It loads that user's `LocalCredential` by `user_id`.
-3. It verifies the Bcrypt hash against the user's input. A wrong password returns `false`; a missing credential returns a not-found error.
-4. If successful, it securely issues the final JWT Session!
+1. The user is looked up by their binding (`idp_id` plus `external_id`, which for local users is their lowercased email).
+2. Their `LocalCredential` is loaded by `user_id` and the bcrypt hash is checked. An unknown email takes as long as a wrong password, so a stopwatch can't tell which emails have accounts.
+3. The result goes through `IdpProvider.Admit`, **the same gate every provider's sign-in passes**: is the provider enabled, is the user disabled, is the email allowed. See [OpenID Connect](./oidc#the-big-idea-protocols-only-verify) for how the other protocols share it.
+4. A session is started.
+
+:::info
+The built-in provider is read-only and permanent: it cannot be created again, edited, disabled or deleted. It is what keeps the lights on when SSO is down.
+:::

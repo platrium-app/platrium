@@ -256,15 +256,19 @@ pub async fn auth_delete_client(configuration: &configuration::Configuration, id
     }
 }
 
-/// Initiates an external SSO handshake (SAML/OIDC) and redirects the user.
-pub async fn auth_idp_redirect(configuration: &configuration::Configuration, idp: &str) -> Result<(), Error<AuthIdpRedirectError>> {
+/// Initiates an external SSO handshake (SAML/OIDC) and redirects the user. return_to is a same-origin path to land on after signing in.
+pub async fn auth_idp_redirect(configuration: &configuration::Configuration, idp: &str, return_to: Option<&str>) -> Result<(), Error<AuthIdpRedirectError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_query_idp = idp;
+    let p_query_return_to = return_to;
 
     let uri_str = format!("{}/auth/login", configuration.base_path);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     req_builder = req_builder.query(&[("idp", &p_query_idp.to_string())]);
+    if let Some(ref param_value) = p_query_return_to {
+        req_builder = req_builder.query(&[("return_to", &param_value.to_string())]);
+    }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }

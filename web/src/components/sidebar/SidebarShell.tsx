@@ -48,7 +48,7 @@ export function SidebarShell({
         {user && (
           <NavUser
             user={{
-              name: user.email.split("@")[0] || "User",
+              name: user.display_name || user.email.split("@")[0] || "User",
               email: user.email,
               avatar: "",
             }}

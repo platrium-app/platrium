@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { NavSection } from "./NavSection"
-import { ADMIN_NAV_ITEMS } from "./nav-config"
+import { ADMIN_NAV_ITEMS, ADMIN_SIGN_IN_NAV_ITEMS } from "./nav-config"
 import { getLastAppLocation } from "./lastAppLocation"
 
 /** The sidebar inside the admin console. */
@@ -36,6 +36,13 @@ export function AdminSidebarPanel() {
         <SidebarGroupLabel>Users &amp; Groups</SidebarGroupLabel>
         <SidebarGroupContent>
           <NavSection items={ADMIN_NAV_ITEMS} />
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup>
+        <SidebarGroupLabel>Sign-in</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <NavSection items={ADMIN_SIGN_IN_NAV_ITEMS} />
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>

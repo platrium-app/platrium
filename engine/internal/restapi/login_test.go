@@ -17,6 +17,7 @@ import (
 // "No such user" must take about as long as "wrong password", or a stopwatch
 // tells an attacker which emails have accounts.
 func TestLoginDoesNotRevealWhichEmailsExist(t *testing.T) {
+	t.Setenv("PLATRIUM_SECRET_KEY", "test-secret-key")
 	ctx := context.Background()
 	d := dbtest.New(t)
 	users := identity.NewUserStore(d)

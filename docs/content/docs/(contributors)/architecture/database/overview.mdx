@@ -25,7 +25,7 @@ DB_DRIVER=postgres   # postgres | mysql | mariadb | sqlite
 DB_DSN="postgres://user:pass@localhost:5432/platrium?sslmode=disable"
 ```
 
-Pool tuning (`DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME`) and `DB_AUTO_MIGRATE` (default `true`) are optional.
+The engine also needs `APP_URL` and `PLATRIUM_SECRET_KEY`; see [the dev environment](../../dev-env). Pool tuning (`DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME`) and `DB_AUTO_MIGRATE` (default `true`) are optional.
 
 :::warning
 `DB_AUTO_MIGRATE` creates and alters tables on startup. It is convenient for development, but production deployments should move to reviewed, versioned migrations and set it to `false`.

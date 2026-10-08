@@ -156,6 +156,9 @@ func (r *TenantStore) GetPublicTenantAuthConfig(ctx context.Context, alias strin
 		Alias:    &t.Alias,
 	}
 	for _, i := range t.Edges.IdpProviders {
+		if !i.Enabled { // a disabled provider is not offered on the login page
+			continue
+		}
 		cfg.Providers = append(cfg.Providers, &PublicIdpProvider{ID: i.ID, Name: i.Name, Type: string(i.Type)})
 	}
 	return cfg, nil

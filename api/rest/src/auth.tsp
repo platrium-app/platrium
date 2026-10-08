@@ -21,8 +21,8 @@ interface Auth {
     @route("/login")
     @get
     @summary("SSO Login Redirect")
-    @doc("Initiates an external SSO handshake (SAML/OIDC) and redirects the user.")
-    idp_redirect(@query idp: string):
+    @doc("Initiates an external SSO handshake (SAML/OIDC) and redirects the user. return_to is a same-origin path to land on after signing in.")
+    idp_redirect(@query idp: string, @query return_to?: string):
         | SSORedirectResponse
         | Errors.NotFound
         | Errors.EngineInternal;
@@ -155,7 +155,12 @@ model AuthMeResponse {
     @statusCode _: 200;
     user_id: string;
     tenant_id: string;
+
+    @doc("The address the user is signed in with, as the database has it now (an external provider keeps it current).")
     email: string;
+
+    @doc("The user's name as the database has it now, not as it was at sign-in.")
+    display_name: string;
 
     @doc("How this request authenticated: SESSION (browser), DEVICE or APP (bearer token).")
     auth_kind: "SESSION" | "DEVICE" | "APP";

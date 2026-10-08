@@ -12,6 +12,7 @@ import (
 	"platrium/internal/auth"
 	"platrium/internal/auth/actor"
 	"platrium/internal/auth/protocol/local"
+	"platrium/internal/auth/protocol/oidc"
 	"platrium/internal/auth/session"
 	"platrium/internal/auth/token"
 	"platrium/internal/authz/sqlauthz"
@@ -25,6 +26,7 @@ import (
 	"platrium/internal/notifications/transports"
 	"platrium/internal/orchestrator"
 	"platrium/internal/restapi"
+	"platrium/internal/secrets"
 	"platrium/internal/setup"
 	"platrium/ui"
 
@@ -119,7 +121,20 @@ func main() {
 
 	actors := actor.NewResolver(authorizer, userStore)
 	restAPI := restapi.NewRestAPI(fsOps, actors, chunkStore, storageManager, notifBroker, idpStore, userStore, localUserStore, sessionManager, tokenStore, codeStore, deviceStore)
-	strictHandler := restapi.NewStrictHandler(restAPI, nil)
+
+	// OpenID Connect sign-in
+	oidcEndpoints, err := oidc.EndpointsFromEnv()
+	if err != nil {
+		log.Fatalf("failed to read OIDC endpoint settings: %v", err)
+	}
+	authManager := auth.NewManager(database, idpStore, userStore, userOrchestrator, sessionManager)
+	secretKeys := secrets.FromEnv()
+	oidcStore := oidc.NewStore(database, idpStore, secretKeys)
+	oidcClient := oidc.NewClient(oidcEndpoints, secretKeys.Sealer(secrets.PurposeAuthFlow))
+	oidcHandler := oidc.NewHandler(idpStore, oidcStore, oidcClient, authManager)
+	restAPI.OIDC = oidcHandler
+
+	strictHandler := restapi.NewStrictHandler(restAPI, []restapi.StrictMiddlewareFunc{restapi.WithExchange})
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -147,6 +162,7 @@ func main() {
 		GroupStore:  groupStore,
 		IdpStore:    idpStore,
 		UserAdmin:   orchestrator.NewUserAdmin(database, userStore, idpStore, localUserStore),
+		IdpAdmin:    orchestrator.NewIdpAdmin(userStore, idpStore, oidcStore, oidcClient, oidcEndpoints),
 	}
 	graphqlSrv := newGraphQLServer(tokenStore, graphql.NewExecutableSchema(graphql.Config{Resolvers: gqlResolver, Directives: gqlResolver.Directives()}))
 
@@ -178,9 +194,13 @@ func main() {
 		r.Use(session.Bearer(tokenStore))
 		r.Use(actors.Middleware)
 		r.Use(rateLimitPath("/api/auth/token", httprate.LimitByIP(20, time.Minute)))
+		// Each sign-in start stores a record for a few minutes, and a password
+		// login is guessable: bound both per address.
+		r.Use(rateLimitPath("/api/auth/login", httprate.LimitByIP(60, time.Minute)))
 
 		r.Get("/health", HealthHandler)
 		r.Mount("/attachedfs", attachedFsHandler.Routes())
+		r.Get("/auth/oidc/{idpId}/callback", oidcHandler.Callback)
 
 		// OpenAPI Generated Routes (Strict Server Mode)
 		restapi.HandlerFromMux(strictHandler, r)
