@@ -16,7 +16,7 @@ import (
 )
 
 // tables lists every table, used to wipe a shared real database between tests.
-var tables = []string{"drive_items", "drives", "auth_tokens", "devices", "domains", "grants", "group_members", "group_closures", "policy_groups", "groups", "local_credentials", "users", "idp_providers", "tenants"}
+var tables = []string{"drive_items", "drives", "auth_tokens", "devices", "domains", "grants", "group_members", "group_closures", "policy_groups", "groups", "local_credentials", "users", "idp_oidc_configs", "idp_providers", "tenants"}
 
 // New opens a migrated, empty database that is closed when the test ends.
 func New(t testing.TB) *db.DB {

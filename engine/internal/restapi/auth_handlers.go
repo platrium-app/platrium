@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"platrium/internal/apperr"
+	"platrium/internal/auth"
 	"platrium/internal/auth/actor"
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
@@ -52,8 +54,12 @@ func (a *RestAPI) AuthLocalUserLogin(ctx context.Context, request AuthLocalUserL
 		}, nil
 	}
 
-	if user.Disabled() {
-		msg := "This account has been disabled. Contact your administrator."
+	// The same gate every provider's sign-in passes.
+	if err := idp.Admit(user.Email, user); err != nil {
+		msg := "You cannot sign in with this account. Contact your administrator."
+		if errors.Is(err, auth.ErrUserDisabled) {
+			msg = "This account has been disabled. Contact your administrator."
+		}
 		return AuthLocalUserLogin401JSONResponse{
 			Message: &msg,
 		}, nil
@@ -88,21 +94,39 @@ func (a *RestAPI) AuthIdpRedirect(ctx context.Context, request AuthIdpRedirectRe
 		}, nil
 	}
 
-	if idp.IsLocal() {
+	if idp.IsLocal() || !idp.Enabled {
 		msg := "Identity Provider does not support SSO redirection"
-		return AuthIdpRedirect404JSONResponse{ // Or 400, but TypeSpec says 404 for missing SSO config
+		return AuthIdpRedirect404JSONResponse{
 			Message: &msg,
 		}, nil
 	}
 
-	// TODO: Phase 2 - Generate SAML/OIDC Auth URL using idp.ProtoConfig
-	idpRedirectUrl := "https://example.com/sso"
+	returnTo := ""
+	if request.Params.ReturnTo != nil {
+		returnTo = *request.Params.ReturnTo
+	}
 
-	return AuthIdpRedirect302Response{
-		Headers: AuthIdpRedirect302ResponseHeaders{
-			Location: idpRedirectUrl,
-		},
-	}, nil
+	switch idp.Type {
+	case auth.IdpTypeOIDC:
+		ex, ok := exchangeFrom(ctx)
+		if !ok {
+			return nil, errors.New("sign-in start needs the HTTP exchange (WithExchange middleware)")
+		}
+		redirectURL, err := a.OIDC.Begin(ex.w, ex.r, idp.ID, returnTo)
+		if errors.Is(err, apperr.ErrNotFound) {
+			msg := "Identity Provider not found"
+			return AuthIdpRedirect404JSONResponse{Message: &msg}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return AuthIdpRedirect302Response{
+			Headers: AuthIdpRedirect302ResponseHeaders{Location: redirectURL},
+		}, nil
+	default:
+		msg := "Identity Provider does not support SSO redirection"
+		return AuthIdpRedirect404JSONResponse{Message: &msg}, nil
+	}
 }
 
 // AuthVerify implements the POST /auth/mfa/verify endpoint
@@ -127,12 +151,20 @@ func (a *RestAPI) AuthMe(ctx context.Context, request AuthMeRequestObject) (Auth
 		return nil, err
 	}
 
+	// Name and address come from the user's row, not the session: a rename, or
+	// an identity provider updating the profile, shows without signing in again.
+	u, err := a.UserStore.Get(ctx, sess.TenantID, sess.UserID)
+	if err != nil {
+		return nil, err
+	}
+
 	info, _ := session.AuthInfoFromContext(ctx)
 	resp := AuthMe200JSONResponse{
-		UserId:   sess.UserID,
-		TenantId: sess.TenantID,
-		Email:    sess.Email,
-		AuthKind: AuthAuthMeResponseAuthKind(info.Kind),
+		UserId:      sess.UserID,
+		TenantId:    sess.TenantID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		AuthKind:    AuthAuthMeResponseAuthKind(info.Kind),
 	}
 	if info.DeviceID != "" {
 		resp.DeviceId = &info.DeviceID

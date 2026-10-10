@@ -152,15 +152,11 @@ func parseRole(s string) (authz.Role, error) {
 	return r, nil
 }
 
-// ownerSubject describes who owns a drive: a person for a private drive, or
-// the organization when ownerUserID is empty (a shared drive).
+// ownerSubject describes the person who owns a private drive. A shared drive
+// has no owner, so it returns nil and the item's access is only its grants.
 func (r *Resolver) ownerSubject(ctx context.Context, tenantID, ownerUserID, viewerID string) (*DirectorySubject, error) {
 	if ownerUserID == "" {
-		t, err := r.TenantStore.GetTenant(ctx, tenantID)
-		if err != nil {
-			return nil, err
-		}
-		return &DirectorySubject{Type: string(authz.SubjectTenant), ID: t.ID, Name: t.Name}, nil
+		return nil, nil
 	}
 	users, err := r.UserStore.GetByIDs(ctx, tenantID, []string{ownerUserID})
 	if err != nil {

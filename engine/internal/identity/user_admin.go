@@ -33,19 +33,12 @@ type UserCursor struct {
 	ID          string
 }
 
-// IdpTypeLocal is the type of the built-in identity provider, whose users
-// Platrium itself manages. Other types (OIDC, SAML) are managed externally.
-const IdpTypeLocal = "LOCAL"
-
 // UserListItem is a user together with the identity provider they come from.
 type UserListItem struct {
 	*User
 	IdpName string
-	IdpType string // LOCAL, OIDC or SAML
+	IdpType string // LOCAL, OIDC or SAML (see auth.IdpType)
 }
-
-// IsLocal reports whether the user belongs to the built-in provider.
-func (u *UserListItem) IsLocal() bool { return u.IdpType == IdpTypeLocal }
 
 func itemFromEnt(u *ent.User) *UserListItem {
 	it := &UserListItem{User: userFromEnt(u)}

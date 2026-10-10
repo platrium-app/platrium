@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { useQuery } from "@apollo/client/react"
+import { ssoErrorMessage } from "@/lib/ssoErrors"
 import { graphql } from "@/graphql"
 import type { GetAuthConfigQuery } from "@/graphql/graphql"
 
@@ -53,7 +54,10 @@ export function SingleTenantLogin({
   const [mfaCode, setMfaCode] = useState("")
   const [challengeToken, setChallengeToken] = useState("")
   const [mfaMethod, setMfaMethod] = useState("")
-  const [errorMsg, setErrorMsg] = useState("")
+  // An external sign-in that did not complete sends people back with ?error=.
+  const [errorMsg, setErrorMsg] = useState(() =>
+    ssoErrorMessage(new URLSearchParams(window.location.search).get("error"))
+  )
   const location = useLocation()
   
   const getReturnUrl = () => {
@@ -157,7 +161,8 @@ export function SingleTenantLogin({
   }
 
   const handleIdpClick = (idpId: string) => {
-    window.location.href = `/api/auth/login?idp=${encodeURIComponent(idpId)}`
+    const params = new URLSearchParams({ idp: idpId, return_to: getReturnUrl() })
+    window.location.href = `/api/auth/login?${params}`
   }
 
   return (

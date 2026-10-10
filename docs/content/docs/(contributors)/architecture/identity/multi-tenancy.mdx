@@ -35,7 +35,7 @@ Every tenant-owned row carries a `tenant_id`, every index that serves tenant tra
 
 Tenants bring their own authentication rules. A Tenant might strictly enforce Okta for employees, but allow Local passwords for external contractors, or even offer Google Workspace as a third option.
 
-Because of this, a Tenant can have **multiple** `IdpProvider` rows, each pointing back to the tenant.
+Because of this, a Tenant can have **multiple** `IdpProvider` rows, each pointing back to the tenant. Every provider has the same common shape (name, type, whether it is enabled, how users are created), and its protocol-specific settings live in a table of their own. [OpenID Connect](../authn/oidc) is the first.
 
 ```mermaid
 flowchart TD

@@ -71,9 +71,14 @@ type AuthAuthMeResponse struct {
 
 	// DeviceId Set when auth_kind is DEVICE.
 	DeviceId *string `json:"device_id,omitempty"`
-	Email    string  `json:"email"`
-	TenantId string  `json:"tenant_id"`
-	UserId   string  `json:"user_id"`
+
+	// DisplayName The user's name as the database has it now, not as it was at sign-in.
+	DisplayName string `json:"display_name"`
+
+	// Email The address the user is signed in with, as the database has it now (an external provider keeps it current).
+	Email    string `json:"email"`
+	TenantId string `json:"tenant_id"`
+	UserId   string `json:"user_id"`
 }
 
 // AuthAuthMeResponseAuthKind How this request authenticated: SESSION (browser), DEVICE or APP (bearer token).
@@ -321,7 +326,8 @@ type FilesUploadSessionPresignedChunk struct {
 
 // AuthIdpRedirectParams defines parameters for AuthIdpRedirect.
 type AuthIdpRedirectParams struct {
-	Idp string `form:"idp" json:"idp"`
+	Idp      string  `form:"idp" json:"idp"`
+	ReturnTo *string `form:"return_to,omitempty" json:"return_to,omitempty"`
 }
 
 // DownloadSessionChunksParams defines parameters for DownloadSessionChunks.

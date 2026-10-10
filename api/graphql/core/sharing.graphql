@@ -77,8 +77,8 @@ type AccessLevelOption {
 
 type ItemAccess {
   itemId: ID!
-  "Who owns the item's drive: a person for a private drive, the organization for a shared one."
-  owner: DirectorySubject!
+  "The person who owns the item's drive. Null in a shared drive, which has no owner: access there is only the grants."
+  owner: DirectorySubject
   "False when the item is restricted from the access of its parent folders."
   inheritsPermissions: Boolean!
   generalAccess: GeneralAccess!

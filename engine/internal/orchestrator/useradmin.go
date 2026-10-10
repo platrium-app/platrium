@@ -47,6 +47,66 @@ type ManagedUser struct {
 	// Manageable is false for a user the viewer outranks nothing of: someone
 	// holding permissions the viewer does not.
 	Manageable bool
+	// EditableFields is what this viewer may change on this user. It is the one
+	// definition of that: the API reports it and UpdateUser enforces the same
+	// rules, so a client never has to guess.
+	EditableFields []UserField
+}
+
+// UserField is something about a user an administrator may change.
+type UserField string
+
+const (
+	// UserFieldDisplayName is the user's name. Only a built-in user's: for an
+	// external user the provider owns it and refreshes it at every sign-in.
+	UserFieldDisplayName UserField = "DISPLAY_NAME"
+	// UserFieldRole is the role. It is Platrium's own, whatever the provider.
+	UserFieldRole UserField = "ROLE"
+	// UserFieldPassword is the password. Only a built-in user has one here.
+	UserFieldPassword UserField = "PASSWORD"
+)
+
+// isLocalUser reports whether Platrium itself owns the user's profile and
+// password, as opposed to the identity provider they sign in through.
+func isLocalUser(u *identity.UserListItem) bool { return auth.IdpType(u.IdpType).IsLocal() }
+
+// isSelf reports whether the target is the actor. Nobody changes their own
+// access (role) or switches themselves off: with one click that would lock out
+// the only person who could have undone it. Another administrator does it.
+func isSelf(ac *actor.Identity, target *identity.UserListItem) bool {
+	return target.ID == ac.UserID
+}
+
+// assignableRoleFor reports whether the actor could give the user a role other
+// than the one they have.
+func assignableRoleFor(ac *actor.Identity, target *identity.UserListItem) bool {
+	if isSelf(ac, target) || !ac.Perms.Has(authz.PermRolesAssign) {
+		return false
+	}
+	for _, r := range authz.TenantRoles() {
+		if r != target.Role && authz.CanAssignRole(ac.Perms, r, ac.Native) {
+			return true
+		}
+	}
+	return false
+}
+
+// editableFields is what the actor may change on the target.
+func editableFields(ac *actor.Identity, target *identity.UserListItem) []UserField {
+	fields := []UserField{}
+	if !canManage(ac, target) || !ac.Perms.Has(authz.PermUsersUpdate) {
+		return fields
+	}
+	if isLocalUser(target) {
+		fields = append(fields, UserFieldDisplayName)
+	}
+	if assignableRoleFor(ac, target) {
+		fields = append(fields, UserFieldRole)
+	}
+	if isLocalUser(target) {
+		fields = append(fields, UserFieldPassword)
+	}
+	return fields
 }
 
 // require reads the administrator's permissions now and checks they include
@@ -63,7 +123,16 @@ func (a *UserAdmin) requireTx(ctx context.Context, tx *ent.Tx, p authz.Principal
 	})
 }
 
-func (a *UserAdmin) requireWith(ctx context.Context, p authz.Principal, need authz.Permission, access func(context.Context, string, string) (authz.PermissionSet, bool, error)) (*actor.Identity, error) {
+func (a *UserAdmin) requireWith(ctx context.Context, p authz.Principal, need authz.Permission, access accessFunc) (*actor.Identity, error) {
+	return requirePermission(ctx, p, need, access)
+}
+
+// accessFunc reads a user's permissions (and whether they are in the native tenant).
+type accessFunc = func(ctx context.Context, tenantID, userID string) (authz.PermissionSet, bool, error)
+
+// requirePermission is the authoritative gate shared by every administration
+// orchestrator: it reads the caller's permissions now and checks need.
+func requirePermission(ctx context.Context, p authz.Principal, need authz.Permission, access accessFunc) (*actor.Identity, error) {
 	if err := requireSignedIn(p); err != nil {
 		return nil, err
 	}
@@ -84,7 +153,7 @@ func canManage(ac *actor.Identity, target *identity.UserListItem) bool {
 
 // view is a user as the administrator sees them.
 func view(ac *actor.Identity, it *identity.UserListItem) *ManagedUser {
-	return &ManagedUser{UserListItem: it, Manageable: canManage(ac, it)}
+	return &ManagedUser{UserListItem: it, Manageable: canManage(ac, it), EditableFields: editableFields(ac, it)}
 }
 
 func invalid(format string, args ...any) error {
@@ -200,9 +269,14 @@ func (a *UserAdmin) CreateLocalUser(ctx context.Context, p authz.Principal, in C
 	return view(ac, it), nil
 }
 
-// UpdateLocalUser changes a built-in user's display name and/or role. A user
-// from an external provider is managed there, so it is refused.
-func (a *UserAdmin) UpdateLocalUser(ctx context.Context, p authz.Principal, id string, displayName, role *string) (*ManagedUser, error) {
+// UpdateUser changes a user's display name and/or role.
+//
+// The role is Platrium's own for every user, so it can be changed whichever
+// provider they sign in through (promoting someone who arrived through SSO is
+// how they become an administrator). The name belongs to whoever owns the
+// profile: Platrium for a built-in user, the provider for an external one, so
+// changing an external user's name is refused. See EditableFields.
+func (a *UserAdmin) UpdateUser(ctx context.Context, p authz.Principal, id string, displayName, role *string) (*ManagedUser, error) {
 	if displayName != nil {
 		n, err := normalizeName(*displayName)
 		if err != nil {
@@ -213,11 +287,20 @@ func (a *UserAdmin) UpdateLocalUser(ctx context.Context, p authz.Principal, id s
 
 	var out *ManagedUser
 	apply := func(tx *ent.Tx, ac *actor.Identity) error {
-		target, err := a.localTarget(ctx, tx, ac, id)
+		target, err := a.manageableTarget(ctx, tx, ac, id)
 		if err != nil {
 			return err
 		}
+		if displayName != nil && *displayName == target.DisplayName {
+			displayName = nil // unchanged is not an edit
+		}
+		if displayName != nil && !isLocalUser(target) {
+			return invalid("%s manages this user's name; it updates when they sign in", target.IdpName)
+		}
 		if role != nil && *role != target.Role {
+			if isSelf(ac, target) {
+				return forbidden("you cannot change your own role; ask another administrator")
+			}
 			if !ac.Perms.Has(authz.PermRolesAssign) {
 				return forbidden("you do not have the %s permission", authz.PermRolesAssign)
 			}
@@ -305,7 +388,7 @@ func (a *UserAdmin) SetUserDisabled(ctx context.Context, p authz.Principal, id s
 			return forbidden("you cannot manage a user with more permissions than you hold")
 		}
 		if disabled {
-			if id == ac.UserID {
+			if isSelf(ac, target) {
 				return forbidden("you cannot disable your own account")
 			}
 			if err := a.keepAnAdmin(ctx, tx, ac, target, authz.NewPermissionSet()); err != nil {
@@ -349,18 +432,27 @@ func (a *UserAdmin) serialized(ctx context.Context, p authz.Principal, need auth
 	})
 }
 
-// localTarget loads a user the actor wants to edit: it must belong to the
-// built-in provider and be one the actor may manage.
-func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor.Identity, id string) (*identity.UserListItem, error) {
+// manageableTarget loads a user the actor wants to change: one they may manage.
+func (a *UserAdmin) manageableTarget(ctx context.Context, tx *ent.Tx, ac *actor.Identity, id string) (*identity.UserListItem, error) {
 	target, err := a.users.GetItemTx(ctx, tx, ac.TenantID, id)
 	if err != nil {
 		return nil, err
 	}
-	if !target.IsLocal() {
-		return nil, invalid("this user is managed by %s and cannot be edited here", target.IdpName)
-	}
 	if !canManage(ac, target) {
 		return nil, forbidden("you cannot manage a user with more permissions than you hold")
+	}
+	return target, nil
+}
+
+// localTarget is manageableTarget for something only a built-in user has (a
+// password): an external user's is the provider's.
+func (a *UserAdmin) localTarget(ctx context.Context, tx *ent.Tx, ac *actor.Identity, id string) (*identity.UserListItem, error) {
+	target, err := a.manageableTarget(ctx, tx, ac, id)
+	if err != nil {
+		return nil, err
+	}
+	if !isLocalUser(target) {
+		return nil, invalid("this user is managed by %s and cannot be edited here", target.IdpName)
 	}
 	return target, nil
 }

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { useMutation } from "@apollo/client/react"
+import { dialogLayout } from "@/components/custom/dialogLayout"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,9 +12,17 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { errorMessage } from "@/lib/errors"
+import { cn } from "@/lib/utils"
 import { roleLabel } from "@/lib/roles"
 import { CREATE_LOCAL_USER } from "./adminUserQueries"
 
@@ -58,75 +67,84 @@ export function CreateUserDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !loading && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className={cn(dialogLayout.content, "sm:max-w-md")}>
+        <DialogHeader className={dialogLayout.header}>
           <DialogTitle>Create user</DialogTitle>
           <DialogDescription>
             They sign in to Platrium with this email and password. The email
             can't be changed later.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="create-user-name">Name</Label>
-            <Input
-              id="create-user-name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              autoFocus
-              required
-              disabled={loading}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="create-user-email">Email</Label>
-            <Input
-              id="create-user-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="off"
-              required
-              disabled={loading}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="create-user-password">Password</Label>
-            <Input
-              id="create-user-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              minLength={8}
-              required
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">
-              At least 8 characters.
-            </p>
-          </div>
-          {roles.length > 1 && (
+        <form onSubmit={submit} className={dialogLayout.form}>
+          <div className={dialogLayout.body}>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="create-user-role">Role</Label>
-              <NativeSelect
-                id="create-user-role"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
+              <Label htmlFor="create-user-name">Name</Label>
+              <Input
+                id="create-user-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                autoFocus
+                required
                 disabled={loading}
-              >
-                {roles.map((r) => (
-                  <option key={r} value={r}>
-                    {roleLabel(r)}
-                  </option>
-                ))}
-              </NativeSelect>
+              />
             </div>
-          )}
-          {error && (
-            <p className="text-sm font-medium text-destructive">{error}</p>
-          )}
-          <DialogFooter>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="create-user-email">Email</Label>
+              <Input
+                id="create-user-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="off"
+                required
+                disabled={loading}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="create-user-password">Password</Label>
+              <Input
+                id="create-user-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+                disabled={loading}
+              />
+              <p className="text-xs text-muted-foreground">
+                At least 8 characters.
+              </p>
+            </div>
+            {roles.length > 1 && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="create-user-role">Role</Label>
+                <Select
+                  value={role}
+                  onValueChange={(v) => v && setRole(v)}
+                  items={Object.fromEntries(
+                    roles.map((r) => [r, roleLabel(r)])
+                  )}
+                  disabled={loading}
+                >
+                  <SelectTrigger id="create-user-role" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {roles.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {roleLabel(r)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          {error && <p className={dialogLayout.error}>{error}</p>}
+          <DialogFooter className={dialogLayout.footer}>
             <Button
               type="button"
               variant="outline"

@@ -30,7 +30,7 @@ export const ADMIN_USERS = graphql(`
           disabled
           disabledAt
           createdAt
-          editable
+          editableFields
           manageable
           source {
             id
@@ -63,13 +63,14 @@ export const CREATE_LOCAL_USER = graphql(`
   }
 `)
 
-export const UPDATE_LOCAL_USER = graphql(`
-  mutation UpdateLocalUser($id: ID!, $input: UpdateLocalUserInput!) {
-    updateLocalUser(id: $id, input: $input) {
+export const UPDATE_USER = graphql(`
+  mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
+    updateUser(id: $id, input: $input) {
       id
       displayName
       role
       manageable
+      editableFields
     }
   }
 `)

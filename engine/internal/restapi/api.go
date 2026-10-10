@@ -6,11 +6,13 @@ import (
 
 	"platrium/internal/auth"
 	"platrium/internal/auth/protocol/local"
+	"platrium/internal/auth/protocol/oidc"
 	"platrium/internal/auth/token"
 	"platrium/internal/fsops"
 	"platrium/internal/identity"
 	"platrium/internal/infra/storage"
 	"platrium/internal/notifications"
+	"platrium/internal/secrets"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/caarlos0/env/v11"
@@ -18,8 +20,6 @@ import (
 
 // RestAPIEnv loads configuration for the REST API layer
 type RestAPIEnv struct {
-	HMACSecret string `env:"HMAC_SECRET" envDefault:"changeinprod"`
-
 	// NativeHTTPSRedirects lists https URL prefixes (universal links) that
 	// native clients may use as redirect_uri. Custom schemes and loopback http
 	// URLs are always allowed.
@@ -41,6 +41,8 @@ type RestAPI struct {
 	TokenStore          *token.Store
 	CodeStore           *token.CodeStore
 	DeviceStore         *identity.EntDeviceStore
+	// OIDC starts OpenID Connect sign-ins (GET /auth/login for an OIDC provider).
+	OIDC *oidc.Handler
 
 	nativeHTTPSRedirects []string
 }
@@ -65,7 +67,7 @@ func NewRestAPI(fsOps *fsops.FSOps, actors *actor.Resolver, chunkStore *fsops.Ch
 		TokenStore:          tokenStore,
 		CodeStore:           codeStore,
 		DeviceStore:         deviceStore,
-		HMACSecret:          apiEnv.HMACSecret,
+		HMACSecret:          secrets.FromEnv().SigningSecret(),
 
 		nativeHTTPSRedirects: apiEnv.NativeHTTPSRedirects,
 	}

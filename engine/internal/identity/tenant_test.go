@@ -71,3 +71,21 @@ func TestTenantConstraints(t *testing.T) {
 		t.Errorf("non-native tenant: %v", err)
 	}
 }
+
+func TestPublicAuthConfigOmitsDisabledProviders(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	tn, local := e.tenantWithIdp(t, "acme", false)
+	okta := e.db.IdpProvider.Create().SetTenantID(tn.ID).SetType("OIDC").SetName("Okta").SaveX(ctx)
+
+	cfg, err := e.tenants.GetPublicTenantAuthConfig(ctx, "acme")
+	if err != nil || len(cfg.Providers) != 2 {
+		t.Fatalf("cfg = %+v, err = %v", cfg, err)
+	}
+
+	e.db.IdpProvider.UpdateOneID(okta.ID).SetEnabled(false).ExecX(ctx)
+	cfg, err = e.tenants.GetPublicTenantAuthConfig(ctx, "acme")
+	if err != nil || len(cfg.Providers) != 1 || cfg.Providers[0].ID != local.ID {
+		t.Fatalf("a disabled provider is still offered: %+v (err %v)", cfg, err)
+	}
+}

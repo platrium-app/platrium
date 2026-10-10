@@ -126,10 +126,10 @@ Fields every signed-in user may call, such as `me` and `canCreateSharedDrive`, c
 | Give no more than you hold | You can give a role only if you hold every permission it carries (`authz.CanAssignRole`). This is the same idea as `no-escalation` in [the sharing rules](./capabilities#changing-access-the-rules). | `ErrForbidden` |
 | Roles need `roles.assign` | Changing anyone's role needs `roles.assign` **in addition to** `users.update`. | `ErrForbidden` |
 | Keep an administrator | The last active user who can assign roles is never demoted or disabled. | `ErrForbidden` |
-| Not yourself | You cannot disable your own account. | `ErrForbidden` |
-| Local users only | Editing and password resets apply to LOCAL users. A user from an external provider is managed there, and only disabling works. | `ErrInvalid` |
+| Not yourself | You cannot disable your own account or change your own role. Someone else has to: the same idea as `no-self-edit` for items, and one click can no longer lock out the only person who could undo it. | `ErrForbidden` |
+| The provider owns the profile | A name and a password are Platrium's to edit only for LOCAL users. For a user from an external provider, those belong to the provider (the name is refreshed at every sign-in). The **role** is Platrium's for everyone, so an administrator promotes someone who arrived through SSO. | `ErrInvalid` |
 
-Each user the API returns carries `manageable: false` when the viewer does not outrank them, so a client can grey out the buttons. That is a courtesy. The server refuses anyway.
+Each user the API returns carries `manageable: false` when the viewer does not outrank them, and `editableFields` (`DISPLAY_NAME`, `ROLE`, `PASSWORD`): exactly what this viewer may change on this user, with every rule above already applied. A client renders from it and never has to guess, and anything it leaves out is shown read-only. That is a courtesy. The server refuses anyway.
 
 ### Why There Is A Tenant Lock
 

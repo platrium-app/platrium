@@ -24,6 +24,10 @@ type DriveItem interface {
 	GetUpdatedAt() time.Time
 }
 
+type IdentityProviderConfig interface {
+	IsIdentityProviderConfig()
+}
+
 type AccessGrant struct {
 	ID          string `json:"id"`
 	SubjectType string `json:"subjectType"`
@@ -62,8 +66,8 @@ type AdminUser struct {
 	DisabledAt  *time.Time      `json:"disabledAt,omitempty"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	Source      *IdentitySource `json:"source"`
-	// False when an external provider manages this user: only disabling is possible.
-	Editable bool `json:"editable"`
+	// What the caller may change on this user. Empty when nothing: an external user's name and password belong to their provider, and a role the caller could not give is not theirs to change.
+	EditableFields []UserField `json:"editableFields"`
 	// Whether the caller may act on this user at all. False for someone with more permissions than the caller holds.
 	Manageable bool `json:"manageable"`
 }
@@ -78,6 +82,26 @@ type AdminUserConnection struct {
 type AdminUserEdge struct {
 	Cursor string     `json:"cursor"`
 	Node   *AdminUser `json:"node"`
+}
+
+// An extra parameter sent on the authorization request, e.g. Auth0's `audience`.
+type AuthParam struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type AuthParamInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type CreateIdentityProviderInput struct {
+	Name     string `json:"name"`
+	JitUsers bool   `json:"jitUsers"`
+	// Must be a role without administrative permissions.
+	DefaultRole         string               `json:"defaultRole"`
+	AllowedEmailDomains []string             `json:"allowedEmailDomains,omitempty"`
+	Config              *ProviderConfigInput `json:"config"`
 }
 
 type CreateLocalUserInput struct {
@@ -234,6 +258,27 @@ type GeneralAccessInput struct {
 	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 }
 
+type IdentityProvider struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// LOCAL, OIDC or SAML.
+	Type string `json:"type"`
+	// True for the built-in provider: read-only and permanent.
+	IsLocal bool `json:"isLocal"`
+	// A disabled provider refuses sign-ins. Its users and their files stay.
+	Enabled bool `json:"enabled"`
+	// Whether a first sign-in creates the user. When false only existing users can sign in.
+	JitUsers bool `json:"jitUsers"`
+	// The role users created on first sign-in start with. Never an administrative role.
+	DefaultRole string `json:"defaultRole"`
+	// When not empty, only these email domains may sign in.
+	AllowedEmailDomains []string `json:"allowedEmailDomains"`
+	// How many users sign in through this provider.
+	UserCount int `json:"userCount"`
+	// Null for the built-in provider.
+	Config IdentityProviderConfig `json:"config,omitempty"`
+}
+
 // Where a user (or group) comes from: the built-in provider, or an external one.
 type IdentitySource struct {
 	ID   string `json:"id"`
@@ -252,8 +297,8 @@ type IdpProvider struct {
 
 type ItemAccess struct {
 	ItemID string `json:"itemId"`
-	// Who owns the item's drive: a person for a private drive, the organization for a shared one.
-	Owner *DirectorySubject `json:"owner"`
+	// The person who owns the item's drive. Null in a shared drive, which has no owner: access there is only the grants.
+	Owner *DirectorySubject `json:"owner,omitempty"`
 	// False when the item is restricted from the access of its parent folders.
 	InheritsPermissions bool           `json:"inheritsPermissions"`
 	GeneralAccess       *GeneralAccess `json:"generalAccess"`
@@ -285,9 +330,59 @@ type Me struct {
 type Mutation struct {
 }
 
+type OidcConfig struct {
+	Issuer   string `json:"issuer"`
+	ClientID string `json:"clientId"`
+	// Scopes requested in addition to `openid`.
+	Scopes               []string     `json:"scopes"`
+	EmailClaim           string       `json:"emailClaim"`
+	NameClaim            string       `json:"nameClaim"`
+	PictureClaim         string       `json:"pictureClaim"`
+	RequireEmailVerified bool         `json:"requireEmailVerified"`
+	ExtraAuthParams      []*AuthParam `json:"extraAuthParams"`
+	// Register this address with the provider as an allowed redirect (callback) URL.
+	RedirectURI string `json:"redirectUri"`
+}
+
+func (OidcConfig) IsIdentityProviderConfig() {}
+
+type OidcConfigInput struct {
+	// The provider's issuer URL, e.g. https://acme.auth0.com. A trailing slash is ignored. Can not be changed later.
+	Issuer       string   `json:"issuer"`
+	ClientID     string   `json:"clientId"`
+	ClientSecret string   `json:"clientSecret"`
+	Scopes       []string `json:"scopes,omitempty"`
+	// Which claim holds each attribute. Default: email, name, picture.
+	EmailClaim   *string `json:"emailClaim,omitempty"`
+	NameClaim    *string `json:"nameClaim,omitempty"`
+	PictureClaim *string `json:"pictureClaim,omitempty"`
+	// Refuse sign-ins the provider has not verified the email of. Default: true.
+	RequireEmailVerified *bool             `json:"requireEmailVerified,omitempty"`
+	ExtraAuthParams      []*AuthParamInput `json:"extraAuthParams,omitempty"`
+}
+
+// What reading a provider's discovery document found.
+type OidcDiscoveryResult struct {
+	Ok bool `json:"ok"`
+	// Why it failed, when it did.
+	Message               *string  `json:"message,omitempty"`
+	AuthorizationEndpoint *string  `json:"authorizationEndpoint,omitempty"`
+	TokenEndpoint         *string  `json:"tokenEndpoint,omitempty"`
+	JwksURI               *string  `json:"jwksUri,omitempty"`
+	ScopesSupported       []string `json:"scopesSupported,omitempty"`
+	ClaimsSupported       []string `json:"claimsSupported,omitempty"`
+	// False when the provider lists its PKCE methods and S256 is not one of them.
+	SupportsPkce *bool `json:"supportsPkce,omitempty"`
+}
+
 type PageInfo struct {
 	HasNextPage bool    `json:"hasNextPage"`
 	EndCursor   *string `json:"endCursor,omitempty"`
+}
+
+// The connection settings of a new provider: exactly one member, for its type.
+type ProviderConfigInput struct {
+	Oidc *OidcConfigInput `json:"oidc,omitempty"`
 }
 
 type Query struct {
@@ -345,7 +440,27 @@ type TenantAuthConfig struct {
 	Providers    []*IdpProvider `json:"providers"`
 }
 
-type UpdateLocalUserInput struct {
+type UpdateIdentityProviderInput struct {
+	Name                *string  `json:"name,omitempty"`
+	JitUsers            *bool    `json:"jitUsers,omitempty"`
+	DefaultRole         *string  `json:"defaultRole,omitempty"`
+	AllowedEmailDomains []string `json:"allowedEmailDomains,omitempty"`
+}
+
+type UpdateOidcConfigInput struct {
+	ClientID *string `json:"clientId,omitempty"`
+	// Leave out to keep the current secret.
+	ClientSecret         *string           `json:"clientSecret,omitempty"`
+	Scopes               []string          `json:"scopes,omitempty"`
+	EmailClaim           *string           `json:"emailClaim,omitempty"`
+	NameClaim            *string           `json:"nameClaim,omitempty"`
+	PictureClaim         *string           `json:"pictureClaim,omitempty"`
+	RequireEmailVerified *bool             `json:"requireEmailVerified,omitempty"`
+	ExtraAuthParams      []*AuthParamInput `json:"extraAuthParams,omitempty"`
+}
+
+type UpdateUserInput struct {
+	// Only for built-in users; see UserField.
 	DisplayName *string `json:"displayName,omitempty"`
 	Role        *string `json:"role,omitempty"`
 }
@@ -510,6 +625,67 @@ func (e *DriveType) UnmarshalJSON(b []byte) error {
 }
 
 func (e DriveType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Something about a user an administrator may change.
+type UserField string
+
+const (
+	// The user's name. Only for built-in users: an external provider owns it and refreshes it at every sign-in.
+	UserFieldDisplayName UserField = "DISPLAY_NAME"
+	// The role. Platrium's own for every user, whichever provider they sign in through.
+	UserFieldRole UserField = "ROLE"
+	// The password. Only for built-in users.
+	UserFieldPassword UserField = "PASSWORD"
+)
+
+var AllUserField = []UserField{
+	UserFieldDisplayName,
+	UserFieldRole,
+	UserFieldPassword,
+}
+
+func (e UserField) IsValid() bool {
+	switch e {
+	case UserFieldDisplayName, UserFieldRole, UserFieldPassword:
+		return true
+	}
+	return false
+}
+
+func (e UserField) String() string {
+	return string(e)
+}
+
+func (e *UserField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UserField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UserField", str)
+	}
+	return nil
+}
+
+func (e UserField) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UserField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UserField) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

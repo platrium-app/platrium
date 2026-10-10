@@ -2,6 +2,7 @@
     "title": "Authentication",
     "pages": [
         "local-users",
+        "oidc",
         "native-clients",
         "requests-and-sessions"
     ]

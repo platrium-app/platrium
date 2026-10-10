@@ -451,7 +451,7 @@ func TestShareRolesDependOnTheItem(t *testing.T) {
 	}
 }
 
-func TestItemAccessReportsTheOwner(t *testing.T) {
+func TestItemAccessReportsTheOwnerOnlyOfAPrivateDrive(t *testing.T) {
 	h := newHarness(t)
 
 	access, err := h.q().ItemAccess(h.as(h.alice), h.docs)
@@ -464,8 +464,8 @@ func TestItemAccessReportsTheOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	access, err = h.q().ItemAccess(h.as(h.admin), d.ID)
-	if err != nil || access.Owner.Type != "TENANT" || access.Owner.Name != "Acme Inc" {
-		t.Fatalf("a shared drive belongs to the organization: %+v %v", access.Owner, err)
+	if err != nil || access.Owner != nil {
+		t.Fatalf("a shared drive has no owner: %+v %v", access.Owner, err)
 	}
 }
 

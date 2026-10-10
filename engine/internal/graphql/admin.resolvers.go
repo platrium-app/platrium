@@ -28,13 +28,13 @@ func (r *mutationResolver) CreateLocalUser(ctx context.Context, input CreateLoca
 	return mapAdminUser(u), nil
 }
 
-// UpdateLocalUser is the resolver for the updateLocalUser field.
-func (r *mutationResolver) UpdateLocalUser(ctx context.Context, id string, input UpdateLocalUserInput) (*AdminUser, error) {
+// UpdateUser is the resolver for the updateUser field.
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*AdminUser, error) {
 	p, err := r.Actors.Principal(ctx)
 	if err != nil {
 		return nil, err
 	}
-	u, err := r.UserAdmin.UpdateLocalUser(ctx, p, id, input.DisplayName, input.Role)
+	u, err := r.UserAdmin.UpdateUser(ctx, p, id, input.DisplayName, input.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (r *queryResolver) AdminIdentitySources(ctx context.Context) ([]*IdentitySo
 	}
 	out := make([]*IdentitySource, 0, len(idps))
 	for _, i := range idps {
-		out = append(out, &IdentitySource{ID: i.ID, Name: i.Name, Type: i.Type, IsLocal: i.IsLocal()})
+		out = append(out, &IdentitySource{ID: i.ID, Name: i.Name, Type: string(i.Type), IsLocal: i.IsLocal()})
 	}
 	return out, nil
 }

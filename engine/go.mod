@@ -7,11 +7,13 @@ require (
 	github.com/99designs/gqlgen v0.17.95
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/caarlos0/env/v11 v11.4.1
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/dgraph-io/badger/v4 v4.9.2
 	github.com/getkin/kin-openapi v0.135.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.16.0
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.11.0
@@ -19,6 +21,7 @@ require (
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/vektah/gqlparser/v2 v2.5.58
 	golang.org/x/crypto v0.57.0
+	golang.org/x/oauth2 v0.37.0
 	modernc.org/sqlite v1.60.1
 )
 

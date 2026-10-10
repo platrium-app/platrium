@@ -9,8 +9,11 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// IdpProvider is the structural definition of an identity provider (OIDC,
-// SAML or LOCAL) owned by exactly one tenant.
+// IdpProvider is the protocol-agnostic definition of an identity provider
+// (OIDC, SAML or LOCAL) owned by exactly one tenant: who it is and how users
+// and groups arriving through it are provisioned. Protocol settings live in a
+// 1:1 table per type (idp_oidc_configs, ...), so each can have typed, required
+// columns.
 type IdpProvider struct{ ent.Schema }
 
 func (IdpProvider) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin{}} }
@@ -18,11 +21,19 @@ func (IdpProvider) Mixin() []ent.Mixin { return []ent.Mixin{IDMixin{}, TimeMixin
 func (IdpProvider) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("tenant_id").MaxLen(idLen).SchemaType(idType).Immutable(),
-		field.Enum("type").Values("OIDC", "SAML", "LOCAL"),
+		// A provider's protocol never changes: its config row belongs to it.
+		field.Enum("type").Values("OIDC", "SAML", "LOCAL").Immutable(),
 		field.String("name").MaxLen(nameLen).NotEmpty(),
-		// Protocol-specific JSON configuration; may hold client secrets.
-		// Never queried into, never logged.
-		field.Text("proto_config").Default("{}").Sensitive(),
+		// A disabled provider is hidden from the login picker and refuses sign-ins;
+		// its users and their data are untouched.
+		field.Bool("enabled").Default(true),
+		// Provisioning policy, shared by every protocol. jit_users says whether a
+		// first sign-in creates the user; default_role is what they start with
+		// (never an administrative role, enforced by the store); a non-empty
+		// allowed_email_domains limits who may sign in.
+		field.Bool("jit_users").Default(false),
+		field.String("default_role").MaxLen(32).Default("MEMBER"),
+		field.JSON("allowed_email_domains", []string{}).Optional(),
 	}
 }
 
@@ -33,6 +44,8 @@ func (IdpProvider) Edges() []ent.Edge {
 			Annotations(entsql.OnDelete(entsql.Restrict)),
 		edge.To("users", User.Type),
 		edge.To("groups", Group.Type),
+		edge.To("oidc_config", IdpOIDCConfig.Type).Unique().
+			Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 

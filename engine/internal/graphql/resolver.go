@@ -31,4 +31,5 @@ type Resolver struct {
 	TenantStore *identity.TenantStore
 	IdpStore    *auth.IdpStore
 	UserAdmin   *orchestrator.UserAdmin
+	IdpAdmin    *orchestrator.IdpAdmin
 }

@@ -8,6 +8,7 @@ import (
 
 	gqlgraphql "github.com/99designs/gqlgen/graphql"
 
+	"platrium/internal/auth"
 	"platrium/internal/authz"
 	"platrium/internal/identity"
 	"platrium/internal/orchestrator"
@@ -42,17 +43,25 @@ func (r *Resolver) Directives() DirectiveRoot {
 func mapAdminUser(m *orchestrator.ManagedUser) *AdminUser {
 	u := m.UserListItem
 	return &AdminUser{
-		ID:          u.ID,
-		Email:       u.Email,
-		DisplayName: u.DisplayName,
-		Role:        u.Role,
-		Disabled:    u.Disabled(),
-		DisabledAt:  u.DisabledAt,
-		CreatedAt:   u.CreatedAt,
-		Source:      &IdentitySource{ID: u.IdpID, Name: u.IdpName, Type: u.IdpType, IsLocal: u.IsLocal()},
-		Editable:    u.IsLocal(),
-		Manageable:  m.Manageable,
+		ID:             u.ID,
+		Email:          u.Email,
+		DisplayName:    u.DisplayName,
+		Role:           u.Role,
+		Disabled:       u.Disabled(),
+		DisabledAt:     u.DisabledAt,
+		CreatedAt:      u.CreatedAt,
+		Source:         &IdentitySource{ID: u.IdpID, Name: u.IdpName, Type: u.IdpType, IsLocal: auth.IdpType(u.IdpType).IsLocal()},
+		EditableFields: mapUserFields(m.EditableFields),
+		Manageable:     m.Manageable,
 	}
+}
+
+func mapUserFields(fs []orchestrator.UserField) []UserField {
+	out := make([]UserField, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, UserField(f))
+	}
+	return out
 }
 
 // The cursor is opaque to clients: the position of the last user returned.
