@@ -64,16 +64,16 @@ type ComplexityRoot struct {
 	}
 
 	AdminUser struct {
-		CreatedAt   func(childComplexity int) int
-		Disabled    func(childComplexity int) int
-		DisabledAt  func(childComplexity int) int
-		DisplayName func(childComplexity int) int
-		Editable    func(childComplexity int) int
-		Email       func(childComplexity int) int
-		ID          func(childComplexity int) int
-		Manageable  func(childComplexity int) int
-		Role        func(childComplexity int) int
-		Source      func(childComplexity int) int
+		CreatedAt      func(childComplexity int) int
+		Disabled       func(childComplexity int) int
+		DisabledAt     func(childComplexity int) int
+		DisplayName    func(childComplexity int) int
+		EditableFields func(childComplexity int) int
+		Email          func(childComplexity int) int
+		ID             func(childComplexity int) int
+		Manageable     func(childComplexity int) int
+		Role           func(childComplexity int) int
+		Source         func(childComplexity int) int
 	}
 
 	AdminUserConnection struct {
@@ -234,8 +234,8 @@ type ComplexityRoot struct {
 		ShareItem                  func(childComplexity int, input ShareInput) int
 		TestOidcDiscovery          func(childComplexity int, issuer string) int
 		UpdateIdentityProvider     func(childComplexity int, id string, input UpdateIdentityProviderInput) int
-		UpdateLocalUser            func(childComplexity int, id string, input UpdateLocalUserInput) int
 		UpdateOidcConfig           func(childComplexity int, id string, input UpdateOidcConfigInput) int
+		UpdateUser                 func(childComplexity int, id string, input UpdateUserInput) int
 	}
 
 	OidcConfig struct {
@@ -347,7 +347,7 @@ type MutationResolver interface {
 	CopyFile(ctx context.Context, fileID string, newParentID string, newName string) (*File, error)
 	DeleteItem(ctx context.Context, id string) (bool, error)
 	CreateLocalUser(ctx context.Context, input CreateLocalUserInput) (*AdminUser, error)
-	UpdateLocalUser(ctx context.Context, id string, input UpdateLocalUserInput) (*AdminUser, error)
+	UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*AdminUser, error)
 	ResetLocalUserPassword(ctx context.Context, id string, password string) (bool, error)
 	SetUserDisabled(ctx context.Context, id string, disabled bool) (*AdminUser, error)
 	CreateSharedDrive(ctx context.Context, name string) (*Folder, error)
@@ -527,12 +527,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AdminUser.DisplayName(childComplexity), true
-	case "AdminUser.editable":
-		if e.ComplexityRoot.AdminUser.Editable == nil {
+	case "AdminUser.editableFields":
+		if e.ComplexityRoot.AdminUser.EditableFields == nil {
 			break
 		}
 
-		return e.ComplexityRoot.AdminUser.Editable(childComplexity), true
+		return e.ComplexityRoot.AdminUser.EditableFields(childComplexity), true
 	case "AdminUser.email":
 		if e.ComplexityRoot.AdminUser.Email == nil {
 			break
@@ -1295,17 +1295,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateIdentityProvider(childComplexity, args["id"].(string), args["input"].(UpdateIdentityProviderInput)), true
-	case "Mutation.updateLocalUser":
-		if e.ComplexityRoot.Mutation.UpdateLocalUser == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_updateLocalUser_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.UpdateLocalUser(childComplexity, args["id"].(string), args["input"].(UpdateLocalUserInput)), true
 	case "Mutation.updateOidcConfig":
 		if e.ComplexityRoot.Mutation.UpdateOidcConfig == nil {
 			break
@@ -1317,6 +1306,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateOidcConfig(childComplexity, args["id"].(string), args["input"].(UpdateOidcConfigInput)), true
+	case "Mutation.updateUser":
+		if e.ComplexityRoot.Mutation.UpdateUser == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateUser_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateUser(childComplexity, args["id"].(string), args["input"].(UpdateUserInput)), true
 
 	case "OidcConfig.clientId":
 		if e.ComplexityRoot.OidcConfig.ClientID == nil {
@@ -1744,8 +1744,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputProviderConfigInput,
 		ec.unmarshalInputShareInput,
 		ec.unmarshalInputUpdateIdentityProviderInput,
-		ec.unmarshalInputUpdateLocalUserInput,
 		ec.unmarshalInputUpdateOidcConfigInput,
+		ec.unmarshalInputUpdateUserInput,
 	)
 	first := true
 
@@ -1865,6 +1865,16 @@ type IdentitySource {
   isLocal: Boolean!
 }
 
+"Something about a user an administrator may change."
+enum UserField {
+  "The user's name. Only for built-in users: an external provider owns it and refreshes it at every sign-in."
+  DISPLAY_NAME
+  "The role. Platrium's own for every user, whichever provider they sign in through."
+  ROLE
+  "The password. Only for built-in users."
+  PASSWORD
+}
+
 type AdminUser {
   id: ID!
   email: String!
@@ -1874,8 +1884,8 @@ type AdminUser {
   disabledAt: DateTime
   createdAt: DateTime!
   source: IdentitySource!
-  "False when an external provider manages this user: only disabling is possible."
-  editable: Boolean!
+  "What the caller may change on this user. Empty when nothing: an external user's name and password belong to their provider, and a role the caller could not give is not theirs to change."
+  editableFields: [UserField!]!
   "Whether the caller may act on this user at all. False for someone with more permissions than the caller holds."
   manageable: Boolean!
 }
@@ -1901,7 +1911,8 @@ input CreateLocalUserInput {
   role: String
 }
 
-input UpdateLocalUserInput {
+input UpdateUserInput {
+  "Only for built-in users; see UserField."
   displayName: String
   role: String
 }
@@ -1922,8 +1933,8 @@ extend type Query {
 extend type Mutation {
   "Create a user on the built-in provider."
   createLocalUser(input: CreateLocalUserInput!): AdminUser! @requires(permission: USERS_CREATE)
-  "Edit a built-in user. Changing the role also needs ROLES_ASSIGN."
-  updateLocalUser(id: ID!, input: UpdateLocalUserInput!): AdminUser! @requires(permission: USERS_UPDATE)
+  "Edit a user's name (built-in users only) or role (any user). Changing the role also needs ROLES_ASSIGN."
+  updateUser(id: ID!, input: UpdateUserInput!): AdminUser! @requires(permission: USERS_UPDATE)
   resetLocalUserPassword(id: ID!, password: String!): Boolean! @requires(permission: USERS_UPDATE)
   "Block or restore sign-in for a user of any provider."
   setUserDisabled(id: ID!, disabled: Boolean!): AdminUser! @requires(permission: USERS_DISABLE)
@@ -2321,8 +2332,8 @@ type AccessLevelOption {
 
 type ItemAccess {
   itemId: ID!
-  "Who owns the item's drive: a person for a private drive, the organization for a shared one."
-  owner: DirectorySubject!
+  "The person who owns the item's drive. Null in a shared drive, which has no owner: access there is only the grants."
+  owner: DirectorySubject
   "False when the item is restricted from the access of its parent folders."
   inheritsPermissions: Boolean!
   generalAccess: GeneralAccess!
@@ -2476,8 +2487,8 @@ func (ec *executionContext) childFields_AdminUser(ctx context.Context, field gra
 		return ec.fieldContext_AdminUser_createdAt(ctx, field)
 	case "source":
 		return ec.fieldContext_AdminUser_source(ctx, field)
-	case "editable":
-		return ec.fieldContext_AdminUser_editable(ctx, field)
+	case "editableFields":
+		return ec.fieldContext_AdminUser_editableFields(ctx, field)
 	case "manageable":
 		return ec.fieldContext_AdminUser_manageable(ctx, field)
 	}
@@ -3344,28 +3355,6 @@ func (ec *executionContext) field_Mutation_updateIdentityProvider_args(ctx conte
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_updateLocalUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNID2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
-		func(ctx context.Context, v any) (UpdateLocalUserInput, error) {
-			return ec.unmarshalNUpdateLocalUserInput2platriumᚋinternalᚋgraphqlᚐUpdateLocalUserInput(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["input"] = arg1
-	return args, nil
-}
-
 func (ec *executionContext) field_Mutation_updateOidcConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3380,6 +3369,28 @@ func (ec *executionContext) field_Mutation_updateOidcConfig_args(ctx context.Con
 	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
 		func(ctx context.Context, v any) (UpdateOidcConfigInput, error) {
 			return ec.unmarshalNUpdateOidcConfigInput2platriumᚋinternalᚋgraphqlᚐUpdateOidcConfigInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNID2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (UpdateUserInput, error) {
+			return ec.unmarshalNUpdateUserInput2platriumᚋinternalᚋgraphqlᚐUpdateUserInput(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -4252,27 +4263,27 @@ func (ec *executionContext) fieldContext_AdminUser_source(_ context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _AdminUser_editable(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
+func (ec *executionContext) _AdminUser_editableFields(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_AdminUser_editable(ctx, field)
+			return ec.fieldContext_AdminUser_editableFields(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.Editable, nil
+			return obj.EditableFields, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
-			return ec.marshalNBoolean2bool(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v []UserField) graphql.Marshaler {
+			return ec.marshalNUserField2ᚕplatriumᚋinternalᚋgraphqlᚐUserFieldᚄ(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_AdminUser_editable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type Boolean does not have child fields"))
+func (ec *executionContext) fieldContext_AdminUser_editableFields(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AdminUser", field, false, false, errors.New("field of type UserField does not have child fields"))
 }
 
 func (ec *executionContext) _AdminUser_manageable(ctx context.Context, field graphql.CollectedField, obj *AdminUser) (ret graphql.Marshaler) {
@@ -6020,10 +6031,10 @@ func (ec *executionContext) _ItemAccess_owner(ctx context.Context, field graphql
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *DirectorySubject) graphql.Marshaler {
-			return ec.marshalNDirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx, selections, v)
+			return ec.marshalODirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx, selections, v)
 		},
 		true,
-		true,
+		false,
 	)
 }
 func (ec *executionContext) fieldContext_ItemAccess_owner(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6647,17 +6658,17 @@ func (ec *executionContext) fieldContext_Mutation_createLocalUser(ctx context.Co
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_updateLocalUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_updateLocalUser(ctx, field)
+			return ec.fieldContext_Mutation_updateUser(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().UpdateLocalUser(ctx, fc.Args["id"].(string), fc.Args["input"].(UpdateLocalUserInput))
+			return ec.Resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(string), fc.Args["input"].(UpdateUserInput))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -6685,7 +6696,7 @@ func (ec *executionContext) _Mutation_updateLocalUser(ctx context.Context, field
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Mutation_updateLocalUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -6702,7 +6713,7 @@ func (ec *executionContext) fieldContext_Mutation_updateLocalUser(ctx context.Co
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_updateLocalUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_updateUser_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10822,43 +10833,6 @@ func (ec *executionContext) unmarshalInputUpdateIdentityProviderInput(ctx contex
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateLocalUserInput(ctx context.Context, obj any) (UpdateLocalUserInput, error) {
-	var it UpdateLocalUserInput
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"displayName", "role"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "displayName":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.DisplayName = data
-		case "role":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Role = data
-		}
-	}
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputUpdateOidcConfigInput(ctx context.Context, obj any) (UpdateOidcConfigInput, error) {
 	var it UpdateOidcConfigInput
 	if obj == nil {
@@ -10933,6 +10907,43 @@ func (ec *executionContext) unmarshalInputUpdateOidcConfigInput(ctx context.Cont
 				return it, err
 			}
 			it.ExtraAuthParams = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, obj any) (UpdateUserInput, error) {
+	var it UpdateUserInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"displayName", "role"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "displayName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DisplayName = data
+		case "role":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Role = data
 		}
 	}
 	return it, nil
@@ -11191,8 +11202,8 @@ func (ec *executionContext) _AdminUser(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "editable":
-			out.Values[i] = ec._AdminUser_editable(ctx, field, obj)
+		case "editableFields":
+			out.Values[i] = ec._AdminUser_editableFields(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -12147,7 +12158,7 @@ func (ec *executionContext) _ItemAccess(ctx context.Context, sel ast.SelectionSe
 			}
 		case "owner":
 			out.Values[i] = ec._ItemAccess_owner(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		case "inheritsPermissions":
@@ -12364,9 +12375,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "updateLocalUser":
+		case "updateUser":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_updateLocalUser(ctx, field)
+				return ec._Mutation_updateUser(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -14624,14 +14635,54 @@ func (ec *executionContext) unmarshalNUpdateIdentityProviderInput2platriumᚋint
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateLocalUserInput2platriumᚋinternalᚋgraphqlᚐUpdateLocalUserInput(ctx context.Context, v any) (UpdateLocalUserInput, error) {
-	res, err := ec.unmarshalInputUpdateLocalUserInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
 func (ec *executionContext) unmarshalNUpdateOidcConfigInput2platriumᚋinternalᚋgraphqlᚐUpdateOidcConfigInput(ctx context.Context, v any) (UpdateOidcConfigInput, error) {
 	res, err := ec.unmarshalInputUpdateOidcConfigInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateUserInput2platriumᚋinternalᚋgraphqlᚐUpdateUserInput(ctx context.Context, v any) (UpdateUserInput, error) {
+	res, err := ec.unmarshalInputUpdateUserInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUserField2platriumᚋinternalᚋgraphqlᚐUserField(ctx context.Context, v any) (UserField, error) {
+	var res UserField
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUserField2platriumᚋinternalᚋgraphqlᚐUserField(ctx context.Context, sel ast.SelectionSet, v UserField) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNUserField2ᚕplatriumᚋinternalᚋgraphqlᚐUserFieldᚄ(ctx context.Context, v any) ([]UserField, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]UserField, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNUserField2platriumᚋinternalᚋgraphqlᚐUserField(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNUserField2ᚕplatriumᚋinternalᚋgraphqlᚐUserFieldᚄ(ctx context.Context, sel ast.SelectionSet, v []UserField) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUserField2platriumᚋinternalᚋgraphqlᚐUserField(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
@@ -14837,6 +14888,13 @@ func (ec *executionContext) marshalODateTime2ᚖtimeᚐTime(ctx context.Context,
 	_ = ctx
 	res := graphql.MarshalTime(*v)
 	return res
+}
+
+func (ec *executionContext) marshalODirectorySubject2ᚖplatriumᚋinternalᚋgraphqlᚐDirectorySubject(ctx context.Context, sel ast.SelectionSet, v *DirectorySubject) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DirectorySubject(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalODriveItem2platriumᚋinternalᚋgraphqlᚐDriveItem(ctx context.Context, sel ast.SelectionSet, v DriveItem) graphql.Marshaler {

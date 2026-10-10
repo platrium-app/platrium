@@ -66,8 +66,8 @@ type AdminUser struct {
 	DisabledAt  *time.Time      `json:"disabledAt,omitempty"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	Source      *IdentitySource `json:"source"`
-	// False when an external provider manages this user: only disabling is possible.
-	Editable bool `json:"editable"`
+	// What the caller may change on this user. Empty when nothing: an external user's name and password belong to their provider, and a role the caller could not give is not theirs to change.
+	EditableFields []UserField `json:"editableFields"`
 	// Whether the caller may act on this user at all. False for someone with more permissions than the caller holds.
 	Manageable bool `json:"manageable"`
 }
@@ -297,8 +297,8 @@ type IdpProvider struct {
 
 type ItemAccess struct {
 	ItemID string `json:"itemId"`
-	// Who owns the item's drive: a person for a private drive, the organization for a shared one.
-	Owner *DirectorySubject `json:"owner"`
+	// The person who owns the item's drive. Null in a shared drive, which has no owner: access there is only the grants.
+	Owner *DirectorySubject `json:"owner,omitempty"`
 	// False when the item is restricted from the access of its parent folders.
 	InheritsPermissions bool           `json:"inheritsPermissions"`
 	GeneralAccess       *GeneralAccess `json:"generalAccess"`
@@ -447,11 +447,6 @@ type UpdateIdentityProviderInput struct {
 	AllowedEmailDomains []string `json:"allowedEmailDomains,omitempty"`
 }
 
-type UpdateLocalUserInput struct {
-	DisplayName *string `json:"displayName,omitempty"`
-	Role        *string `json:"role,omitempty"`
-}
-
 type UpdateOidcConfigInput struct {
 	ClientID *string `json:"clientId,omitempty"`
 	// Leave out to keep the current secret.
@@ -462,6 +457,12 @@ type UpdateOidcConfigInput struct {
 	PictureClaim         *string           `json:"pictureClaim,omitempty"`
 	RequireEmailVerified *bool             `json:"requireEmailVerified,omitempty"`
 	ExtraAuthParams      []*AuthParamInput `json:"extraAuthParams,omitempty"`
+}
+
+type UpdateUserInput struct {
+	// Only for built-in users; see UserField.
+	DisplayName *string `json:"displayName,omitempty"`
+	Role        *string `json:"role,omitempty"`
 }
 
 type DriveItemEventType string
@@ -624,6 +625,67 @@ func (e *DriveType) UnmarshalJSON(b []byte) error {
 }
 
 func (e DriveType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Something about a user an administrator may change.
+type UserField string
+
+const (
+	// The user's name. Only for built-in users: an external provider owns it and refreshes it at every sign-in.
+	UserFieldDisplayName UserField = "DISPLAY_NAME"
+	// The role. Platrium's own for every user, whichever provider they sign in through.
+	UserFieldRole UserField = "ROLE"
+	// The password. Only for built-in users.
+	UserFieldPassword UserField = "PASSWORD"
+)
+
+var AllUserField = []UserField{
+	UserFieldDisplayName,
+	UserFieldRole,
+	UserFieldPassword,
+}
+
+func (e UserField) IsValid() bool {
+	switch e {
+	case UserFieldDisplayName, UserFieldRole, UserFieldPassword:
+		return true
+	}
+	return false
+}
+
+func (e UserField) String() string {
+	return string(e)
+}
+
+func (e *UserField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UserField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UserField", str)
+	}
+	return nil
+}
+
+func (e UserField) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UserField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UserField) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

@@ -4,8 +4,19 @@ import { CircleAlertIcon, Plus, Search, ShieldCheck, Users } from "lucide-react"
 import { PlaceholderView } from "@/components/custom/PlaceholderView"
 import { ConfirmModal } from "@/components/modals/ConfirmModal"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { NativeSelect } from "@/components/ui/native-select"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { useSetBreadcrumbs } from "@/contexts/BreadcrumbContext"
 import type { UserStatus } from "@/graphql/graphql"
@@ -23,6 +34,9 @@ import type { AdminUserNode } from "./types"
 import { UsersTable, type UserAction } from "./UsersTable"
 
 const PAGE_SIZE = 50
+
+// The "no filter" choice: a select needs a value to stand for it.
+const ALL = "all"
 
 type OpenDialog =
   | { kind: "create" }
@@ -95,38 +109,64 @@ export default function AdminUsersView() {
 
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
-        <div className="relative min-w-52 flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-1 pt-1 pb-3">
+        <InputGroup className="min-w-52 flex-1 sm:max-w-xs">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or email"
             aria-label="Search users"
-            className="pl-9"
           />
-        </div>
-        <NativeSelect
-          value={sourceId}
-          onChange={(e) => setSourceId(e.target.value)}
-          aria-label="Filter by source"
+        </InputGroup>
+        <Select
+          value={sourceId || ALL}
+          onValueChange={(v) => setSourceId(!v || v === ALL ? "" : v)}
+          items={{
+            [ALL]: "All sources",
+            ...Object.fromEntries(
+              sources.map((s) => [s.id, s.isLocal ? "Cluster local" : s.name])
+            ),
+          }}
         >
-          <option value="">All sources</option>
-          {sources.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.isLocal ? "Cluster local" : s.name}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          value={status}
-          onChange={(e) => setStatus(e.target.value as UserStatus | "")}
-          aria-label="Filter by status"
+          <SelectTrigger aria-label="Filter by source">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={ALL}>All sources</SelectItem>
+              {sources.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.isLocal ? "Cluster local" : s.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select
+          value={status || ALL}
+          onValueChange={(v) =>
+            setStatus(!v || v === ALL ? "" : (v as UserStatus))
+          }
+          items={{
+            [ALL]: "Any status",
+            ACTIVE: "Active",
+            DISABLED: "Disabled",
+          }}
         >
-          <option value="">Any status</option>
-          <option value="ACTIVE">Active</option>
-          <option value="DISABLED">Disabled</option>
-        </NativeSelect>
+          <SelectTrigger aria-label="Filter by status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value={ALL}>Any status</SelectItem>
+              <SelectItem value="ACTIVE">Active</SelectItem>
+              <SelectItem value="DISABLED">Disabled</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <div className="ml-auto">{createButton}</div>
       </div>
 

@@ -25,6 +25,16 @@ type IdentitySource {
   isLocal: Boolean!
 }
 
+"Something about a user an administrator may change."
+enum UserField {
+  "The user's name. Only for built-in users: an external provider owns it and refreshes it at every sign-in."
+  DISPLAY_NAME
+  "The role. Platrium's own for every user, whichever provider they sign in through."
+  ROLE
+  "The password. Only for built-in users."
+  PASSWORD
+}
+
 type AdminUser {
   id: ID!
   email: String!
@@ -34,8 +44,8 @@ type AdminUser {
   disabledAt: DateTime
   createdAt: DateTime!
   source: IdentitySource!
-  "False when an external provider manages this user: only disabling is possible."
-  editable: Boolean!
+  "What the caller may change on this user. Empty when nothing: an external user's name and password belong to their provider, and a role the caller could not give is not theirs to change."
+  editableFields: [UserField!]!
   "Whether the caller may act on this user at all. False for someone with more permissions than the caller holds."
   manageable: Boolean!
 }
@@ -61,7 +71,8 @@ input CreateLocalUserInput {
   role: String
 }
 
-input UpdateLocalUserInput {
+input UpdateUserInput {
+  "Only for built-in users; see UserField."
   displayName: String
   role: String
 }
@@ -82,8 +93,8 @@ extend type Query {
 extend type Mutation {
   "Create a user on the built-in provider."
   createLocalUser(input: CreateLocalUserInput!): AdminUser! @requires(permission: USERS_CREATE)
-  "Edit a built-in user. Changing the role also needs ROLES_ASSIGN."
-  updateLocalUser(id: ID!, input: UpdateLocalUserInput!): AdminUser! @requires(permission: USERS_UPDATE)
+  "Edit a user's name (built-in users only) or role (any user). Changing the role also needs ROLES_ASSIGN."
+  updateUser(id: ID!, input: UpdateUserInput!): AdminUser! @requires(permission: USERS_UPDATE)
   resetLocalUserPassword(id: ID!, password: String!): Boolean! @requires(permission: USERS_UPDATE)
   "Block or restore sign-in for a user of any provider."
   setUserDisabled(id: ID!, disabled: Boolean!): AdminUser! @requires(permission: USERS_DISABLE)

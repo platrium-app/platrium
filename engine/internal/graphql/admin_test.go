@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"platrium/internal/auth/protocol/local"
 	"platrium/internal/auth/session"
 	"platrium/internal/identity"
+	"platrium/internal/infra/db/ent/idpprovider"
 	"platrium/internal/orchestrator"
 )
 
@@ -53,7 +55,7 @@ func mustFail(t *testing.T, what string, err error, code string) {
 	}
 }
 
-const usersQuery = `query { adminUsers(first: 50) { totalCount pageInfo { hasNextPage endCursor } edges { cursor node { id email role disabled editable manageable source { name type isLocal } } } } }`
+const usersQuery = `query { adminUsers(first: 50) { totalCount pageInfo { hasNextPage endCursor } edges { cursor node { id email role disabled editableFields manageable source { name type isLocal } } } } }`
 
 func TestAdminFieldsAreGatedByPermission(t *testing.T) {
 	h := newHarness(t)
@@ -93,12 +95,12 @@ func TestAdminCreateDisableAndMe(t *testing.T) {
 	h := newHarness(t)
 	do := h.adminClient(t)
 
-	resp, err := do(h.admin, `mutation { createLocalUser(input: {email: "New@Acme.com", displayName: "New", password: "password-2"}) { id email role editable source { isLocal } } }`)
+	resp, err := do(h.admin, `mutation { createLocalUser(input: {email: "New@Acme.com", displayName: "New", password: "password-2"}) { id email role editableFields source { isLocal } } }`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	created := resp["createLocalUser"].(map[string]any)
-	if created["email"] != "new@acme.com" || created["role"] != "MEMBER" || created["editable"] != true {
+	if created["email"] != "new@acme.com" || created["role"] != "MEMBER" || fmt.Sprint(created["editableFields"]) != "[DISPLAY_NAME PASSWORD]" {
 		t.Fatalf("created: %v", created)
 	}
 	_, err = do(h.admin, `mutation { createLocalUser(input: {email: "new@acme.com", displayName: "Dup", password: "password-2"}) { id } }`)
@@ -180,4 +182,46 @@ func nilIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// An external user's name belongs to their provider; their role is ours.
+func TestUpdateUserOnAnExternalUser(t *testing.T) {
+	h := newHarness(t)
+	do := h.adminClient(t)
+	ctx := context.Background()
+
+	okta := h.db.IdpProvider.Create().SetTenantID(h.tenant).SetType("OIDC").SetName("Okta").SaveX(ctx)
+	ext := h.db.User.Create().SetTenantID(h.tenant).SetIdpID(okta.ID).SetExternalID("sub-1").
+		SetEmail("ext@acme.com").SetDisplayName("Ext").SaveX(ctx)
+	local := h.db.IdpProvider.Query().Where(idpprovider.TenantID(h.tenant), idpprovider.TypeEQ("LOCAL")).OnlyX(ctx)
+	sue := h.db.User.Create().SetTenantID(h.tenant).SetIdpID(local.ID).SetExternalID("sue").
+		SetEmail("sue@acme.com").SetDisplayName("sue").SetRole(identity.RoleSuperAdmin).SaveX(ctx)
+
+	fields := func(viewer string) string {
+		resp, err := do(viewer, `query { adminUsers(search: "ext@acme.com") { edges { node { editableFields } } } }`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprint(resp["adminUsers"].(map[string]any)["edges"].([]any)[0].(map[string]any)["node"].(map[string]any)["editableFields"])
+	}
+	if got := fields(sue.ID); got != "[ROLE]" {
+		t.Errorf("super admin sees %s, want [ROLE]", got)
+	}
+	if got := fields(h.admin); got != "[]" {
+		t.Errorf("admin sees %s, want []", got)
+	}
+
+	_, err := do(sue.ID, `mutation { updateUser(id: "`+ext.ID+`", input: {displayName: "Renamed"}) { id } }`)
+	mustFail(t, "renaming an external user", err, "BAD_REQUEST")
+
+	resp, err := do(sue.ID, `mutation { updateUser(id: "`+ext.ID+`", input: {role: "ADMIN"}) { role displayName editableFields source { type } } }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp["updateUser"].(map[string]any)
+	if got["role"] != "ADMIN" || got["displayName"] != "Ext" || got["source"].(map[string]any)["type"] != "OIDC" {
+		t.Errorf("promoted: %v", got)
+	}
+	_, err = do(h.admin, `mutation { updateUser(id: "`+ext.ID+`", input: {role: "MEMBER"}) { id } }`)
+	mustFail(t, "an admin cannot assign roles", err, "FORBIDDEN")
 }

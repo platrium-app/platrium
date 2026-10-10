@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { useApolloClient, useMutation } from "@apollo/client/react"
+import { dialogLayout } from "@/components/custom/dialogLayout"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -12,9 +13,17 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { errorMessage } from "@/lib/errors"
+import { cn } from "@/lib/utils"
 import { CONNECTION_TYPES, connectionFor } from "./connections"
 import {
   CREATE_IDENTITY_PROVIDER,
@@ -47,7 +56,10 @@ export function ProviderDialog({
   onClose: () => void
 }) {
   const client = useApolloClient()
-  const refetch = { refetchQueries: ["IdentityProviders"], awaitRefetchQueries: true }
+  const refetch = {
+    refetchQueries: ["IdentityProviders"],
+    awaitRefetchQueries: true,
+  }
   const [create] = useMutation(CREATE_IDENTITY_PROVIDER, refetch)
   const [update] = useMutation(UPDATE_IDENTITY_PROVIDER, refetch)
 
@@ -61,7 +73,9 @@ export function ProviderDialog({
     (provider?.allowedEmailDomains ?? []).join(", ")
   )
   const [state, setState] = useState(() =>
-    provider ? connectionFor(provider.type)?.fromProvider(provider) : connection?.initial()
+    provider
+      ? connectionFor(provider.type)?.fromProvider(provider)
+      : connection?.initial()
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -88,7 +102,11 @@ export function ProviderDialog({
         await update({
           variables: {
             id: provider.id,
-            input: { name, jitUsers, allowedEmailDomains: parseDomains(domains) },
+            input: {
+              name,
+              jitUsers,
+              allowedEmailDomains: parseDomains(domains),
+            },
           },
         })
         await connection.update(client, provider.id, state)
@@ -124,8 +142,8 @@ export function ProviderDialog({
           <DialogHeader>
             <DialogTitle>Provider added</DialogTitle>
             <DialogDescription>
-              One last step: tell {name} where to send people back to after
-              they sign in.
+              One last step: tell {name} where to send people back to after they
+              sign in.
             </DialogDescription>
           </DialogHeader>
           {createdUri && <RedirectUriBox uri={createdUri} />}
@@ -139,8 +157,8 @@ export function ProviderDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
+      <DialogContent className={cn(dialogLayout.content, "sm:max-w-xl")}>
+        <DialogHeader className={dialogLayout.header}>
           <DialogTitle>
             {editing ? `Edit ${provider?.name}` : "Add identity provider"}
           </DialogTitle>
@@ -151,89 +169,99 @@ export function ProviderDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={submit} className="flex flex-col gap-5">
-          {!editing && (
+        <form onSubmit={submit} className={dialogLayout.form}>
+          <div className={dialogLayout.body}>
+            {!editing && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="idp-type">Provider type</Label>
+                <Select
+                  value={type}
+                  onValueChange={(v) => v && changeType(v)}
+                  items={Object.fromEntries(
+                    CONNECTION_TYPES.map((c) => [c.type, c.label])
+                  )}
+                  disabled={busy}
+                >
+                  <SelectTrigger id="idp-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {CONNECTION_TYPES.map((c) => (
+                        <SelectItem key={c.type} value={c.type}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {connection.description}
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
-              <Label htmlFor="idp-type">Provider type</Label>
-              <NativeSelect
-                id="idp-type"
-                value={type}
-                onChange={(e) => changeType(e.target.value)}
+              <Label htmlFor="idp-name">Name</Label>
+              <Input
+                id="idp-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Acme single sign-on"
+                autoFocus
+                required
                 disabled={busy}
-              >
-                {CONNECTION_TYPES.map((c) => (
-                  <option key={c.type} value={c.type}>
-                    {c.label}
-                  </option>
-                ))}
-              </NativeSelect>
+              />
               <p className="text-xs text-muted-foreground">
-                {connection.description}
+                Shown on the sign-in page, as "Login with {name || "…"}".
               </p>
             </div>
-          )}
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="idp-name">Name</Label>
-            <Input
-              id="idp-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Acme single sign-on"
-              autoFocus
-              required
+            <connection.Fields
+              state={state}
+              onChange={setState}
+              mode={editing ? "edit" : "create"}
               disabled={busy}
+              redirectUri={redirectUri}
             />
-            <p className="text-xs text-muted-foreground">
-              Shown on the sign-in page, as "Login with {name || "…"}".
-            </p>
-          </div>
 
-          <connection.Fields
-            state={state}
-            onChange={setState}
-            mode={editing ? "edit" : "create"}
-            disabled={busy}
-            redirectUri={redirectUri}
-          />
-
-          <div className="flex flex-col gap-3 rounded-lg border p-3">
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id="idp-jit"
-                checked={jitUsers}
-                onCheckedChange={(v) => setJitUsers(v === true)}
-                disabled={busy}
-                className="mt-0.5"
-              />
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="idp-jit">Create accounts on first sign-in</Label>
+            <div className="flex flex-col gap-3 rounded-lg border p-3">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="idp-jit"
+                  checked={jitUsers}
+                  onCheckedChange={(v) => setJitUsers(v === true)}
+                  disabled={busy}
+                  className="mt-0.5"
+                />
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="idp-jit">
+                    Create accounts on first sign-in
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {jitUsers
+                      ? "Anyone who signs in with this provider gets an account, as a member."
+                      : "Only people who already have an account can sign in."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="idp-domains">Allowed email domains</Label>
+                <Input
+                  id="idp-domains"
+                  value={domains}
+                  onChange={(e) => setDomains(e.target.value)}
+                  placeholder="acme.com, acme.org"
+                  disabled={busy}
+                />
                 <p className="text-xs text-muted-foreground">
-                  {jitUsers
-                    ? "Anyone who signs in with this provider gets an account, as a member."
-                    : "Only people who already have an account can sign in."}
+                  Leave empty to allow any address the provider vouches for.
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="idp-domains">Allowed email domains</Label>
-              <Input
-                id="idp-domains"
-                value={domains}
-                onChange={(e) => setDomains(e.target.value)}
-                placeholder="acme.com, acme.org"
-                disabled={busy}
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave empty to allow any address the provider vouches for.
-              </p>
-            </div>
           </div>
-
-          {error && (
-            <p className="text-sm font-medium text-destructive">{error}</p>
-          )}
-          <DialogFooter>
+          {error && <p className={dialogLayout.error}>{error}</p>}
+          <DialogFooter className={dialogLayout.footer}>
             <Button
               type="button"
               variant="outline"

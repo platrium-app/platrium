@@ -25,9 +25,8 @@ export function OidcFields({
   redirectUri,
 }: ConnectionFieldsProps<OidcState>) {
   const set = (patch: Partial<OidcState>) => onChange({ ...state, ...patch })
-  const [testDiscovery, { data, loading: testing, error }] = useMutation(
-    TEST_OIDC_DISCOVERY
-  )
+  const [testDiscovery, { data, loading: testing, error }] =
+    useMutation(TEST_OIDC_DISCOVERY)
   const [advanced, setAdvanced] = useState(false)
   const result = data?.testOidcDiscovery
   const editing = mode === "edit"
@@ -148,8 +147,7 @@ export function OidcFields({
             />
             <p className="text-xs text-muted-foreground">
               <code>openid</code> is always requested. Most providers need{" "}
-              <code>email</code> and <code>profile</code> for the details
-              below.
+              <code>email</code> and <code>profile</code> for the details below.
             </p>
           </div>
 
@@ -247,8 +245,8 @@ export function OidcFields({
               Add parameter
             </Button>
             <p className="text-xs text-muted-foreground">
-              Sent on the sign-in request, for providers that need more than
-              the standard ones (Auth0's <code>audience</code>, for example).
+              Sent on the sign-in request, for providers that need more than the
+              standard ones (Auth0's <code>audience</code>, for example).
             </p>
           </div>
         </CollapsibleContent>

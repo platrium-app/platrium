@@ -48,7 +48,10 @@ export const CREATE_IDENTITY_PROVIDER = graphql(`
 `)
 
 export const UPDATE_IDENTITY_PROVIDER = graphql(`
-  mutation UpdateIdentityProvider($id: ID!, $input: UpdateIdentityProviderInput!) {
+  mutation UpdateIdentityProvider(
+    $id: ID!
+    $input: UpdateIdentityProviderInput!
+  ) {
     updateIdentityProvider(id: $id, input: $input) {
       id
     }

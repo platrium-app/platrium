@@ -29,7 +29,7 @@ type OpenDialog =
 export default function AdminIdentityProvidersView() {
   useSetBreadcrumbs([
     { label: "Admin console", icon: ShieldCheck },
-    { label: "Identity providers", icon: KeyRound },
+    { label: "Identity Providers", icon: KeyRound },
   ])
 
   const { data, loading, error } = useQuery(IDENTITY_PROVIDERS)

@@ -21,7 +21,7 @@ export interface AccessGrantRow {
 }
 
 interface PeopleWithAccessProps {
-  owner: Subject
+  owner: Subject | null
   grants: AccessGrantRow[]
   /** Access that comes from above. Shown read-only, with where it comes from. */
   inherited: AccessGrantRow[]
@@ -99,7 +99,7 @@ function InheritedDetail({ grant }: { grant: AccessGrantRow }) {
   )
 }
 
-/** The owner, everyone added by name, then everyone with access from above. */
+/** The owner (private drives only), everyone added by name, then everyone with access from above. */
 export function PeopleWithAccess({
   owner,
   grants,
@@ -112,17 +112,14 @@ export function PeopleWithAccess({
 }: PeopleWithAccessProps) {
   return (
     <ul className="flex flex-col gap-1" aria-label="People with access">
-      <li className="flex items-center justify-between gap-3 py-1">
-        <Who
-          name={owner.name}
-          detail={owner.type === "TENANT" ? "Your organization" : owner.email}
-          group={owner.type === "TENANT"}
-          you={owner.isYou}
-        />
-        <span className="shrink-0 pr-3 text-sm text-muted-foreground">
-          Owner
-        </span>
-      </li>
+      {owner && (
+        <li className="flex items-center justify-between gap-3 py-1">
+          <Who name={owner.name} detail={owner.email} you={owner.isYou} />
+          <span className="shrink-0 pr-3 text-sm text-muted-foreground">
+            Owner
+          </span>
+        </li>
+      )}
 
       {grants.map((g) => {
         const busy = busyId === g.id

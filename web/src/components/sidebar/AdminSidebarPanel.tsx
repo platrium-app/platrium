@@ -40,7 +40,7 @@ export function AdminSidebarPanel() {
       </SidebarGroup>
 
       <SidebarGroup>
-        <SidebarGroupLabel>Sign-in</SidebarGroupLabel>
+        <SidebarGroupLabel>Auth & Directory Sync</SidebarGroupLabel>
         <SidebarGroupContent>
           <NavSection items={ADMIN_SIGN_IN_NAV_ITEMS} />
         </SidebarGroupContent>

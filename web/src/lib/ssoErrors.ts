@@ -3,7 +3,8 @@
 // detail stays in the server log.
 const MESSAGES: Record<string, string> = {
   sso_denied: "The sign-in was cancelled or declined by your provider.",
-  sso_expired: "That sign-in link expired or was already used. Please try again.",
+  sso_expired:
+    "That sign-in link expired or was already used. Please try again.",
   sso_no_account:
     "You don't have an account here yet. Ask an administrator to add you, or sign in with a different account.",
   sso_disabled:

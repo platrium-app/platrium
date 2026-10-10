@@ -111,7 +111,9 @@ On every sign-in the user's **email and display name are refreshed** from the pr
   <Accordion title="Why can't an identity provider make administrators?">
     `defaultRole` must be a role with no permissions at all. The store checks this when the provider is saved, and the manager checks it again at sign-in, in case someone edited the row by hand. If an IdP could mint administrators just by sending people through it, whoever controls the IdP controls Platrium.
 
-    Giving administrator access through an IdP will be an explicit, audited mapping (for example, "members of this group are admins"), designed on its own.
+    So how does someone who signed in through SSO become an administrator? **A person promotes them.** The role is Platrium's own for every user, whichever provider they come from, so an administrator holding `roles.assign` opens *Edit user* and changes it. Their name and email stay the provider's (read-only, refreshed at each sign-in), and the role is never touched by a sign-in.
+
+    A rule like "members of this group are admins" would be an explicit, audited mapping, designed on its own.
   </Accordion>
   <Accordion title="What about groups?">
     Not in yet. Mirroring a provider's groups into Platrium means adding and removing memberships on every login, with edge cases (a provider that drops the claim for users with too many groups would silently wipe memberships). Enterprises that need it have SCIM, which is built for exactly that.

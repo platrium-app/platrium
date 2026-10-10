@@ -1,4 +1,12 @@
-import { Lock, MoreHorizontal, Network, Pencil, Power, Trash2 } from "lucide-react"
+import {
+  BanIcon,
+  Lock,
+  MoreHorizontal,
+  Network,
+  Pencil,
+  PlayIcon,
+  Trash2,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,6 +21,16 @@ import {
 import { cn } from "@/lib/utils"
 import { connectionFor } from "./connections"
 import type { IdentityProviderNode } from "./types"
+
+// 12 columns; the menu always takes the last, so it stays at the right edge at
+// every width (see UsersTable).
+const COL = {
+  provider: "col-span-8 sm:col-span-5 md:col-span-4",
+  signIn: "hidden sm:col-span-6 sm:block md:col-span-4",
+  users: "hidden md:col-span-1 md:block",
+  status: "hidden md:col-span-2 md:block",
+  menu: "col-span-4 sm:col-span-1 sm:col-start-12",
+}
 
 export type ProviderAction = "edit" | "disable" | "enable" | "delete"
 
@@ -45,12 +63,12 @@ function RowMenu({
         </DropdownMenuItem>
         {provider.enabled ? (
           <DropdownMenuItem onClick={() => onAction("disable", provider)}>
-            <Power />
+            <BanIcon />
             Disable
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem onClick={() => onAction("enable", provider)}>
-            <Power />
+            <PlayIcon />
             Enable
           </DropdownMenuItem>
         )}
@@ -94,11 +112,11 @@ export function IdentityProvidersTable({
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       <div className="grid grid-cols-12 gap-2 border-b px-4 py-3 text-sm font-medium text-muted-foreground select-none">
-        <div className="col-span-8 sm:col-span-4">Provider</div>
-        <div className="col-span-4 hidden sm:block">Sign-in</div>
-        <div className="col-span-1 hidden md:block">Users</div>
-        <div className="col-span-2 hidden md:block">Status</div>
-        <div className="col-span-1" />
+        <div className={COL.provider}>Provider</div>
+        <div className={COL.signIn}>Sign-in</div>
+        <div className={COL.users}>Users</div>
+        <div className={COL.status}>Status</div>
+        <div className={COL.menu} />
       </div>
       <div className="w-full flex-1 overflow-auto">
         {providers.map((p) => (
@@ -109,7 +127,9 @@ export function IdentityProvidersTable({
               !p.enabled && "text-muted-foreground"
             )}
           >
-            <div className="col-span-8 flex min-w-0 items-center gap-2 sm:col-span-4">
+            <div
+              className={cn("flex min-w-0 items-center gap-2", COL.provider)}
+            >
               <div className="min-w-0">
                 <div className="truncate font-medium">{p.name}</div>
                 <div className="truncate text-xs text-muted-foreground">
@@ -119,11 +139,16 @@ export function IdentityProvidersTable({
                 </div>
               </div>
             </div>
-            <div className="col-span-4 hidden min-w-0 truncate text-xs text-muted-foreground sm:block">
+            <div
+              className={cn(
+                "min-w-0 truncate text-xs text-muted-foreground",
+                COL.signIn
+              )}
+            >
               {p.isLocal ? "—" : signInPolicy(p)}
             </div>
-            <div className="col-span-1 hidden md:block">{p.userCount}</div>
-            <div className="col-span-2 hidden md:block">
+            <div className={COL.users}>{p.userCount}</div>
+            <div className={COL.status}>
               {p.isLocal ? (
                 <Badge variant="outline">
                   <Lock />
@@ -138,7 +163,7 @@ export function IdentityProvidersTable({
                 <Badge variant="destructive">Disabled</Badge>
               )}
             </div>
-            <div className="col-span-4 flex items-center justify-end sm:col-span-1">
+            <div className={cn("flex items-center justify-end", COL.menu)}>
               {!p.isLocal && <RowMenu provider={p} onAction={onAction} />}
             </div>
           </div>

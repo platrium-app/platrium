@@ -175,7 +175,7 @@ func TestAdminsManageOnlyUsersTheyOutrank(t *testing.T) {
 	_, err := e.admin.SetUserDisabled(ctx, admin, super.UserID, true)
 	wantErr(t, "an admin disabling a super admin", err, authz.ErrForbidden)
 	wantErr(t, "an admin resetting a super admin's password", e.admin.ResetLocalUserPassword(ctx, admin, super.UserID, "password-9"), authz.ErrForbidden)
-	_, err = e.admin.UpdateLocalUser(ctx, admin, super.UserID, ptr("Boss"), nil)
+	_, err = e.admin.UpdateUser(ctx, admin, super.UserID, ptr("Boss"), nil)
 	wantErr(t, "an admin renaming a super admin", err, authz.ErrForbidden)
 
 	if _, err := e.admin.SetUserDisabled(ctx, admin, other.UserID, true); err != nil {
@@ -211,13 +211,14 @@ func TestAdminsManageOnlyUsersTheyOutrank(t *testing.T) {
 	wantErr(t, "a disabled admin", err, authz.ErrForbidden)
 }
 
-func TestExternalUsersCanOnlyBeDisabled(t *testing.T) {
+func TestExternalUsersAreManagedByTheirProvider(t *testing.T) {
 	ctx := context.Background()
 	e := newAdminEnv(t)
 	admin := e.user(t, "ada", identity.RoleAdmin)
 
-	_, err := e.admin.UpdateLocalUser(ctx, admin, e.extID, ptr("New Name"), nil)
-	wantErr(t, "editing an external user", err, authz.ErrInvalid)
+	// Their name is the provider's: it comes back at the next sign-in.
+	_, err := e.admin.UpdateUser(ctx, admin, e.extID, ptr("New Name"), nil)
+	wantErr(t, "renaming an external user", err, authz.ErrInvalid)
 	wantErr(t, "resetting an external user's password", e.admin.ResetLocalUserPassword(ctx, admin, e.extID, "password-9"), authz.ErrInvalid)
 
 	got, err := e.admin.SetUserDisabled(ctx, admin, e.extID, true)
@@ -229,6 +230,77 @@ func TestExternalUsersCanOnlyBeDisabled(t *testing.T) {
 	}
 }
 
+// The role is Platrium's own, whichever provider the user signs in through:
+// promoting someone who arrived through SSO is how they become an administrator.
+func TestExternalUsersCanBeGivenARole(t *testing.T) {
+	ctx := context.Background()
+	e := newAdminEnv(t)
+	super := e.user(t, "sue", identity.RoleSuperAdmin)
+	admin := e.user(t, "ada", identity.RoleAdmin)
+
+	_, err := e.admin.UpdateUser(ctx, admin, e.extID, nil, ptr(identity.RoleAdmin))
+	wantErr(t, "an admin cannot assign roles", err, authz.ErrForbidden)
+
+	got, err := e.admin.UpdateUser(ctx, super, e.extID, nil, ptr(identity.RoleAdmin))
+	if err != nil || got.Role != identity.RoleAdmin || got.IdpType != "OIDC" {
+		t.Fatalf("promote an external user: %+v %v", got, err)
+	}
+	// The name did not change, so it is not an edit: sending it back is fine.
+	if _, err := e.admin.UpdateUser(ctx, super, e.extID, ptr(got.DisplayName), ptr(identity.RoleMember)); err != nil {
+		t.Errorf("demote with the unchanged name: %v", err)
+	}
+}
+
+func TestEditableFieldsSayWhatThisViewerMayChange(t *testing.T) {
+	ctx := context.Background()
+	e := newAdminEnv(t)
+	super := e.user(t, "sue", identity.RoleSuperAdmin)
+	admin := e.user(t, "ada", identity.RoleAdmin)
+	member := e.user(t, "mia", identity.RoleMember)
+
+	fields := func(viewer authz.Principal, target string) []orchestrator.UserField {
+		t.Helper()
+		items, _, _, err := e.admin.ListUsers(ctx, viewer, identity.UserFilter{Search: target}, nil, 10)
+		if err != nil || len(items) != 1 {
+			t.Fatalf("list %q: %d users, %v", target, len(items), err)
+		}
+		return items[0].EditableFields
+	}
+	has := func(fs []orchestrator.UserField, f orchestrator.UserField) bool {
+		for _, x := range fs {
+			if x == f {
+				return true
+			}
+		}
+		return false
+	}
+
+	// A built-in user: everything, for someone who may give roles.
+	if got := fields(super, "mia"); !has(got, orchestrator.UserFieldDisplayName) || !has(got, orchestrator.UserFieldRole) || !has(got, orchestrator.UserFieldPassword) {
+		t.Errorf("super admin on a built-in member: %v", got)
+	}
+	// An administrator can edit and reset, but not hand out roles.
+	if got := fields(admin, "mia"); !has(got, orchestrator.UserFieldDisplayName) || has(got, orchestrator.UserFieldRole) || !has(got, orchestrator.UserFieldPassword) {
+		t.Errorf("admin on a built-in member: %v", got)
+	}
+	// An external user: the provider owns the name and the password; the role is ours.
+	ext := "ext@acme.com"
+	if got := fields(super, ext); has(got, orchestrator.UserFieldDisplayName) || has(got, orchestrator.UserFieldPassword) || !has(got, orchestrator.UserFieldRole) {
+		t.Errorf("super admin on an external user: %v", got)
+	}
+	if got := fields(admin, ext); len(got) != 0 {
+		t.Errorf("admin on an external user: %v, want nothing", got)
+	}
+	// Someone who outranks the viewer is not editable at all.
+	if got := fields(admin, "sue"); len(got) != 0 {
+		t.Errorf("admin on a super admin: %v, want nothing", got)
+	}
+	// Nobody edits what is not theirs to change, a member included.
+	if _, _, _, err := e.admin.ListUsers(ctx, member, identity.UserFilter{}, nil, 10); err == nil {
+		t.Error("a member listed users")
+	}
+}
+
 func TestRoleChanges(t *testing.T) {
 	ctx := context.Background()
 	e := newAdminEnv(t)
@@ -236,22 +308,54 @@ func TestRoleChanges(t *testing.T) {
 	admin := e.user(t, "ada", identity.RoleAdmin)
 	member := e.user(t, "mia", identity.RoleMember)
 
-	_, err := e.admin.UpdateLocalUser(ctx, admin, member.UserID, nil, ptr(identity.RoleAdmin))
+	_, err := e.admin.UpdateUser(ctx, admin, member.UserID, nil, ptr(identity.RoleAdmin))
 	wantErr(t, "an admin cannot assign roles", err, authz.ErrForbidden)
 
-	got, err := e.admin.UpdateLocalUser(ctx, super, member.UserID, ptr("Mia M"), ptr(identity.RoleAdmin))
+	got, err := e.admin.UpdateUser(ctx, super, member.UserID, ptr("Mia M"), ptr(identity.RoleAdmin))
 	if err != nil || got.Role != identity.RoleAdmin || got.DisplayName != "Mia M" {
 		t.Fatalf("promote: %+v %v", got, err)
 	}
-	_, err = e.admin.UpdateLocalUser(ctx, super, member.UserID, nil, ptr("OWNER"))
+	_, err = e.admin.UpdateUser(ctx, super, member.UserID, nil, ptr("OWNER"))
 	wantErr(t, "unknown role", err, authz.ErrForbidden)
 
 	// A rename that keeps the role must not need roles.assign.
-	if _, err := e.admin.UpdateLocalUser(ctx, admin, member.UserID, ptr("Mia Again"), ptr(identity.RoleAdmin)); err != nil {
+	if _, err := e.admin.UpdateUser(ctx, admin, member.UserID, ptr("Mia Again"), ptr(identity.RoleAdmin)); err != nil {
 		t.Errorf("setting the same role is not a promotion: %v", err)
 	}
-	_, err = e.admin.UpdateLocalUser(ctx, super, "missing", ptr("x"), nil)
+	_, err = e.admin.UpdateUser(ctx, super, "missing", ptr("x"), nil)
 	wantErr(t, "unknown user", err, identity.ErrNotFound)
+}
+
+// You never change your own role: with two administrators, one cannot step
+// down alone, the other does it. Everything else about yourself is unaffected.
+func TestYouCannotChangeYourOwnRole(t *testing.T) {
+	ctx := context.Background()
+	e := newAdminEnv(t)
+	a := e.user(t, "alpha", identity.RoleSuperAdmin)
+	b := e.user(t, "beta", identity.RoleSuperAdmin)
+
+	for _, role := range []string{identity.RoleMember, identity.RoleAdmin} {
+		_, err := e.admin.UpdateUser(ctx, a, a.UserID, nil, ptr(role))
+		wantErr(t, "changing your own role to "+role, err, authz.ErrForbidden)
+	}
+	// Someone else may.
+	if _, err := e.admin.UpdateUser(ctx, b, a.UserID, nil, ptr(identity.RoleMember)); err != nil {
+		t.Fatalf("another administrator demoting alpha: %v", err)
+	}
+	// The same rule shows in what the editor offers.
+	items, _, _, err := e.admin.ListUsers(ctx, b, identity.UserFilter{Search: "beta"}, nil, 10)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("list: %d users, %v", len(items), err)
+	}
+	for _, f := range items[0].EditableFields {
+		if f == orchestrator.UserFieldRole {
+			t.Error("the role of the viewer's own row is offered as editable")
+		}
+	}
+	// Restating the role you already have is not a change.
+	if _, err := e.admin.UpdateUser(ctx, b, b.UserID, ptr("Beta Two"), ptr(identity.RoleSuperAdmin)); err != nil {
+		t.Errorf("renaming yourself, role unchanged: %v", err)
+	}
 }
 
 func TestTheLastAssigningAdminIsProtected(t *testing.T) {
@@ -263,12 +367,12 @@ func TestTheLastAssigningAdminIsProtected(t *testing.T) {
 	_, err := e.admin.SetUserDisabled(ctx, a, a.UserID, true)
 	wantErr(t, "disabling yourself", err, authz.ErrForbidden)
 
-	// With a second super admin, one may step down.
-	if _, err := e.admin.UpdateLocalUser(ctx, a, b.UserID, nil, ptr(identity.RoleMember)); err != nil {
+	// With a second super admin, one may demote the other.
+	if _, err := e.admin.UpdateUser(ctx, a, b.UserID, nil, ptr(identity.RoleMember)); err != nil {
 		t.Fatalf("demoting one of two super admins: %v", err)
 	}
-	// Now alpha is the only one left: neither demoting nor disabling may remove them.
-	_, err = e.admin.UpdateLocalUser(ctx, a, a.UserID, nil, ptr(identity.RoleAdmin))
+	// Now alpha is the only one left, and nobody else can demote them.
+	_, err = e.admin.UpdateUser(ctx, a, a.UserID, nil, ptr(identity.RoleAdmin))
 	wantErr(t, "demoting the last super admin", err, authz.ErrForbidden)
 
 	// A disabled super admin does not count as one.
@@ -289,7 +393,7 @@ func TestConcurrentAdminsCannotRemoveEachOther(t *testing.T) {
 	ctx := context.Background()
 	for name, act := range map[string]func(e *adminEnv, by, target authz.Principal) error{
 		"demote": func(e *adminEnv, by, target authz.Principal) error {
-			_, err := e.admin.UpdateLocalUser(ctx, by, target.UserID, nil, ptr(identity.RoleMember))
+			_, err := e.admin.UpdateUser(ctx, by, target.UserID, nil, ptr(identity.RoleMember))
 			return err
 		},
 		"disable": func(e *adminEnv, by, target authz.Principal) error {
@@ -476,7 +580,7 @@ func TestResetPasswordSignsTheUserOutEverywhere(t *testing.T) {
 func TestLaterFieldsOfARequestSeeAnEarlierRoleChange(t *testing.T) {
 	e := newAdminEnv(t)
 	sue := e.user(t, "sue", identity.RoleSuperAdmin)
-	e.user(t, "sam", identity.RoleSuperAdmin) // so sue may step down
+	sam := e.user(t, "sam", identity.RoleSuperAdmin) // steps sue down, mid-request
 	actors := e.actors()
 
 	h := actors.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -486,8 +590,8 @@ func TestLaterFieldsOfARequestSeeAnEarlierRoleChange(t *testing.T) {
 		if err != nil || !id.Perms.Has(authz.PermUsersCreate) {
 			t.Fatalf("field 1 sees a super admin: %v %+v", err, id)
 		}
-		if _, err := e.admin.UpdateLocalUser(ctx, sue, sue.UserID, nil, ptr(identity.RoleMember)); err != nil {
-			t.Fatalf("stepping down: %v", err)
+		if _, err := e.admin.UpdateUser(ctx, sam, sue.UserID, nil, ptr(identity.RoleMember)); err != nil {
+			t.Fatalf("stepping sue down: %v", err)
 		}
 		id, err = actors.Identity(ctx)
 		if err != nil {

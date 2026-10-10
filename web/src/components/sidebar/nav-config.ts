@@ -60,7 +60,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
 export const ADMIN_SIGN_IN_NAV_ITEMS: NavItem[] = [
   {
     id: "admin-identity-providers",
-    label: "Identity providers",
+    label: "Identity Providers",
     icon: KeyRound,
     path: `${ADMIN_PATH_PREFIX}/identity-providers`,
     requires: "IDP_MANAGE",
